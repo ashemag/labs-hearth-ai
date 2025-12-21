@@ -1,26 +1,194 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 255, 255, 255;
+  --background-end-rgb: 255, 255, 255;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground-rgb: 255, 255, 255;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* apple font -- New York */
+  /* font-family: -apple-system-ui-serif, ui-serif, 'Georgia', serif; */
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+}
+
+.bg-noise {
+  /* Standard syntax */
+  background-image: url(/backgrounds/noise_nonhome.png);
+  background-size: 250px 250px;
+  background-position: 0 0;
+
+  /* Webkit browsers (like Chrome, Safari) */
+  background-image: -webkit-image-set(url(/backgrounds/noise_nonhome.png) 1x);
+  background-size: -webkit-background-size(250px 250px);
+
+  /* Firefox */
+  background-image: -moz-image-set(url(/backgrounds/noise_nonhome.png) 1x);
+  background-size: -moz-background-size(250px 250px);
+
+  /* Opera */
+  background-image: -o-image-set(url(/backgrounds/noise_nonhome.png) 1x);
+  background-size: -o-background-size(250px 250px);
+}
+
+.bg-gradient {
+  /* z-index: -1; */
+  width: 100vw;
+  height: 20vh;
+  position: fixed;
+  bottom: 0;
+
+  /* Standard syntax */
+  background-image: linear-gradient(rgba(157, 76, 63, 0), rgba(157, 76, 63, 0.47));
+
+  /* For older Webkit (e.g., Safari 4-6, Chrome 4-9) */
+  background-image: -webkit-linear-gradient(rgba(157, 76, 63, 0), rgba(157, 76, 63, 0.47)) repeat scroll;
+
+  /* For older Firefox (3.6 to 15) */
+  background-image: -moz-linear-gradient(rgba(157, 76, 63, 0), rgba(157, 76, 63, 0.47));
+
+  /* For old IE versions (IE 10) */
+  background-image: -ms-linear-gradient(rgba(157, 76, 63, 0), rgba(157, 76, 63, 0.47));
+
+  /* For older Opera (11.10 to 12.0) */
+  background-image: -o-linear-gradient(rgba(157, 76, 63, 0), rgba(157, 76, 63, 0.47));
+}
+
+.screneContainer {
+  z-index: 999;
+  height: 800px;
+  width: 800px;
+
+  /* margin-top: 10vh;
+  margin-top: 10vh; */
+}
+
+@media (max-width: 768px) {
+  .screneContainer {
+    width: 500px; /* Adjust the width for smaller screens */
+    height: 500px; /* Adjust the height for smaller screens */
+  }
+}
+
+.productImg1 {
+  height: 80%;
+  width: 80%;
+  background-image: url("/product/image1.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  border-radius: 10px;
+}
+
+@media (max-width: 768px) {
+  .productImg2 {
+    width: 100%; /* Adjust the width for smaller screens */
+    height: 80px; /* Adjust the height for smaller screens */
+  }
+}
+
+.productImg2 {
+  width: 80%;
+  height: 100px;
+  background-image: url("/product/image2.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.productImg3 {
+  width: 80%;
+  height: 80px;
+  background-image: url("/product/image3.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.gradient-wrapper {
+  z-index: -1;
+  min-height: 100vh;
+  background-image: url("/backgrounds/noise.png");
+  background-size: 100px 100px;
+  background-position: 0 0;
+  overflow: hidden;
+  position: absolute;
+  top: 0%;
+  bottom: 0%;
+  left: 0%;
+  right: 0%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-modal {
+  background-image: url("/backgrounds/noise.png");
+  background-size: 250px 250px;
+  background-position: 0 0;
+}
+.bg-modal-nonhome {
+  background-color: #fcf9f9;
+}
+
+.gradient-modal {
+  background: linear-gradient(0deg, #eaddd8 0%, #eaddd8 80%, rgba(211, 199, 195, 0) 100%);
+}
+
+.engraved {
+  background-color: #1e1f2b;
+  -webkit-background-clip: text;
+  -moz-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: -2px 2px 3px rgba(205, 209, 255, 0.3);
+}
+
+.movingText {
+  animation: moveText 10s linear infinite;
+}
+
+.whiteFeatherMask {
+  background-color: #ffffff00;
+  box-shadow: inset 0 0 50px 50px #ffffff;
+}
+
+.whiteFeatherMaskMedium {
+  background-color: #ffffff00;
+  box-shadow: inset 0 0 25px 25px #ffffff;
+}
+
+.whiteFeatherMaskSmall {
+  background-color: #ffffff00;
+  box-shadow: inset 0 0 10px 10px #ffffff;
+}
+
+@keyframes moveText {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.c-markdown p:not(:last-of-type) {
+  margin-bottom: 1.5em;
+}
+
+.c-markdown a {
+  @apply text-brand-orange cursor-pointer hover:underline;
+}
+
+.c-markdown img {
+  max-width: 400px;
+  margin-inline: auto;
+  margin-block: 2rem;
 }

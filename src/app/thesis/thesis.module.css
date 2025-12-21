@@ -1,0 +1,11 @@
+.featherMask {
+  /* Apply a radial gradient mask to the image */
+  mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 70%, rgba(0, 0, 0, 0) 100%);
+  mask-size: cover;
+  mask-position: center;
+
+  /* For cross-browser compatibility */
+  -webkit-mask-image: radial-gradient(circle, rgba(0, 0, 0, 1) 70%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-size: cover;
+  -webkit-mask-position: center;
+}

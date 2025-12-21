@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient gradientUnits="userSpaceOnUse" cx="16.518" cy="22.787" r="20.792" id="gradient-0">
+      <stop offset="0" style="stop-color: rgb(255, 254, 254);"/>
+      <stop offset="1" style="stop-color: rgba(255, 255, 255, 0);"/>
+    </radialGradient>
+    <radialGradient gradientUnits="userSpaceOnUse" cx="16.518" cy="22.787" r="20.792" id="gradient-1" gradientTransform="matrix(5.187555, 0, 0, 5.187555, -152.166675, -178.738095)">
+      <stop offset="0" style="stop-color: rgb(255, 254, 254);"/>
+      <stop offset="1" style="stop-color: rgba(255, 255, 255, 0);"/>
+    </radialGradient>
+  </defs>
+  <g style="">
+    <title>brightest lines</title>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="22.172" y1="89.016" x2="84.884" y2="23.276"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="22.269" y1="88.364" x2="171.789" y2="84.092"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="58.8" y1="0" x2="84.852" y2="23.073"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="121.253" y1="42.282" x2="48.259" y2="61.809"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="121.342" y1="42.29" x2="152.4" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="233.22" y1="39.871" x2="196.27" y2="19.906"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="196.396" y1="18.746" x2="171.789" y2="84.092"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="233.829" y1="39.912" x2="171.789" y2="84.092"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="233.829" y1="39.912" x2="233.8" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="189.3" y1="0" x2="196.27" y2="19.906"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="121.471" y1="42.243" x2="196.318" y2="18.757"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="121.242" y1="42.288" x2="85.086" y2="23.226"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="22.172" y1="89.016" x2="0" y2="95.4"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="403.06" y1="81.48" x2="334.1" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="403.092" y1="81.414" x2="447.7" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="403.065" y1="81.636" x2="361.531" y2="114.53"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="233.22" y1="39.871" x2="276.801" y2="48.056"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="129.762" y1="68.814" x2="171.894" y2="83.794"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="22.172" y1="89.016" x2="49.56" y2="122.54"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="22.172" y1="89.016" x2="0" y2="32"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="175.758" y1="171.713" x2="61.299" y2="183.354"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="175.758" y1="171.713" x2="143.1" y2="300"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="175.758" y1="171.713" x2="361.133" y2="114.596"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="61.165" y1="183.494" x2="196.829" y2="274.591"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="337.172" y1="208.888" x2="196.667" y2="274.28"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="94.3" y1="300" x2="60.878" y2="184.436"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="0" y1="262.9" x2="60.831" y2="183.832"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="0" y1="293.4" x2="196.829" y2="274.591"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="336.878" y1="47.146" x2="276.801" y2="48.056"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="336.952" y1="47.509" x2="361.638" y2="114.791"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="336.952" y1="47.509" x2="414.2" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="267.497" y1="89.456" x2="171.947" y2="83.909"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="267.497" y1="89.065" x2="233.638" y2="40.102"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="40.618" y1="12.136" x2="84.819" y2="23.404"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="40.618" y1="12.136" x2="24" y2="47.487"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="11.421" y1="20.745" x2="24" y2="47.487"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="11.612" y1="20.564" x2="0" y2="18.1"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="0" y1="42.8" x2="24" y2="47.487"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="40.618" y1="12.136" x2="38.3" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="40.618" y1="12.136" x2="12.041" y2="20.686"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="47.875" y1="61.469" x2="24" y2="47.487"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="84.998" y1="23.468" x2="47.404" y2="34.008"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="23.952" y1="47.506" x2="47.404" y2="34.008"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="77.8" y1="0" x2="84.913" y2="22.927"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke: rgb(237, 226, 223); stroke-width: 0.5px;" x1="47.504" y1="33.445" x2="0" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="62.617" y1="182.057" x2="276.565" y2="48.14"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="15.692" y1="183.674" x2="86.5" y2="300"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="47.866" y1="62.193" x2="175.012" y2="172.021"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="83.7" y1="0" x2="267.454" y2="89.221"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="276.508" y1="48.148" x2="267.449" y2="90.015"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="276.601" y1="48.307" x2="402.945" y2="81.643"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="275.762" y1="49.014" x2="304.6" y2="0"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="60.69" y1="183.463" x2="14.957" y2="183.967"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="403.034" y1="81.576" x2="267.566" y2="89.229"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="361.437" y1="114.308" x2="267.934" y2="89.259"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="0" y1="177.8" x2="14.957" y2="183.967"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="60.69" y1="183.463" x2="49.451" y2="123.463"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="16.026" y1="182.595" x2="49.378" y2="123.292"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="129.119" y1="68.763" x2="49.331" y2="123.91"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="129.419" y1="68.423" x2="121.219" y2="42.407"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="48.221" y1="34.311" x2="47.897" y2="62.459"/>
+    <line style="fill: none; stroke-linejoin: round; stroke-miterlimit: 10; stroke-width: 0.5px; stroke: rgb(237, 226, 223);" x1="47.838" y1="33.608" x2="129.421" y2="69.228"/>
+  </g>
+  <g style="">
+    <title>brightest dots</title>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="196.263" cy="18.864" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="233.545" cy="40.065" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="171.89" cy="83.774" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="121.305" cy="42.252" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="84.893" cy="23.221" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="22.326" cy="87.893" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="336.843" cy="208.728" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="48.227" cy="61.503" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="40.602" cy="12.218" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="11.349" cy="20.555" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="23.912" cy="47.475" rx="2" ry="2"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="48.31" cy="33.545" rx="3" ry="3"/>
+  </g>
+  <g style="">
+    <title>brighter dots</title>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="129.219" cy="68.81" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(211, 184, 175);" cx="196.295" cy="274.174" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(211, 184, 175);" cx="267.535" cy="89.12" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(211, 184, 175);" cx="402.99" cy="81.506" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="61.016" cy="183.325" rx="4" ry="4"/>
+    <ellipse style="fill: rgb(237, 226, 223);" cx="336.835" cy="46.909" rx="3" ry="3"/>
+  </g>
+  <g style="">
+    <title>bright dots</title>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="15.485" cy="183.431" rx="3" ry="3"/>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="276.483" cy="47.905" rx="4" ry="4"/>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="361.368" cy="114.487" rx="4" ry="4"/>
+    <ellipse style="fill: rgb(212, 184, 175);" cx="49.381" cy="123.088" rx="3" ry="3"/>
+  </g>
+  <g id="Logo" transform="matrix(2.283061, 0, 0, 2.283061, 138.107986, 118.290962)" style="">
+    <title>Logo</title>
+    <g id="Group 2999">
+      <path id="Vector_3" d="M 16.578 43.294 C 5.281 43.633 -4.177 34.18 -4.273 23.007 C -4.368 12.149 4.512 2.282 16.463 2.272 C 28.61 2.267 37.204 12.129 37.309 22.644 C 37.424 33.836 28.017 43.564 16.578 43.294 Z" style="fill: url('#gradient-0');"/>
+      <path id="Vector" d="M31.5903 0C31.7871 0.166061 32.012 0.307879 32.1733 0.501818C32.5022 0.894546 32.5168 2.09697 32.2186 2.51758C32.023 2.79394 31.7651 2.97576 31.4069 2.97818C31.2651 2.97818 31.1221 2.98061 30.9803 2.98061C21.3185 2.98061 11.6566 2.98061 1.99481 2.97818C1.754 2.97818 1.50829 2.96 1.27482 2.90667C1.14647 2.87758 1.023 2.77333 0.923989 2.67636C0.271229 2.03636 0.52182 0.545455 1.34327 0.13697C1.41539 0.101818 1.47651 0.0460606 1.5413 0C11.5576 0 21.5739 0 31.5903 0Z" fill="#6F6F84"/>
+      <path id="Vector_2" d="M16.5668 4.26448C20.597 4.26448 24.6272 4.26084 28.6575 4.27175C28.9729 4.27175 29.3139 4.32266 29.5987 4.44872C30.0376 4.64387 30.2356 5.05357 30.2967 5.5166C30.32 5.69478 30.3114 5.87781 30.3114 6.05842C30.3114 12.799 30.3114 19.5408 30.3114 26.2814C30.3114 26.4827 30.3224 26.6875 30.2882 26.8827C30.1843 27.4742 29.7601 27.8014 29.1733 27.7675C28.5854 27.7336 28.2297 27.3627 28.2138 26.7384C28.1991 26.1554 28.2052 25.5711 28.2052 24.9881C28.2052 19.2136 28.2052 13.4378 28.2052 7.66326C28.2052 7.48266 28.2125 7.30084 28.2015 7.12023C28.1661 6.48993 27.8788 6.16872 27.2468 6.06811C27.0476 6.0366 26.8422 6.03417 26.6393 6.03417C19.8807 6.03296 13.1233 6.03296 6.36464 6.03296C6.26318 6.03296 6.1605 6.03054 6.05904 6.03539C5.16791 6.08145 4.81342 6.43417 4.81219 7.32023C4.8073 10.7808 4.80853 14.2427 4.80975 17.7033C4.80975 20.6014 4.81464 23.4984 4.81708 26.3966C4.81708 26.5578 4.82197 26.719 4.80608 26.879C4.75107 27.4402 4.36113 27.7772 3.78171 27.7724C3.19985 27.7687 2.82947 27.4354 2.78179 26.8584C2.76712 26.6778 2.77324 26.496 2.77324 26.3154C2.77324 19.5542 2.77324 12.793 2.77324 6.03175C2.77324 5.85114 2.76957 5.66933 2.78179 5.48872C2.82947 4.8172 3.30987 4.32993 3.98585 4.27175C4.18755 4.25478 4.39291 4.26448 4.59583 4.26448C8.58573 4.26448 12.5756 4.26448 16.5655 4.26448H16.5668Z" fill="#6F6F84"/>
+      <path id="path-1" d="M16.5328 27.7755C13.7849 27.858 11.4843 25.5586 11.4611 22.841C11.4379 20.1998 13.5979 17.7998 16.5047 17.7974C19.4593 17.7962 21.5496 20.1949 21.5752 22.7525C21.6033 25.4749 19.315 27.841 16.5328 27.7755V27.7755Z" fill="#A7715F"/>
+      <path id="path-2" d="M -60.033 45.81 C -59.263 34.701 -60.492 -51.812 -60.492 -51.812 C -60.492 -51.812 22.291 -51.812 41.257 -51.812 C 38.452 -1.544 -5.668 43.821 -60.033 45.81 Z" style="fill: url('#gradient-1');"/>
+    </g>
+    <g id="Group 3000">
+      <path id="Vector_4" d="M106.205 18.4302C107.689 21.1017 109.134 23.7029 110.605 26.3502H108.744C108.001 25.006 107.259 23.6702 106.521 22.332C105.917 21.2387 105.302 20.1514 104.723 19.046C104.54 18.6993 104.334 18.5454 103.923 18.5551C102.825 18.5829 101.726 18.5623 100.628 18.566C100.47 18.566 100.311 18.5926 100.076 18.6132V26.3429H98.4614V9.05445C98.6313 9.04354 98.7878 9.02536 98.9455 9.02536C100.777 9.02294 102.608 9.01687 104.439 9.02778C105.46 9.03384 106.467 9.15748 107.436 9.50172C109.355 10.1829 110.381 11.6048 110.368 13.6266C110.364 14.1635 110.315 14.7151 110.182 15.2338C109.817 16.6545 108.836 17.5357 107.48 18.0375C107.085 18.1841 106.675 18.2872 106.204 18.4314L106.205 18.4302ZM100.097 17.0581C100.209 17.0872 100.267 17.1151 100.323 17.1151C101.929 17.1114 103.538 17.1454 105.141 17.0775C105.795 17.0496 106.466 16.8641 107.083 16.6302C108.087 16.2496 108.574 15.4302 108.686 14.3951C108.722 14.0569 108.717 13.7114 108.699 13.372C108.635 12.1902 108.051 11.3478 106.924 10.9466C106.376 10.7514 105.784 10.6048 105.207 10.5841C103.603 10.5272 101.995 10.5466 100.389 10.5417C100.296 10.5417 100.202 10.5866 100.096 10.6132V17.0593L100.097 17.0581Z" fill="#4B4E6C"/>
+      <path id="Vector_5" d="M135.708 9.03857H137.309V16.3513C137.839 16.5052 146.202 16.5234 146.858 16.3804V9.0713H148.454V26.3258H146.893V18.001H137.383C137.273 18.6895 137.347 19.3877 137.334 20.0798C137.32 20.7634 137.331 21.4471 137.331 22.1307V26.3283H135.708V9.03857V9.03857Z" fill="#4B4E6C"/>
+      <path id="Vector_6" d="M52.8562 26.342H51.2756C51.2488 25.4317 51.2659 24.5165 51.2634 23.6014C51.2598 22.6765 51.2634 21.7505 51.2634 20.8244V18.0729C50.7794 17.9299 42.5049 17.8996 41.7214 18.0353V26.342H40.1421C40.0051 25.8789 39.9404 11.0317 40.0712 9.07167H41.6908V16.428H51.2561V9.05713H52.8574V26.342H52.8562Z" fill="#4B4E6C"/>
+      <path id="Vector_7" d="M62.6758 24.8615H71.8854V26.3427H61.0391V9.05908H71.3903V10.5464H62.6624V16.4457H69.1668V17.9185H62.748C62.5988 18.4021 62.5499 23.647 62.6771 24.8615H62.6758Z" fill="#4B4E6C"/>
+      <path id="Vector_8" d="M83.6875 9.00121H85.526C87.587 14.7806 89.643 20.5442 91.715 26.3515H89.9975C89.3753 24.5915 88.7495 22.8194 88.1175 21.0303H80.9775C80.3528 22.8024 79.7318 24.5612 79.1048 26.3406H77.5034C79.5668 20.5527 81.618 14.8048 83.6875 9V9.00121ZM81.5092 19.5139H87.5882C86.5797 16.6291 85.5932 13.8048 84.6055 10.9806C84.564 10.9855 84.5224 10.9891 84.4809 10.9939C83.4968 13.8145 82.5128 16.6352 81.508 19.5139H81.5092Z" fill="#4B4E6C"/>
+      <path id="Vector_9" d="M116.042 10.5441V9.05566H128.954V10.5514H123.347V26.3248H121.675V10.5441H116.042Z" fill="#4B4E6C"/>
+    </g>
+  </g>
+</svg>

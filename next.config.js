@@ -1,0 +1,35 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  webpack(config) {
+    // shader support
+    config.module.rules.push({
+      test: /\.(glsl|vs|fs|vert|frag)$/,
+      exclude: /node_modules/,
+      use: ["raw-loader", "glslify-loader"],
+    });
+    return config;
+  },
+  images: {
+    domains: ["i.pravatar.cc"],
+  },
+  experimental: { serverActions: true },
+  async redirects() {
+    return [
+      {
+        source: "/privacy-policy",
+        destination: "/privacy",
+        permanent: true,
+      },
+      {
+        source: "/security",
+        destination: "/privacy",
+        permanent: true,
+      },
+    ];
+  },
+};
+
+module.exports = nextConfig;
