@@ -52,7 +52,13 @@ export default function LiquidGlassButton({ href, children }: LiquidGlassButtonP
                             backgroundSize: '100px 100px',
                         }}
                     />
-                    <span className="relative text-sm font-medium text-gray-800 tracking-wide">
+                    <span 
+                        className="relative text-sm font-medium tracking-wide"
+                        style={{
+                            color: '#b8b2aa',
+                            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                        }}
+                    >
                         {children}
                     </span>
                 </div>

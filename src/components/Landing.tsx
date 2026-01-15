@@ -19,40 +19,51 @@ export default function Landing() {
       </div>
 
       {/* Logo with pulsing animation */}
-      <div className="relative z-10">
-        <Image
-          src="/brand/logo_square_new.png"
-          alt="Hearth Logo"
-          width={40}
-          height={40}
-          priority
-        />
-        {/* Circle to cover the original orange dot - matches watercolor paper */}
-        <div
-          className="absolute w-[14px] h-[14px] rounded-full"
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="relative">
+          <Image
+            src="/brand/logo_square_new.png"
+            alt="Hearth Logo"
+            width={40}
+            height={40}
+            priority
+          />
+          {/* Circle to cover the original orange dot - matches watercolor paper */}
+          <div
+            className="absolute w-[14px] h-[14px] rounded-full"
+            style={{
+              left: '13px',
+              top: '22px',
+              backgroundColor: '#faf8f5',
+            }}
+          />
+          {/* Pulsing orange dot on top */}
+          <motion.div
+            className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
+            style={{
+              left: '14.5px',
+              top: '23.5px',
+            }}
+            animate={{
+              scale: [1, 1.1, 1],
+              opacity: [0.7, 1, 0.7],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+        </div>
+        <span
+          className="mt-3 text-xs tracking-wide"
           style={{
-            left: '13px',
-            top: '22px',
-            backgroundColor: '#faf8f5',
+            color: '#b8b2aa',
+            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
           }}
-        />
-        {/* Pulsing orange dot on top */}
-        <motion.div
-          className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
-          style={{
-            left: '14.5px',
-            top: '23.5px',
-          }}
-          animate={{
-            scale: [1, 1.1, 1],
-            opacity: [0.7, 1, 0.7],
-          }}
-          transition={{
-            duration: 3,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
+        >
+          Relational Intelligence
+        </span>
       </div>
     </div>
   );

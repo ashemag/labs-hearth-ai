@@ -34,3 +34,4 @@ CREATE POLICY "Allow public insert to waitlist" ON waitlist
 CREATE POLICY "Allow public read access to waitlist" ON waitlist
   FOR SELECT USING (true);
 
+

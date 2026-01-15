@@ -5,62 +5,62 @@ import { NextResponse } from 'next/server';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: Request) {
-  try {
-    const { email } = await request.json();
+    try {
+        const { email } = await request.json();
 
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
-    }
+        if (!email) {
+            return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        }
 
-    // Get the origin from the request (works for both localhost and production)
-    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai';
+        // Get the origin from the request (works for both localhost and production)
+        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai';
 
-    // Use service role to check allowlist and generate link
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+        // Use service role to check allowlist and generate link
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
 
-    // Check allowlist
-    const { data: allowlistEntry } = await supabase
-      .from('allowlist')
-      .select('email')
-      .eq('email', email.toLowerCase())
-      .single();
+        // Check allowlist
+        const { data: allowlistEntry } = await supabase
+            .from('allowlist')
+            .select('email')
+            .eq('email', email.toLowerCase())
+            .single();
 
-    if (!allowlistEntry) {
-      return NextResponse.json({ error: 'not_allowed' }, { status: 403 });
-    }
+        if (!allowlistEntry) {
+            return NextResponse.json({ error: 'not_allowed' }, { status: 403 });
+        }
 
-    // Generate magic link using Supabase Admin API
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: 'magiclink',
-      email: email.toLowerCase(),
-      options: {
-        redirectTo: `${origin}/`,
-      },
-    });
+        // Generate magic link using Supabase Admin API
+        const { data, error } = await supabase.auth.admin.generateLink({
+            type: 'magiclink',
+            email: email.toLowerCase(),
+            options: {
+                redirectTo: `${origin}/`,
+            },
+        });
 
-    if (error || !data.properties?.action_link) {
-      console.error('Failed to generate magic link:', error);
-      return NextResponse.json({ error: 'Failed to generate magic link' }, { status: 500 });
-    }
+        if (error || !data.properties?.action_link) {
+            console.error('Failed to generate magic link:', error);
+            return NextResponse.json({ error: 'Failed to generate magic link' }, { status: 500 });
+        }
 
-    // Replace the Site URL in the action link with the correct origin
-    // This handles cases where Supabase dashboard Site URL differs from request origin
-    let actionLink = data.properties.action_link;
-    
-    // Extract and replace the redirect_to parameter in the action link
-    const actionUrl = new URL(actionLink);
-    actionUrl.searchParams.set('redirect_to', `${origin}/`);
-    actionLink = actionUrl.toString();
+        // Replace the Site URL in the action link with the correct origin
+        // This handles cases where Supabase dashboard Site URL differs from request origin
+        let actionLink = data.properties.action_link;
 
-    // Send email via Resend
-    const { error: emailError } = await resend.emails.send({
-      from: 'Hearth Labs <noreply@hearth.ai>',
-      to: email,
-      subject: 'Sign in to Hearth',
-      html: `
+        // Extract and replace the redirect_to parameter in the action link
+        const actionUrl = new URL(actionLink);
+        actionUrl.searchParams.set('redirect_to', `${origin}/`);
+        actionLink = actionUrl.toString();
+
+        // Send email via Resend
+        const { error: emailError } = await resend.emails.send({
+            from: 'Hearth Labs <noreply@hearth.ai>',
+            to: email,
+            subject: 'Sign in to Hearth',
+            html: `
         <!DOCTYPE html>
         <html>
           <head>
@@ -113,17 +113,17 @@ export async function POST(request: Request) {
           </body>
         </html>
       `,
-    });
+        });
 
-    if (emailError) {
-      console.error('Failed to send email:', emailError);
-      return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
+        if (emailError) {
+            console.error('Failed to send email:', emailError);
+            return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Magic link error:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Magic link error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
 }
 
