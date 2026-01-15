@@ -37,26 +37,34 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    // Redirect authenticated allowlisted users away from auth pages to home
-    if (
-        user &&
-        (request.nextUrl.pathname === "/sign-in" ||
-            request.nextUrl.pathname === "/sign-up")
-    ) {
-        // Check if user is on allowlist before redirecting to home
+    // If user is authenticated, verify they're on the allowlist
+    if (user) {
         const { data: allowlistEntry } = await supabase
             .from("allowlist")
             .select("email")
             .eq("email", user.email?.toLowerCase())
             .single();
 
-        if (allowlistEntry) {
-            const url = request.nextUrl.clone();
-            url.pathname = "/";
-            return NextResponse.redirect(url);
-        } else {
-            // User is authenticated but not on allowlist - sign them out
+        if (!allowlistEntry) {
+            // User is authenticated but NOT on allowlist - sign them out immediately
             await supabase.auth.signOut();
+            
+            // If they're trying to access anything other than public pages, redirect to sign-in
+            if (request.nextUrl.pathname !== "/" && 
+                !request.nextUrl.pathname.startsWith("/sign-") &&
+                !request.nextUrl.pathname.startsWith("/api/")) {
+                const url = request.nextUrl.clone();
+                url.pathname = "/sign-in";
+                return NextResponse.redirect(url);
+            }
+        } else {
+            // User is on allowlist - redirect away from auth pages
+            if (request.nextUrl.pathname === "/sign-in" ||
+                request.nextUrl.pathname === "/sign-up") {
+                const url = request.nextUrl.clone();
+                url.pathname = "/";
+                return NextResponse.redirect(url);
+            }
         }
     }
 
