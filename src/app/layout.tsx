@@ -25,6 +25,11 @@ export const metadata = {
     maximumScale: 1,
     userScalable: false,
   },
+  icons: {
+    icon: "/brand/logo_square_new.png",
+    shortcut: "/brand/logo_square_new.png",
+    apple: "/brand/logo_square_new.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

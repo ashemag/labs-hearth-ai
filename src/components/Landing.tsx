@@ -2,44 +2,49 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
+import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
+import AuthHandler from "@/components/AuthHandler";
 
 export default function Landing() {
   return (
     <div className="relative w-screen min-h-screen flex flex-col items-center justify-center bg-white">
+      {/* Handle auth redirects from magic links */}
+      <AuthHandler />
+
+      {/* Sign In Button - Top Right */}
+      <div className="absolute top-6 right-8">
+        <LiquidGlassButton href="https://labs.hearth.ai/sign-in">
+          Sign In
+        </LiquidGlassButton>
+      </div>
+
+      {/* Logo with pulsing animation */}
       <div className="relative">
         <Image
-          src="/brand/hearth_logo.svg"
+          src="/brand/logo_square_new.png"
           alt="Hearth Logo"
           width={40}
-          height={35}
+          height={40}
           priority
         />
-        {/* Larger white background circle to fully cover the original orange dot */}
+        {/* White circle to cover the original orange dot */}
         <div
           className="absolute w-[14px] h-[14px] rounded-full bg-white"
           style={{
             left: '13px',
-            top: '21.5px',
-          }}
-        />
-        {/* White background circle to cover the original orange dot */}
-        <div
-          className="absolute w-[10px] h-[10px] rounded-full bg-white"
-          style={{
-            left: '15px',
-            top: '23.5px',
+            top: '22px',
           }}
         />
         {/* Pulsing orange dot on top */}
         <motion.div
-          className="absolute w-[10px] h-[10px] rounded-full bg-[#A7715F]"
+          className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
           style={{
-            left: '15px',
+            left: '14.5px',
             top: '23.5px',
           }}
           animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.6, 1, 0.6],
+            scale: [1, 1.1, 1],
+            opacity: [0.7, 1, 0.7],
           }}
           transition={{
             duration: 3,
