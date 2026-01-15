@@ -45,14 +45,14 @@ export default function HeroSection() {
       >
         <br />
         <h2
-          className={`text-[24px] font-bold mb-4 text-[#34364b] transition-opacity duration-[1500ms] ease-in-out delay-[1200ms] ${
+          className={`text-[24px] font-bold mb-4 text-[#34364b] transition-opacity duration-1500 ease-in-out delay-1200 ${
             showWaves ? "opacity-100" : "opacity-0"
           }`}
         >
           Your connections, curated
         </h2>
         <p
-          className={`text-[#34364b] leading-relaxed transition-opacity duration-[1500ms] ease-in-out delay-[1500ms] text-[18px] ${
+          className={`text-[#34364b] leading-relaxed transition-opacity duration-1500 ease-in-out delay-1500 text-[18px] ${
             showWaves ? "opacity-100" : "opacity-0"
           }`}
         >

@@ -98,6 +98,13 @@ module.exports = {
 				'slide-up': 'slide-up 0.4s ease-in-out forwards',
 				'fade-in-down': 'fade-in-down 0.1s ease-out'
 			},
+			transitionDuration: {
+				'1500': '1500ms',
+			},
+			transitionDelay: {
+				'1200': '1200ms',
+				'1500': '1500ms',
+			},
 			boxShadow: {
 				custom: '0 0 5px 10px #fff',
 				'custom-sm': '0 0 5px 5px #fff'

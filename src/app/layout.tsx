@@ -17,6 +17,7 @@ const inter = Inter({
 });
 
 export const metadata = {
+  metadataBase: new URL("https://labs.hearth.ai"),
   title: "Hearth AI",
   description: "Relational Intelligence",
   viewport: {
