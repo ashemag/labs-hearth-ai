@@ -39,12 +39,20 @@ export default function LiquidGlassButton({ href, children }: LiquidGlassButtonP
                     }}
                 />
 
-                {/* White pill overlay - disappears on hover */}
+                {/* Watercolor paper pill overlay - disappears on hover */}
                 <div
-                    className="absolute inset-[3px] bg-white flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200"
-                    style={{ borderRadius: '9999px' }}
+                    className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden"
+                    style={{ borderRadius: '9999px', backgroundColor: '#faf8f5' }}
                 >
-                    <span className="text-sm font-medium text-gray-800 tracking-wide">
+                    {/* Paper texture overlay */}
+                    <div 
+                        className="absolute inset-0 opacity-30 mix-blend-multiply"
+                        style={{
+                            backgroundImage: "url('/backgrounds/noise.png')",
+                            backgroundSize: '100px 100px',
+                        }}
+                    />
+                    <span className="relative text-sm font-medium text-gray-800 tracking-wide">
                         {children}
                     </span>
                 </div>

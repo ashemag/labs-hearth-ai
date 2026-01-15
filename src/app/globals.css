@@ -136,6 +136,45 @@ body {
   background-color: #fcf9f9;
 }
 
+/* Watercolor Paper Background */
+.bg-watercolor-paper {
+  /* Warm cream base color like cold-pressed watercolor paper */
+  background-color: #faf8f5;
+  position: relative;
+}
+
+.bg-watercolor-paper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Subtle warm gradient to simulate paper tone variations */
+  background: 
+    /* Soft radial highlights like paper texture */
+    radial-gradient(ellipse 120% 80% at 20% 30%, rgba(255, 252, 248, 0.6) 0%, transparent 50%),
+    radial-gradient(ellipse 100% 100% at 80% 70%, rgba(252, 248, 242, 0.5) 0%, transparent 40%),
+    radial-gradient(ellipse 80% 60% at 60% 20%, rgba(255, 250, 245, 0.4) 0%, transparent 35%),
+    /* Subtle fiber-like streaks */
+    linear-gradient(175deg, transparent 45%, rgba(240, 235, 228, 0.15) 45.5%, rgba(240, 235, 228, 0.15) 46%, transparent 46.5%),
+    linear-gradient(185deg, transparent 52%, rgba(245, 240, 232, 0.1) 52.5%, rgba(245, 240, 232, 0.1) 53%, transparent 53.5%),
+    linear-gradient(172deg, transparent 68%, rgba(238, 232, 224, 0.12) 68.5%, rgba(238, 232, 224, 0.12) 69%, transparent 69.5%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-watercolor-paper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Paper grain texture using noise */
+  background-image: url('/backgrounds/noise.png');
+  background-size: 180px 180px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 1;
+  /* Blend mode for natural paper feel */
+  mix-blend-mode: multiply;
+}
+
 .gradient-modal {
   background: linear-gradient(0deg, #eaddd8 0%, #eaddd8 80%, rgba(211, 199, 195, 0) 100%);
 }
