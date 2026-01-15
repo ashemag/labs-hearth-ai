@@ -48,9 +48,9 @@ export async function updateSession(request: NextRequest) {
         if (!allowlistEntry) {
             // User is authenticated but NOT on allowlist - sign them out immediately
             await supabase.auth.signOut();
-            
+
             // If they're trying to access anything other than public pages, redirect to sign-in
-            if (request.nextUrl.pathname !== "/" && 
+            if (request.nextUrl.pathname !== "/" &&
                 !request.nextUrl.pathname.startsWith("/sign-") &&
                 !request.nextUrl.pathname.startsWith("/api/")) {
                 const url = request.nextUrl.clone();

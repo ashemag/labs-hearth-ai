@@ -12,6 +12,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
+    // Get the origin from the request (works for both localhost and production)
+    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai';
+
     // Use service role to check allowlist and generate link
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
       type: 'magiclink',
       email: email.toLowerCase(),
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai'}/`,
+        redirectTo: `${origin}/`,
       },
     });
 
@@ -42,6 +45,15 @@ export async function POST(request: Request) {
       console.error('Failed to generate magic link:', error);
       return NextResponse.json({ error: 'Failed to generate magic link' }, { status: 500 });
     }
+
+    // Replace the Site URL in the action link with the correct origin
+    // This handles cases where Supabase dashboard Site URL differs from request origin
+    let actionLink = data.properties.action_link;
+    
+    // Extract and replace the redirect_to parameter in the action link
+    const actionUrl = new URL(actionLink);
+    actionUrl.searchParams.set('redirect_to', `${origin}/`);
+    actionLink = actionUrl.toString();
 
     // Send email via Resend
     const { error: emailError } = await resend.emails.send({
@@ -59,7 +71,7 @@ export async function POST(request: Request) {
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto; padding: 48px 24px;">
               <tr>
                 <td align="center" style="padding-bottom: 32px;">
-                  <img src="https://labs.hearth.ai/brand/logo_square_new.png" alt="Hearth" width="40" height="40" style="display: block;">
+                  <img src="${origin}/brand/logo_square_new.png" alt="Hearth" width="40" height="40" style="display: block;">
                 </td>
               </tr>
               <tr>
@@ -78,7 +90,7 @@ export async function POST(request: Request) {
               </tr>
               <tr>
                 <td align="center" style="padding-bottom: 32px;">
-                  <a href="${data.properties.action_link}" style="display: inline-block; padding: 14px 32px; background-color: #1a1a2e; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500; border-radius: 8px;">
+                  <a href="${actionLink}" style="display: inline-block; padding: 14px 32px; background-color: #1a1a2e; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500; border-radius: 8px;">
                     Sign in
                   </a>
                 </td>
