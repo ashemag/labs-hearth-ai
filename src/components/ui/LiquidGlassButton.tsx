@@ -53,7 +53,7 @@ export default function LiquidGlassButton({ href, children }: LiquidGlassButtonP
                         }}
                     />
                     <span 
-                        className="relative text-sm font-medium tracking-wide"
+                        className="relative text-xs font-medium tracking-wide"
                         style={{
                             color: '#b8b2aa',
                             textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
@@ -64,7 +64,7 @@ export default function LiquidGlassButton({ href, children }: LiquidGlassButtonP
                 </div>
 
                 {/* Text for when hovering (on liquid metal) */}
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-white tracking-wide opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white tracking-wide opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     {children}
                 </span>
             </motion.div>
