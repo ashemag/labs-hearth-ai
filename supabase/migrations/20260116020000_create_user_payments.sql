@@ -27,3 +27,4 @@ CREATE POLICY "Users can view own payments" ON user_payments
 CREATE POLICY "Service role full access" ON user_payments
     FOR ALL USING (true) WITH CHECK (true);
 
+

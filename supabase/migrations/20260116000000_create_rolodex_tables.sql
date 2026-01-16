@@ -364,3 +364,4 @@ CREATE POLICY "Users can update their own todos" ON rolodex_todos
 CREATE POLICY "Users can delete their own todos" ON rolodex_todos
     FOR DELETE USING (auth.uid() = user_id);
 
+
