@@ -2,9 +2,9 @@ import { Paragraph, Subtitle, Title } from "@/components/common/Typography";
 import { AnimatedSubLayout } from "@/layouts/AnimatedSubLayout";
 
 export const metadata = {
-  title: "Thesis",
+  title: "On Relational Intelligence",
   description:
-    "Hearth's vision for the AI Rolodex CRM, and how it will change the way the world manages personal and professional networks.",
+    "Hearth AI's thesis on Relational Intelligence - a new category of AI that augments the brain's ability to understand relationships. Your Second Brain on Your People.",
 };
 
 // {`Today, our personal and professional networks have reached an unprecedented level of complexity. The last two

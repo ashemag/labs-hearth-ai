@@ -18,8 +18,60 @@ const inter = Inter({
 
 export const metadata = {
   metadataBase: new URL("https://labs.hearth.ai"),
-  title: "Hearth Labs",
-  description: "Relational Intelligence",
+  title: {
+    default: "Hearth AI — Relational Intelligence",
+    template: "%s | Hearth AI",
+  },
+  description: "Your Second Brain on Your People. Hearth AI is relational intelligence software that helps you nurture meaningful connections, remember what matters, and build stronger relationships.",
+  keywords: [
+    "relational intelligence",
+    "second brain",
+    "relationship management",
+    "personal CRM",
+    "contact management",
+    "networking tool",
+    "relationship tracking",
+    "people management",
+    "connection builder",
+    "AI assistant",
+  ],
+  authors: [{ name: "Hearth AI" }],
+  creator: "Hearth AI",
+  publisher: "Hearth AI",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://labs.hearth.ai",
+    siteName: "Hearth AI",
+    title: "Hearth AI — Relational Intelligence",
+    description: "Your Second Brain on Your People. Build stronger relationships with AI-powered relational intelligence.",
+    images: [
+      {
+        url: "/brand/opengraph-image.svg",
+        width: 1200,
+        height: 630,
+        alt: "Hearth AI - Relational Intelligence",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Hearth AI — Relational Intelligence",
+    description: "Your Second Brain on Your People. Build stronger relationships with AI-powered relational intelligence.",
+    images: ["/brand/opengraph-image.svg"],
+    creator: "@HearthAI",
+  },
   viewport: {
     width: "device-width",
     initialScale: 1,
@@ -30,6 +82,10 @@ export const metadata = {
     icon: "/brand/logo_square_new.png",
     shortcut: "/brand/logo_square_new.png",
     apple: "/brand/logo_square_new.png",
+  },
+  manifest: "/manifest.json",
+  alternates: {
+    canonical: "https://labs.hearth.ai",
   },
 };
 

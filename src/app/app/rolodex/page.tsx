@@ -32,7 +32,9 @@ import {
     EyeOff,
     Sparkles,
     Command,
+    LogOut,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 
 interface Note {
@@ -3439,6 +3441,19 @@ export default function RolodexPage() {
                                         {todos.filter(t => !t.completed).length}
                                     </span>
                                 )}
+                            </button>
+
+                            {/* Sign Out Button */}
+                            <button
+                                onClick={async () => {
+                                    const supabase = createClient();
+                                    await supabase.auth.signOut();
+                                    window.location.href = "/";
+                                }}
+                                className="flex items-center gap-2 px-3 py-2.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                                title="Sign out"
+                            >
+                                <LogOut className="h-4 w-4" />
                             </button>
                         </div>
                     </div>
