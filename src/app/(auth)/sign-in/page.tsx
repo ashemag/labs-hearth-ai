@@ -102,7 +102,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="h-full w-full flex items-center justify-center bg-watercolor-paper">
+    <div className="min-h-screen w-full flex items-center justify-center bg-watercolor-paper">
       {/* Handle auth redirects from magic links */}
       <AuthHandler />
       
