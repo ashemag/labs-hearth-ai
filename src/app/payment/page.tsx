@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { loadStripe } from "@stripe/stripe-js";
 import {
     Elements,
@@ -10,7 +11,8 @@ import {
     useStripe,
     useElements,
 } from "@stripe/react-stripe-js";
-import { Check, Loader2, Sparkles, Heart, Users, Brain } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { LiquidMetal } from "@paper-design/shaders-react";
 
 const stripePromise = loadStripe(
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
@@ -44,23 +46,17 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             setErrorMessage(error.message || "An unexpected error occurred.");
             setIsProcessing(false);
         } else {
-            // Mark payment as complete in our database
             await fetch("/api/payment/complete", { method: "POST" });
             onSuccess();
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
             <PaymentElement
                 options={{
-                    layout: {
-                        type: "accordion",
-                        defaultCollapsed: false,
-                        radios: true,
-                        spacedAccordionItems: true,
-                    },
-                    paymentMethodOrder: ["link", "card"],
+                    layout: "tabs",
+                    paymentMethodOrder: ["card", "link"],
                     wallets: {
                         applePay: "auto",
                         googlePay: "auto",
@@ -69,22 +65,75 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
             />
 
             {errorMessage && (
-                <p className="text-red-600 text-sm">{errorMessage}</p>
+                <div className="p-3 rounded-lg bg-red-50/80 border border-red-200/50">
+                    <p className="text-sm text-red-700">{errorMessage}</p>
+                </div>
             )}
 
             <button
                 type="submit"
                 disabled={!stripe || isProcessing}
-                className="w-full py-4 bg-brand-purple-darkest text-white text-base font-medium rounded-xl hover:bg-brand-purple-darker disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
+                className="group w-full h-12 relative z-10 rounded-lg overflow-hidden disabled:opacity-50 transition-all cursor-pointer"
             >
-                {isProcessing ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Processing...
+                {/* LiquidMetal - always visible as metallic border/background */}
+                <LiquidMetal
+                    shape="none"
+                    scale={1.5}
+                    rotation={0}
+                    speed={1}
+                    softness={0.05}
+                    repetition={1.5}
+                    shiftRed={0.3}
+                    shiftBlue={0.3}
+                    distortion={0.1}
+                    contour={0.4}
+                    angle={90}
+                    colorTint="#FFFFFF"
+                    className="absolute inset-0 w-full h-full bg-[#AAAAAC]"
+                />
+
+                {/* Inner overlay - creates metallic border effect, fades on hover */}
+                <div
+                    className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md"
+                    style={{ backgroundColor: '#faf8f5' }}
+                >
+                    {/* Paper texture overlay */}
+                    <div 
+                        className="absolute inset-0 opacity-30 mix-blend-multiply"
+                        style={{
+                            backgroundImage: "url('/backgrounds/noise.png')",
+                            backgroundSize: '100px 100px',
+                        }}
+                    />
+                    <span 
+                        className="relative flex items-center justify-center h-full font-medium"
+                        style={{
+                            color: '#5c564e',
+                            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                        }}
+                    >
+                        {isProcessing ? (
+                            <span className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Processing...
+                            </span>
+                        ) : (
+                            "Continue"
+                        )}
                     </span>
-                ) : (
-                    "Become an Early Design Partner — $100"
-                )}
+                </div>
+
+                {/* Text for when hovering (on liquid metal) */}
+                <span className="absolute inset-0 flex items-center justify-center font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    {isProcessing ? (
+                        <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Processing...
+                        </span>
+                    ) : (
+                        "Continue"
+                    )}
+                </span>
             </button>
         </form>
     );
@@ -94,29 +143,39 @@ function SuccessView() {
     const router = useRouter();
 
     useEffect(() => {
-        // Redirect to app after 3 seconds
         const timer = setTimeout(() => {
             router.push("/");
-        }, 3000);
+        }, 2500);
         return () => clearTimeout(timer);
     }, [router]);
 
     return (
-        <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gradient-to-br from-brand-purple to-brand-orange rounded-full flex items-center justify-center mx-auto mb-6">
-                <Check className="h-8 w-8 text-white" />
+        <div className="text-center">
+            <div className="mb-6">
+                <h2
+                    className="text-2xl font-medium tracking-tight"
+                    style={{ color: '#4a3f5c' }}
+                >
+                    Welcome to Hearth
+                </h2>
+                <p
+                    className="mt-3 text-sm"
+                    style={{ color: '#8b7f99' }}
+                >
+                    You&apos;re now an Early Design Partner
+                </p>
+                <p
+                    className="mt-1 text-sm"
+                    style={{ color: '#b8b2aa' }}
+                >
+                    Lifetime access. We&apos;re building this together.
+                </p>
             </div>
-            <h2 className="text-2xl font-medium text-brand-purple-darkest mb-3">
-                Welcome to the family
-            </h2>
-            <p className="text-brand-purple mb-2">
-                You&apos;re now an Early Design Partner.
-            </p>
-            <p className="text-brand-purple/60 text-sm mb-8">
-                Lifetime access to Hearth AI. We&apos;re building this together.
-            </p>
-            <p className="text-sm text-brand-purple/40">
-                Redirecting to your Rolodex...
+            <p
+                className="text-xs"
+                style={{ color: '#b8b2aa' }}
+            >
+                Redirecting...
             </p>
         </div>
     );
@@ -132,7 +191,6 @@ function PaymentContent() {
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("success") === "true") {
-            // Mark payment as complete
             fetch("/api/payment/complete", { method: "POST" })
                 .then(() => {
                     setPaymentSuccess(true);
@@ -166,19 +224,20 @@ function PaymentContent() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin text-brand-purple" />
+            <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#b8b2aa' }} />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="text-center py-12">
-                <p className="text-brand-purple-darkest mb-4">{error}</p>
+            <div className="text-center">
+                <p className="mb-4" style={{ color: '#4a3f5c' }}>{error}</p>
                 <button
                     onClick={() => window.location.reload()}
-                    className="text-sm text-brand-purple hover:text-brand-orange underline"
+                    className="text-sm transition-colors hover:opacity-70 cursor-pointer"
+                    style={{ color: '#8b7f99' }}
                 >
                     Try again
                 </button>
@@ -203,10 +262,36 @@ function PaymentContent() {
                     theme: "stripe",
                     variables: {
                         colorPrimary: "#4a3f5c",
-                        colorBackground: "#ffffff",
+                        colorBackground: "#faf8f5",
                         colorText: "#4a3f5c",
-                        fontFamily: "system-ui, sans-serif",
-                        borderRadius: "12px",
+                        colorTextSecondary: "#8b7f99",
+                        fontFamily: "system-ui, -apple-system, sans-serif",
+                        borderRadius: "8px",
+                        spacingUnit: "4px",
+                    },
+                    rules: {
+                        '.Input': {
+                            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                            border: '1px solid rgba(184, 178, 170, 0.3)',
+                            boxShadow: 'none',
+                        },
+                        '.Input:focus': {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: '1px solid rgba(232, 121, 59, 0.4)',
+                            boxShadow: '0 0 0 2px rgba(232, 121, 59, 0.1)',
+                        },
+                        '.Tab': {
+                            border: '1px solid rgba(184, 178, 170, 0.3)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                        },
+                        '.Tab--selected': {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            border: '1px solid rgba(184, 178, 170, 0.4)',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        },
+                        '.Label': {
+                            color: '#8b7f99',
+                        },
                     },
                 },
             }}
@@ -218,86 +303,120 @@ function PaymentContent() {
 
 export default function PaymentPage() {
     return (
-        <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8">
-            <div className="w-full max-w-lg">
-                {/* Logo */}
+        <div className="min-h-screen flex items-center justify-center bg-watercolor-paper py-12">
+            <div className="w-full max-w-sm mx-auto px-6 relative z-10">
+                {/* Logo with pulsing dot */}
                 <div className="flex justify-center mb-8">
-                    <Image 
-                        src="/brand/logo_square_new.png" 
-                        alt="Hearth" 
-                        width={48} 
-                        height={48}
-                    />
+                    <div className="relative">
+                        <Image
+                            src="/brand/logo_square_new.png"
+                            alt="Hearth"
+                            width={40}
+                            height={40}
+                            priority
+                        />
+                        {/* Circle to cover the original orange dot */}
+                        <div
+                            className="absolute w-[14px] h-[14px] rounded-full"
+                            style={{
+                                left: '13px',
+                                top: '22px',
+                                backgroundColor: '#faf8f5',
+                            }}
+                        />
+                        {/* Pulsing orange dot */}
+                        <motion.div
+                            className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
+                            style={{
+                                left: '14.5px',
+                                top: '23.5px',
+                            }}
+                            animate={{
+                                scale: [1, 1.1, 1],
+                                opacity: [0.7, 1, 0.7],
+                            }}
+                            transition={{
+                                duration: 3,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                            }}
+                        />
+                    </div>
                 </div>
 
                 {/* Header */}
-                <div className="text-center mb-10">
-                    <h1 className="text-3xl font-medium text-brand-purple-darkest mb-3">
-                        Join the Beta
-                    </h1>
-                    <p className="text-brand-purple text-lg">
-                        Your Second Brain for Your People
+                <div className="text-center mb-6">
+                    <h2
+                        className="text-2xl font-medium tracking-tight"
+                        style={{
+                            color: '#5c564e',
+                            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                        }}
+                    >
+                        Early Design Partner
+                    </h2>
+                    <p
+                        className="mt-3 text-lg font-medium"
+                        style={{
+                            color: '#5c564e',
+                            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                        }}
+                    >
+                        $100
+                    </p>
+                    <p
+                        className="mt-1 text-sm"
+                        style={{
+                            color: '#b8b2aa',
+                            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                        }}
+                    >
+                        Once, forever
                     </p>
                 </div>
 
-                {/* Value Props */}
-                <div className="bg-brand-purple-lighter/30 rounded-2xl p-6 mb-8">
-                    <h2 className="text-sm font-medium text-brand-purple-darkest uppercase tracking-wider mb-4">
-                        Early Design Partner Benefits
-                    </h2>
-                    <div className="space-y-4">
-                        <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-brand-purple/10 flex items-center justify-center flex-shrink-0">
-                                <Heart className="h-4 w-4 text-brand-purple" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-brand-purple-darkest">Lifetime Access</p>
-                                <p className="text-sm text-brand-purple/70">All future updates and features, forever. No recurring fees.</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-brand-purple/10 flex items-center justify-center flex-shrink-0">
-                                <Users className="h-4 w-4 text-brand-purple" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-brand-purple-darkest">Shape the Product</p>
-                                <p className="text-sm text-brand-purple/70">Direct input on features. We&apos;re building this together.</p>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-brand-purple/10 flex items-center justify-center flex-shrink-0">
-                                <Brain className="h-4 w-4 text-brand-purple" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-brand-purple-darkest">Relational Intelligence</p>
-                                <p className="text-sm text-brand-purple/70">AI-powered CRM that actually understands your relationships.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {/* Tagline */}
+                <p
+                    className="text-center text-sm mb-6"
+                    style={{
+                        color: '#b8b2aa',
+                        textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                    }}
+                >
+                    A new era of human tooling
+                </p>
 
-                {/* Price */}
-                <div className="text-center mb-6">
-                    <div className="inline-flex items-baseline gap-1">
-                        <span className="text-4xl font-semibold text-brand-purple-darkest">$100</span>
-                        <span className="text-brand-purple/60">one-time</span>
-                    </div>
-                </div>
-
-                {/* Disclaimer */}
-                <p className="text-center text-sm text-brand-purple/50 mb-8">
-                    This is an early version. Things may break. Your patience and feedback make us better.
+                <p
+                    className="text-center text-xs mb-6"
+                    style={{
+                        color: '#c5c0b8',
+                        textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                    }}
+                >
+                    Early version · Your feedback makes us better
                 </p>
 
                 {/* Payment Form */}
                 <PaymentContent />
 
                 {/* Footer */}
-                <p className="text-center text-xs text-brand-purple/40 mt-8">
-                    Secure payment powered by Stripe
+                <p
+                    className="text-center text-xs mt-6"
+                    style={{
+                        color: '#c5c0b8',
+                        textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                    }}
+                >
+                    Questions?{' '}
+                    <a
+                        href="mailto:ashe@hearth.ai"
+                        className="underline underline-offset-2 hover:opacity-70 transition-opacity"
+                        style={{ color: '#8b7f99' }}
+                    >
+                        Contact us
+                    </a>
                 </p>
             </div>
         </div>
     );
 }
-

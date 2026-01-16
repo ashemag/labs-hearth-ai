@@ -4,9 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 // POST - Add a website to a person
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
 // DELETE - Remove a website
 export async function DELETE(req: NextRequest) {
     const supabase = await createClient();
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

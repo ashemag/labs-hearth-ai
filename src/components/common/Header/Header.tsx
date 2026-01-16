@@ -27,7 +27,7 @@ const Header = () => {
       </div>
       <div className="flex items-center">
         <LiquidGlassButton href="/sign-in">
-          Sign In
+          Play with Fire
         </LiquidGlassButton>
       </div>
       <div className="block md:hidden">
