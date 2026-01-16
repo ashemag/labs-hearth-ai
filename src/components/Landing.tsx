@@ -11,7 +11,7 @@ export default function Landing() {
 
   const handleSignIn = async () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
+
     if (isLocalhost) {
       // Auto sign-in for localhost
       setSigningIn(true);
@@ -37,7 +37,7 @@ export default function Landing() {
       {/* Sign In Button - Top Right */}
       <div className="absolute top-6 right-8 z-10">
         <LiquidGlassButton onClick={handleSignIn} disabled={signingIn}>
-          {signingIn ? "Signing in..." : "Sign In"}
+          {signingIn ? "Kindling..." : "Play with Fire"}
         </LiquidGlassButton>
       </div>
 
