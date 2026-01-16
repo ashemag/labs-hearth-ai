@@ -3,7 +3,7 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Learn how Hearth AI protects your data and privacy. Your Second Brain on Your People - built with trust and security at its core.",
+  description: "Learn how Hearth AI protects your data and privacy. Your Second Brain for Your People - built with trust and security at its core.",
 };
 
 const PrivacyPolicyPage = () => {

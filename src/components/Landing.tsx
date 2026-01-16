@@ -94,7 +94,7 @@ export default function Landing() {
             textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
           }}
         >
-          Your Second Brain on Your People
+          Your Second Brain for Your People
         </span>
       </div>
     </div>

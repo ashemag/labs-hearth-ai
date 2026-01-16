@@ -22,7 +22,7 @@ export const metadata = {
     default: "Hearth AI — Relational Intelligence",
     template: "%s | Hearth AI",
   },
-  description: "Your Second Brain on Your People. Hearth AI is relational intelligence software that helps you nurture meaningful connections, remember what matters, and build stronger relationships.",
+  description: "Your Second Brain for Your People. Hearth AI is relational intelligence software that helps you nurture meaningful connections, remember what matters, and build stronger relationships.",
   keywords: [
     "relational intelligence",
     "second brain",
@@ -55,7 +55,7 @@ export const metadata = {
     url: "https://labs.hearth.ai",
     siteName: "Hearth AI",
     title: "Hearth AI — Relational Intelligence",
-    description: "Your Second Brain on Your People. Build stronger relationships with AI-powered relational intelligence.",
+    description: "Your Second Brain for Your People. Build stronger relationships with AI-powered relational intelligence.",
     images: [
       {
         url: "/brand/opengraph-image.svg",
@@ -68,7 +68,7 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Hearth AI — Relational Intelligence",
-    description: "Your Second Brain on Your People. Build stronger relationships with AI-powered relational intelligence.",
+    description: "Your Second Brain for Your People. Build stronger relationships with AI-powered relational intelligence.",
     images: ["/brand/opengraph-image.svg"],
     creator: "@HearthAI",
   },

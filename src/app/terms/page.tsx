@@ -3,7 +3,7 @@ import { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Use",
-  description: "Terms of service for Hearth AI - Relational Intelligence software. Your Second Brain on Your People.",
+  description: "Terms of service for Hearth AI - Relational Intelligence software. Your Second Brain for Your People.",
 };
 
 const Terms = () => {

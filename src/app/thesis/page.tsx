@@ -4,7 +4,7 @@ import { AnimatedSubLayout } from "@/layouts/AnimatedSubLayout";
 export const metadata = {
   title: "On Relational Intelligence",
   description:
-    "Hearth AI's thesis on Relational Intelligence - a new category of AI that augments the brain's ability to understand relationships. Your Second Brain on Your People.",
+    "Hearth AI's thesis on Relational Intelligence - a new category of AI that augments the brain's ability to understand relationships. Your Second Brain for Your People.",
 };
 
 // {`Today, our personal and professional networks have reached an unprecedented level of complexity. The last two
