@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import Landing from "@/components/Landing";
-import AppHome from "@/components/AppHome";
+import RolodexPage from "@/app/app/rolodex/page";
 
 export default async function Home() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
@@ -15,7 +15,7 @@ export default async function Home() {
       .single();
 
     if (allowlistEntry) {
-      return <AppHome user={user} />;
+      return <RolodexPage />;
     }
   }
 

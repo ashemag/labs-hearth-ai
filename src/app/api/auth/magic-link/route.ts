@@ -33,11 +33,12 @@ export async function POST(request: Request) {
         }
 
         // Generate magic link using Supabase Admin API
+        // Use the auth callback route which will handle the code exchange
         const { data, error } = await supabase.auth.admin.generateLink({
             type: 'magiclink',
             email: email.toLowerCase(),
             options: {
-                redirectTo: `${origin}/`,
+                redirectTo: `${origin}/auth/callback`,
             },
         });
 
@@ -46,13 +47,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Failed to generate magic link' }, { status: 500 });
         }
 
-        // Replace the Site URL in the action link with the correct origin
+        // Replace the redirect_to parameter to ensure it goes to the correct origin's callback
         // This handles cases where Supabase dashboard Site URL differs from request origin
         let actionLink = data.properties.action_link;
 
         // Extract and replace the redirect_to parameter in the action link
         const actionUrl = new URL(actionLink);
-        actionUrl.searchParams.set('redirect_to', `${origin}/`);
+        actionUrl.searchParams.set('redirect_to', `${origin}/auth/callback`);
         actionLink = actionUrl.toString();
 
         // Send email via Resend

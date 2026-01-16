@@ -58,7 +58,7 @@ export async function updateSession(request: NextRequest) {
                 return NextResponse.redirect(url);
             }
         } else {
-            // User is on allowlist - redirect away from auth pages
+            // User is on allowlist - redirect away from auth pages to the app
             if (request.nextUrl.pathname === "/sign-in" ||
                 request.nextUrl.pathname === "/sign-up") {
                 const url = request.nextUrl.clone();

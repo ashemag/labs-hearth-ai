@@ -17,7 +17,13 @@ const nextConfig = {
     return config;
   },
   images: {
-    domains: ["i.pravatar.cc"],
+    domains: [
+      "i.pravatar.cc",
+      "jbbyipqzjsfnekfscvis.supabase.co",
+      "pqlkkgtbvaegqqqnozvl.supabase.co",
+      "pbs.twimg.com",
+      "media.licdn.com",
+    ],
   },
   experimental: { serverActions: true },
   async redirects() {

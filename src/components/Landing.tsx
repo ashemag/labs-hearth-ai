@@ -1,11 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import AuthHandler from "@/components/AuthHandler";
 
 export default function Landing() {
+  const [signingIn, setSigningIn] = useState(false);
+
+  const handleSignIn = async () => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isLocalhost) {
+      // Auto sign-in for localhost
+      setSigningIn(true);
+      try {
+        const response = await fetch('/api/auth/dev-login', { method: 'POST' });
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      } catch {
+        window.location.href = '/sign-in';
+      }
+    } else {
+      window.location.href = '/sign-in';
+    }
+  };
+
   return (
     <div className="relative w-screen min-h-screen flex flex-col items-center justify-center bg-watercolor-paper">
       {/* Handle auth redirects from magic links */}
@@ -13,8 +36,8 @@ export default function Landing() {
 
       {/* Sign In Button - Top Right */}
       <div className="absolute top-6 right-8 z-10">
-        <LiquidGlassButton href="https://labs.hearth.ai/sign-in">
-          Sign In
+        <LiquidGlassButton onClick={handleSignIn} disabled={signingIn}>
+          {signingIn ? "Signing in..." : "Sign In"}
         </LiquidGlassButton>
       </div>
 
@@ -63,6 +86,15 @@ export default function Landing() {
           }}
         >
           Relational Intelligence
+        </span>
+        <span
+          className="mt-1 text-xs tracking-wide"
+          style={{
+            color: '#b8b2aa',
+            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+          }}
+        >
+          Your Second Brain on Your People
         </span>
       </div>
     </div>

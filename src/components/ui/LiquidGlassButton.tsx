@@ -5,19 +5,20 @@ import Link from "next/link";
 import { LiquidMetal } from "@paper-design/shaders-react";
 
 interface LiquidGlassButtonProps {
-    href: string;
+    href?: string;
+    onClick?: () => void;
+    disabled?: boolean;
     children: React.ReactNode;
 }
 
-export default function LiquidGlassButton({ href, children }: LiquidGlassButtonProps) {
-    return (
-        <Link href={href}>
-            <motion.div
-                className="relative cursor-pointer group overflow-hidden"
-                style={{ width: '100px', height: '38px', borderRadius: '9999px' }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-            >
+export default function LiquidGlassButton({ href, onClick, disabled, children }: LiquidGlassButtonProps) {
+    const content = (
+        <motion.div
+            className={`relative cursor-pointer group overflow-hidden ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+            style={{ width: '100px', height: '38px', borderRadius: '9999px' }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+        >
                 {/* LiquidMetal - background */}
                 <LiquidMetal
                     shape="none"
@@ -68,7 +69,12 @@ export default function LiquidGlassButton({ href, children }: LiquidGlassButtonP
                     {children}
                 </span>
             </motion.div>
-        </Link>
     );
+
+    if (href) {
+        return <Link href={href}>{content}</Link>;
+    }
+
+    return <button onClick={onClick} disabled={disabled} className="appearance-none bg-transparent border-none p-0">{content}</button>;
 }
 
