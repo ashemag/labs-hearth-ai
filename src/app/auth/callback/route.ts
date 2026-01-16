@@ -30,7 +30,8 @@ export async function GET(request: Request) {
     console.error('OTP verification error:', error);
   }
 
-  // Return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/sign-in?error=Could not authenticate`);
+  // Redirect to home page - AuthHandler will catch tokens in hash fragment if present
+  // This handles the case where Supabase uses implicit flow (tokens in hash)
+  return NextResponse.redirect(`${origin}/`);
 }
 

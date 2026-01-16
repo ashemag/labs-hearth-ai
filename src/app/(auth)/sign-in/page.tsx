@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { LiquidMetal } from "@paper-design/shaders-react";
+import AuthHandler from "@/components/AuthHandler";
 
 type ViewState = "form" | "sent" | "not-allowed" | "waitlist-joined";
 
@@ -102,6 +103,9 @@ export default function SignInPage() {
 
   return (
     <div className="h-full w-full flex items-center justify-center bg-watercolor-paper">
+      {/* Handle auth redirects from magic links */}
+      <AuthHandler />
+      
       <div className="w-full max-w-sm mx-auto px-6 relative z-10">
         {/* Logo with pulsing dot */}
         <div className="flex justify-center mb-10">
