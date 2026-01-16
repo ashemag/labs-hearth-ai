@@ -144,7 +144,7 @@ function SuccessView() {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            router.push("/");
+            router.push("/app/rolodex");
         }, 2500);
         return () => clearTimeout(timer);
     }, [router]);
@@ -160,7 +160,7 @@ function SuccessView() {
                 </h2>
                 <p
                     className="mt-3 text-sm"
-                    style={{ color: '#8b7f99' }}
+                    style={{ color: '#5c564e' }}
                 >
                     You&apos;re now an Early Design Partner
                 </p>
@@ -237,7 +237,7 @@ function PaymentContent() {
                 <button
                     onClick={() => window.location.reload()}
                     className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-                    style={{ color: '#8b7f99' }}
+                    style={{ color: '#5c564e' }}
                 >
                     Try again
                 </button>
@@ -264,7 +264,7 @@ function PaymentContent() {
                         colorPrimary: "#4a3f5c",
                         colorBackground: "#faf8f5",
                         colorText: "#4a3f5c",
-                        colorTextSecondary: "#8b7f99",
+                        colorTextSecondary: "#5c564e",
                         fontFamily: "system-ui, -apple-system, sans-serif",
                         borderRadius: "8px",
                         spacingUnit: "4px",
@@ -290,7 +290,7 @@ function PaymentContent() {
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                         },
                         '.Label': {
-                            color: '#8b7f99',
+                            color: '#5c564e',
                         },
                     },
                 },
@@ -411,7 +411,7 @@ export default function PaymentPage() {
                     <a
                         href="mailto:ashe@hearth.ai"
                         className="underline underline-offset-2 hover:opacity-70 transition-opacity"
-                        style={{ color: '#8b7f99' }}
+                        style={{ color: '#5c564e' }}
                     >
                         Contact us
                     </a>

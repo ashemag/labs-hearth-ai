@@ -37,7 +37,7 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    // If user is authenticated, verify they're on the allowlist
+    // If user is authenticated, verify they're on the allowlist and check payment
     if (user) {
         const { data: allowlistEntry } = await supabase
             .from("allowlist")
@@ -58,13 +58,52 @@ export async function updateSession(request: NextRequest) {
                 return NextResponse.redirect(url);
             }
         } else {
-            // User is on allowlist - redirect away from auth pages to the app
+            // User is on allowlist - check payment status
+            const { data: payment } = await supabase
+                .from("user_payments")
+                .select("status")
+                .eq("user_id", user.id)
+                .eq("status", "completed")
+                .single();
+
+            const hasPaid = !!payment;
+
+            // Redirect away from auth pages
             if (request.nextUrl.pathname === "/sign-in" ||
                 request.nextUrl.pathname === "/sign-up") {
                 const url = request.nextUrl.clone();
-                url.pathname = "/";
+                url.pathname = hasPaid ? "/app/rolodex" : "/payment";
                 return NextResponse.redirect(url);
             }
+
+            // If on home page and paid, redirect to app
+            if (request.nextUrl.pathname === "/" && hasPaid) {
+                const url = request.nextUrl.clone();
+                url.pathname = "/app/rolodex";
+                return NextResponse.redirect(url);
+            }
+
+            // If trying to access app without payment, redirect to payment
+            if (request.nextUrl.pathname.startsWith("/app") && !hasPaid) {
+                const url = request.nextUrl.clone();
+                url.pathname = "/payment";
+                return NextResponse.redirect(url);
+            }
+
+            // If on payment page but already paid, redirect to app
+            if (request.nextUrl.pathname === "/payment" && hasPaid) {
+                const url = request.nextUrl.clone();
+                url.pathname = "/app/rolodex";
+                return NextResponse.redirect(url);
+            }
+        }
+    } else {
+        // Not authenticated - protect app routes
+        if (request.nextUrl.pathname.startsWith("/app") ||
+            request.nextUrl.pathname === "/payment") {
+            const url = request.nextUrl.clone();
+            url.pathname = "/sign-in";
+            return NextResponse.redirect(url);
         }
     }
 

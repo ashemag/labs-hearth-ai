@@ -162,7 +162,7 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#8b7f99',
+                  color: '#5c564e',
                   textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
                 }}
               >
@@ -181,7 +181,7 @@ export default function SignInPage() {
             <button
               onClick={resetForm}
               className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-              style={{ color: '#8b7f99' }}
+              style={{ color: '#b8b2aa' }}
             >
               Use a different email
             </button>
@@ -204,7 +204,7 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#8b7f99',
+                  color: '#5c564e',
                   textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
                 }}
               >
@@ -280,7 +280,7 @@ export default function SignInPage() {
               <button
                 onClick={resetForm}
                 className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-                style={{ color: '#8b7f99' }}
+                style={{ color: '#5c564e' }}
               >
                 Try a different email
               </button>
@@ -304,7 +304,7 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#8b7f99',
+                  color: '#5c564e',
                   textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
                 }}
               >
@@ -323,7 +323,7 @@ export default function SignInPage() {
             <button
               onClick={resetForm}
               className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-              style={{ color: '#8b7f99' }}
+              style={{ color: '#5c564e' }}
             >
               Back to sign in
             </button>
@@ -359,7 +359,7 @@ export default function SignInPage() {
                 <Label
                   htmlFor="email"
                   className="text-xs uppercase tracking-wider font-medium"
-                  style={{ color: '#8b7f99' }}
+                  style={{ color: '#5c564e' }}
                 >
                   Email
                 </Label>
