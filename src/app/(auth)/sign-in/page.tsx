@@ -105,7 +105,7 @@ export default function SignInPage() {
     <div className="min-h-screen w-full flex items-center justify-center bg-watercolor-paper">
       {/* Handle auth redirects from magic links */}
       <AuthHandler />
-      
+
       <div className="w-full max-w-sm mx-auto px-6 relative z-10">
         {/* Logo with pulsing dot */}
         <div className="flex justify-center mb-10">

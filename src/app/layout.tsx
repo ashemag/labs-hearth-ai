@@ -91,12 +91,12 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable}`}>
+    <html lang="en" className={`${inter.variable}`} style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
       <GoogleAnalytics GA_TRACKING_ID={process.env.NEXT_PUBLIC_GA_ID as string} />
-      <body className={clsx("text-brand-purple-darker ")}>
+      <body className={clsx("text-brand-purple-darker ")} style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
         <AnimationControlProvider>
-          <div className="min-h-screen grid grid-rows-layout">
-            <main>{children}</main>
+          <div className="min-h-screen grid grid-rows-layout" style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
+            <main style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>{children}</main>
           </div>
         </AnimationControlProvider>
       </body>

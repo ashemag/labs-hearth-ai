@@ -23,6 +23,11 @@ const nextConfig = {
       "pqlkkgtbvaegqqqnozvl.supabase.co",
       "pbs.twimg.com",
       "media.licdn.com",
+      "unavatar.io",
+      // Nitter instances for X profile images
+      "nitter.poast.org",
+      "nitter.privacydev.net",
+      "nitter.woodland.cafe",
     ],
   },
   experimental: { serverActions: true },

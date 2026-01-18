@@ -1,12 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+// Extract mention IDs from note text
+// Supports @[Name](id) format
+function extractMentionIds(noteText: string): number[] {
+    const mentionRegex = /@\[([^\]]+)\]\((\d+)\)/g;
+    const ids: number[] = [];
+    let match;
+
+    while ((match = mentionRegex.exec(noteText)) !== null) {
+        const id = parseInt(match[2], 10);
+        if (!isNaN(id) && !ids.includes(id)) {
+            ids.push(id);
+        }
+    }
+
+    return ids;
+}
+
+// Save mentions to the database
+async function saveMentions(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+    noteId: number,
+    mentionedPeopleIds: number[]
+) {
+    if (mentionedPeopleIds.length === 0) return;
+
+    const mentionRecords = mentionedPeopleIds.map(peopleId => ({
+        user_id: userId,
+        note_id: noteId,
+        mentioned_people_id: peopleId,
+    }));
+
+    const { error } = await supabase
+        .from("people_note_mentions")
+        .insert(mentionRecords);
+
+    if (error) {
+        console.error("Error saving mentions:", error);
+        // Don't fail the whole request if mentions fail to save
+    }
+}
+
 // POST - Add a note to a person
 export async function POST(req: NextRequest) {
     const supabase = await createClient();
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -35,6 +77,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
+        // Extract and save mentions
+        const mentionIds = extractMentionIds(note);
+        if (mentionIds.length > 0) {
+            await saveMentions(supabase, user.id, data.id, mentionIds);
+            console.log(`✓ Saved ${mentionIds.length} mention(s) for note ${data.id}`);
+        }
+
         return NextResponse.json({ note: data });
     } catch (error) {
         console.error("Error:", error);
@@ -45,9 +94,9 @@ export async function POST(req: NextRequest) {
 // PATCH - Update an existing note
 export async function PATCH(req: NextRequest) {
     const supabase = await createClient();
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -73,6 +122,19 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
+        // Update mentions: delete old ones and insert new ones
+        await supabase
+            .from("people_note_mentions")
+            .delete()
+            .eq("note_id", note_id)
+            .eq("user_id", user.id);
+
+        const mentionIds = extractMentionIds(note.trim());
+        if (mentionIds.length > 0) {
+            await saveMentions(supabase, user.id, note_id, mentionIds);
+            console.log(`✓ Updated ${mentionIds.length} mention(s) for note ${note_id}`);
+        }
+
         return NextResponse.json({ note: data });
     } catch (error) {
         console.error("Error:", error);
@@ -83,9 +145,9 @@ export async function PATCH(req: NextRequest) {
 // DELETE - Remove a note
 export async function DELETE(req: NextRequest) {
     const supabase = await createClient();
-    
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
+
     if (authError || !user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

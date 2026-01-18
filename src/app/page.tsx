@@ -2,6 +2,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Landing from "@/components/Landing";
 import RolodexPage from "@/app/app/rolodex/page";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Home / Hearth",
+};
 
 export default async function Home() {
   const supabase = await createClient();
