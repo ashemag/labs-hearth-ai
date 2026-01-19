@@ -13,6 +13,9 @@ module.exports = {
 			fontFamily: {
 				inter: [
 					'var(--font-inter)'
+				],
+				homemade: [
+					'var(--font-homemade-apple)'
 				]
 			},
 			colors: {

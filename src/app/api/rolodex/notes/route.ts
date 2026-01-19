@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// PATCH - Update an existing note
+// PATCH - Update an existing note (text and/or date)
 export async function PATCH(req: NextRequest) {
     const supabase = await createClient();
 
@@ -103,15 +103,28 @@ export async function PATCH(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { note_id, note } = body;
+        const { note_id, note, created_at } = body;
 
-        if (!note_id || !note?.trim()) {
-            return NextResponse.json({ error: "note_id and note are required" }, { status: 400 });
+        if (!note_id) {
+            return NextResponse.json({ error: "note_id is required" }, { status: 400 });
+        }
+
+        // Build update object - only include fields that are provided
+        const updateData: { note?: string; created_at?: string } = {};
+        if (note?.trim()) {
+            updateData.note = note.trim();
+        }
+        if (created_at) {
+            updateData.created_at = created_at;
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return NextResponse.json({ error: "No fields to update" }, { status: 400 });
         }
 
         const { data, error } = await supabase
             .from("people_notes")
-            .update({ note: note.trim() })
+            .update(updateData)
             .eq("id", note_id)
             .eq("user_id", user.id)
             .select()
@@ -122,17 +135,19 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        // Update mentions: delete old ones and insert new ones
-        await supabase
-            .from("people_note_mentions")
-            .delete()
-            .eq("note_id", note_id)
-            .eq("user_id", user.id);
+        // Update mentions only if note text was updated
+        if (updateData.note) {
+            await supabase
+                .from("people_note_mentions")
+                .delete()
+                .eq("note_id", note_id)
+                .eq("user_id", user.id);
 
-        const mentionIds = extractMentionIds(note.trim());
-        if (mentionIds.length > 0) {
-            await saveMentions(supabase, user.id, note_id, mentionIds);
-            console.log(`✓ Updated ${mentionIds.length} mention(s) for note ${note_id}`);
+            const mentionIds = extractMentionIds(updateData.note);
+            if (mentionIds.length > 0) {
+                await saveMentions(supabase, user.id, note_id, mentionIds);
+                console.log(`✓ Updated ${mentionIds.length} mention(s) for note ${note_id}`);
+            }
         }
 
         return NextResponse.json({ note: data });

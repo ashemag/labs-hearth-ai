@@ -1,6 +1,6 @@
 // G analytics - https://analytics.google.com/analytics/web/#/
 
-import { Inter } from "next/font/google";
+import { Inter, Homemade_Apple } from "next/font/google";
 
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import Footer from "@/components/common/Footer";
@@ -14,6 +14,13 @@ const inter = Inter({
   display: "swap",
   weight: "variable",
   variable: "--font-inter",
+});
+
+const homemadeApple = Homemade_Apple({
+  subsets: ["latin"],
+  display: "swap",
+  weight: "400",
+  variable: "--font-homemade-apple",
 });
 
 export const metadata = {
@@ -91,7 +98,7 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable}`} style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
+    <html lang="en" className={`${inter.variable} ${homemadeApple.variable}`} style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
       <GoogleAnalytics GA_TRACKING_ID={process.env.NEXT_PUBLIC_GA_ID as string} />
       <body className={clsx("text-brand-purple-darker ")} style={{ backgroundColor: '#faf8f5', minHeight: '100vh' }}>
         <AnimationControlProvider>

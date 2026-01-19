@@ -48,7 +48,11 @@ function formatDate(dateStr: string): string {
     });
 }
 
-export default function ContributionsGrid() {
+interface ContributionsGridProps {
+    refreshKey?: number; // Increment this to trigger a refresh
+}
+
+export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridProps) {
     const [data, setData] = useState<ContributionsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isDark, setIsDark] = useState(false);
@@ -81,7 +85,7 @@ export default function ContributionsGrid() {
 
     useEffect(() => {
         fetchContributions();
-    }, [fetchContributions]);
+    }, [fetchContributions, refreshKey]);
 
     // Subscribe to notes table changes
     useEffect(() => {
@@ -174,7 +178,10 @@ export default function ContributionsGrid() {
                         <div key={weekIndex} className="flex flex-col gap-[2px]">
                             {week.map((day) => {
                                 const intensity = getIntensity(day.count);
-                                const isToday = day.date === new Date().toISOString().split("T")[0];
+                                // Use local date for "today" comparison
+                                const now = new Date();
+                                const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                                const isToday = day.date === todayLocal;
                                 const bgColor = isDark ? intensityStyles[intensity].darkBg : intensityStyles[intensity].bg;
 
                                 return (

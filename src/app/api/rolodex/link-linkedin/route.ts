@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-
-// Extract username from LinkedIn URL
-function extractLinkedInUsername(url: string): string | null {
-    const match = url.match(/linkedin\.com\/in\/([a-zA-Z0-9_-]+)/);
-    return match ? match[1] : null;
-}
-
-// Get profile image URL from unavatar.io (returns URL directly - service handles fallbacks)
-function getLinkedInAvatarUrl(username: string): string {
-    return `https://unavatar.io/linkedin/${username}?fallback=false`;
-}
+import { fetchLinkedInProfile, extractLinkedInUsername } from "@/lib/linkedin";
 
 // POST - Link a LinkedIn profile to a contact
 export async function POST(req: NextRequest) {
@@ -63,11 +53,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Contact not found" }, { status: 404 });
         }
 
-        // Get profile image URL
-        const username = extractLinkedInUsername(cleanUrl);
-        const profileImageUrl = username ? getLinkedInAvatarUrl(username) : null;
+        // Fetch enriched profile data via SerpAPI
+        console.log(`[LinkedIn] Enriching profile for contact ${people_id}: ${cleanUrl}`);
+        const profileData = await fetchLinkedInProfile(cleanUrl);
         
-        console.log(`LinkedIn link: username=${username}, avatarUrl=${profileImageUrl}`);
+        const username = extractLinkedInUsername(cleanUrl);
+        console.log(`[LinkedIn] Enrichment result:`, {
+            username,
+            hasName: !!profileData?.fullName,
+            hasHeadline: !!profileData?.headline,
+            hasLocation: !!profileData?.location,
+            hasImage: !!profileData?.profileImageUrl,
+        });
 
         // Delete any existing LinkedIn profile for this contact (to avoid unique constraint issues)
         await supabase
@@ -76,14 +73,16 @@ export async function POST(req: NextRequest) {
             .eq("people_id", people_id)
             .eq("user_id", user.id);
 
-        // Insert the new profile
+        // Insert the new profile with enriched data
         const { data: linkedinProfile, error: createError } = await supabase
             .from("people_linkedin_profiles")
             .insert({
                 user_id: user.id,
                 people_id: people_id,
-                linkedin_url: cleanUrl,
-                profile_image_url: profileImageUrl,
+                linkedin_url: profileData?.linkedinUrl || cleanUrl,
+                profile_image_url: profileData?.profileImageUrl || null,
+                headline: profileData?.headline || null,
+                location: profileData?.location || null,
             })
             .select()
             .single();
@@ -93,7 +92,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: createError.message }, { status: 500 });
         }
 
-        console.log(`✓ Linked LinkedIn profile to contact ${people_id}`, { hasAvatar: !!profileImageUrl });
+        console.log(`✓ Linked LinkedIn profile to contact ${people_id}`, { 
+            hasAvatar: !!profileData?.profileImageUrl,
+            hasHeadline: !!profileData?.headline,
+            hasLocation: !!profileData?.location,
+        });
 
         // Return in the format expected by the frontend
         return NextResponse.json({
@@ -146,4 +149,3 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-

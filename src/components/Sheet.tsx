@@ -11,6 +11,7 @@ interface SheetProps {
     modal?: boolean; // When false, allows interaction with main page
     defaultOpen?: boolean; // If true, skip initial open animation
     closeOnClickOutside?: boolean; // When false, don't close when clicking outside
+    expanded?: boolean; // When true, sheet takes full width
 }
 
 interface SheetContentProps {
@@ -43,7 +44,7 @@ export function useSheetContext() {
     return useContext(SheetContext);
 }
 
-export function Sheet({ open, onOpenChange, children, side = "right", className = "", modal = false, defaultOpen = false, closeOnClickOutside = true }: SheetProps) {
+export function Sheet({ open, onOpenChange, children, side = "right", className = "", modal = false, defaultOpen = false, closeOnClickOutside = true, expanded = false }: SheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
     const [isClosing, setIsClosing] = useState(false);
     const [shouldRender, setShouldRender] = useState(open);
@@ -132,7 +133,7 @@ export function Sheet({ open, onOpenChange, children, side = "right", className 
             {/* Sheet Panel */}
             <div
                 ref={sheetRef}
-                className={`fixed top-0 bottom-0 ${sideStyles} z-50 w-full max-w-sm bg-white dark:bg-gray-900 shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 ${className}`}
+                className={`fixed top-0 bottom-0 ${sideStyles} z-50 bg-white dark:bg-gray-900 shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 transition-all duration-500 ease-in-out ${expanded ? "w-full" : "w-full max-w-sm"} ${className}`}
             >
                 {children}
             </div>
