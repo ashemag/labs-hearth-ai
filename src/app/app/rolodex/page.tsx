@@ -33,10 +33,15 @@ import {
     Sparkles,
     Command,
     LogOut,
+    Maximize2,
+    Minimize2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 interface Note {
     id: number;
@@ -156,8 +161,11 @@ interface UserProfile {
 function formatTimeAgo(dateString: string): string {
     const now = new Date();
     const date = new Date(dateString);
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    // Compare by calendar day in local timezone, not by milliseconds
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.floor((todayStart.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return "Today";
     if (diffDays === 1) return "Yesterday";
@@ -177,7 +185,7 @@ export default function RolodexPage() {
     const userAvatarInputRef = useRef<HTMLInputElement>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [loading, setLoading] = useState(true);
-    const [expandedContact, setExpandedContact] = useState<number | null>(null);
+    const [contributionsRefreshKey, setContributionsRefreshKey] = useState(0);
     const [showAddModal, setShowAddModal] = useState(false);
     const [addMode, setAddMode] = useState<"social" | "name">("social");
     const [addHandle, setAddHandle] = useState("");
@@ -211,11 +219,14 @@ export default function RolodexPage() {
     const [newListName, setNewListName] = useState("");
     const [creatingList, setCreatingList] = useState(false);
     const [showListsDropdown, setShowListsDropdown] = useState(false);
+    const [showListDropdownFor, setShowListDropdownFor] = useState<number | null>(null);
     const [hiddenListIds, setHiddenListIds] = useState<Set<number>>(new Set());
     const listsDropdownRef = useRef<HTMLDivElement>(null);
     const [editingNote, setEditingNote] = useState<{ noteId: number; contactId: number } | null>(null);
     const [editNoteText, setEditNoteText] = useState("");
     const [editNoteLoading, setEditNoteLoading] = useState(false);
+    const [editingNoteDate, setEditingNoteDate] = useState<{ noteId: number; contactId: number; currentDate: Date } | null>(null);
+    const [editNoteDateLoading, setEditNoteDateLoading] = useState(false);
     // Compliments state
     const [newCompliment, setNewCompliment] = useState("");
     const [newComplimentContext, setNewComplimentContext] = useState("");
@@ -270,10 +281,9 @@ export default function RolodexPage() {
     // Hidden contacts state
     const [showHiddenContacts, setShowHiddenContacts] = useState(false);
     const [togglingHiddenFor, setTogglingHiddenFor] = useState<number | null>(null);
-    // Touchpoint state
-    const [updatingTouchpointFor, setUpdatingTouchpointFor] = useState<number | null>(null);
     // Contact profile panel state
     const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
+    const [profilePanelExpanded, setProfilePanelExpanded] = useState(false);
     // Command+K search state
     const [showCommandSearch, setShowCommandSearch] = useState(false);
     const [commandSearchQuery, setCommandSearchQuery] = useState("");
@@ -281,7 +291,6 @@ export default function RolodexPage() {
     const commandSearchInputRef = useRef<HTMLInputElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const addInputRef = useRef<HTMLInputElement>(null);
-    const expandedRowRef = useRef<HTMLDivElement>(null);
     const noteInputRef = useRef<HTMLTextAreaElement>(null);
     const editNoteInputRef = useRef<HTMLInputElement>(null);
 
@@ -424,20 +433,6 @@ export default function RolodexPage() {
         };
     }, []);
 
-    // Close expanded row on click outside
-    useEffect(() => {
-        if (!expandedContact) return;
-
-        const handleClickOutside = (e: MouseEvent) => {
-            if (expandedRowRef.current && !expandedRowRef.current.contains(e.target as Node)) {
-                setExpandedContact(null);
-            }
-        };
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [expandedContact]);
-
     // Persist todo sheet state to localStorage
     useEffect(() => {
         localStorage.setItem("rolodex-todo-sheet-open", showTodoSheet ? "true" : "false");
@@ -470,6 +465,25 @@ export default function RolodexPage() {
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [showListsDropdown]);
+
+    // Close profile panel list dropdown when clicking outside
+    useEffect(() => {
+        if (!showListDropdownFor) return;
+
+        const handleClickOutside = () => {
+            setShowListDropdownFor(null);
+        };
+
+        // Delay to allow the dropdown button click to register first
+        const timeoutId = setTimeout(() => {
+            document.addEventListener("mousedown", handleClickOutside);
+        }, 0);
+
+        return () => {
+            clearTimeout(timeoutId);
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [showListDropdownFor]);
 
     // Command+K search keyboard listener
     useEffect(() => {
@@ -538,9 +552,9 @@ export default function RolodexPage() {
         // Clear any list filter to ensure the contact is visible
         setActiveList(null);
         setSearchQuery("");
-        // Expand the contact and scroll to it
+        // Open the profile panel and scroll to the contact
         setTimeout(() => {
-            setExpandedContact(contactId);
+            setSelectedContactId(contactId);
             const element = document.querySelector(`[data-contact-id="${contactId}"]`);
             element?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 50);
@@ -626,6 +640,8 @@ export default function RolodexPage() {
             if (noteInputRef.current) {
                 noteInputRef.current.style.height = 'auto';
             }
+            // Refresh contributions grid
+            setContributionsRefreshKey(prev => prev + 1);
         } catch (error) {
             console.error("Error adding note:", error);
         } finally {
@@ -679,6 +695,41 @@ export default function RolodexPage() {
             console.error("Error editing note:", error);
         } finally {
             setEditNoteLoading(false);
+        }
+    };
+
+    const handleUpdateNoteDate = async (noteId: number, contactId: number, newDate: Date) => {
+        setEditNoteDateLoading(true);
+        try {
+            const res = await fetch("/api/rolodex/notes", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ note_id: noteId, created_at: newDate.toISOString() }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setContacts((prev) =>
+                    prev.map((c) =>
+                        c.id === contactId
+                            ? {
+                                ...c,
+                                notes: c.notes.map((n) =>
+                                    n.id === noteId ? { ...n, created_at: data.note.created_at } : n
+                                ),
+                            }
+                            : c
+                    )
+                );
+                setEditingNoteDate(null);
+                // Refresh contributions grid since date changed
+                setContributionsRefreshKey(prev => prev + 1);
+            }
+        } catch (error) {
+            console.error("Error updating note date:", error);
+        } finally {
+            setEditNoteDateLoading(false);
         }
     };
 
@@ -885,15 +936,15 @@ export default function RolodexPage() {
                     c.id === contactId ? { ...c, hidden } : c
                 )
             );
-            // Clear selection and collapse if hiding
+            // Clear selection and close profile panel if hiding
             if (hidden) {
                 setSelectedContacts((prev) => {
                     const next = new Set(prev);
                     next.delete(contactId);
                     return next;
                 });
-                if (expandedContact === contactId) {
-                    setExpandedContact(null);
+                if (selectedContactId === contactId) {
+                    setSelectedContactId(null);
                 }
             }
             setContextMenu(null);
@@ -1151,7 +1202,7 @@ export default function RolodexPage() {
                     onClick={(e) => {
                         e.stopPropagation();
                         if (mentionId) {
-                            setExpandedContact(mentionId);
+                            setSelectedContactId(mentionId);
                             const element = document.querySelector(`[data-contact-id="${mentionId}"]`);
                             element?.scrollIntoView({ behavior: "smooth", block: "center" });
                         }
@@ -1703,40 +1754,6 @@ export default function RolodexPage() {
             console.error("Error updating location:", error);
         } finally {
             setEditLocationLoading(false);
-        }
-    };
-
-    const handleLogTouchpoint = async (contactId: number) => {
-        setUpdatingTouchpointFor(contactId);
-
-        try {
-            const now = new Date().toISOString();
-            const res = await fetch("/api/rolodex/update", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ people_id: contactId, last_touchpoint: now }),
-            });
-
-            if (res.ok) {
-                // Generate a temporary ID for the new touchpoint (will be replaced on next fetch)
-                const tempId = Date.now();
-                setContacts((prev) =>
-                    prev.map((c) =>
-                        c.id === contactId
-                            ? {
-                                ...c,
-                                last_touchpoint: now,
-                                touchpoints: [{ id: tempId, created_at: now }, ...c.touchpoints]
-                            }
-                            : c
-                    )
-                );
-            }
-        } catch (error) {
-            console.error("Error logging touchpoint:", error);
-        } finally {
-            setUpdatingTouchpointFor(null);
         }
     };
 
@@ -2695,7 +2712,7 @@ export default function RolodexPage() {
                                                 onClick={() => {
                                                     setShowTodoSheet(false);
                                                     setTimeout(() => {
-                                                        setExpandedContact(todo.contactId);
+                                                        setSelectedContactId(todo.contactId);
                                                         const element = document.querySelector(`[data-contact-id="${todo.contactId}"]`);
                                                         element?.scrollIntoView({ behavior: "smooth", block: "center" });
                                                     }, 300);
@@ -2820,7 +2837,7 @@ export default function RolodexPage() {
                                                                 onClick={() => {
                                                                     setShowTodoSheet(false);
                                                                     setTimeout(() => {
-                                                                        setExpandedContact(todo.contactId);
+                                                                        setSelectedContactId(todo.contactId);
                                                                         const element = document.querySelector(`[data-contact-id="${todo.contactId}"]`);
                                                                         element?.scrollIntoView({ behavior: "smooth", block: "center" });
                                                                     }, 300);
@@ -2873,7 +2890,12 @@ export default function RolodexPage() {
             </Sheet>
 
             {/* Contact Profile Sheet */}
-            <Sheet open={selectedContactId !== null} onOpenChange={(open) => !open && setSelectedContactId(null)}>
+            <Sheet
+                open={selectedContactId !== null}
+                onOpenChange={(open) => { if (!open) { setSelectedContactId(null); setShowListDropdownFor(null); setProfilePanelExpanded(false); setEditingNoteDate(null); } }}
+                expanded={profilePanelExpanded}
+                closeOnClickOutside={editingNoteDate === null}
+            >
                 {(() => {
                     const contact = contacts.find(c => c.id === selectedContactId);
                     if (!contact) return null;
@@ -2887,14 +2909,29 @@ export default function RolodexPage() {
                                 <SheetTitle className="sr-only">{contact.name}</SheetTitle>
                                 <SheetDescription className="sr-only">Contact profile for {contact.name}</SheetDescription>
 
-                                {/* Close button */}
-                                <button
-                                    onClick={() => setSelectedContactId(null)}
-                                    className="absolute top-4 left-4 p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all z-10"
-                                    aria-label="Close panel"
-                                >
-                                    <PanelRightClose className="h-5 w-5" />
-                                </button>
+                                {/* Panel controls */}
+                                <div className="absolute top-4 left-4 flex items-center gap-1 z-10">
+                                    {/* Close button */}
+                                    <button
+                                        onClick={() => setSelectedContactId(null)}
+                                        className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                        aria-label="Close panel"
+                                    >
+                                        <PanelRightClose className="h-5 w-5" />
+                                    </button>
+                                    {/* Expand/Collapse button */}
+                                    <button
+                                        onClick={() => setProfilePanelExpanded(!profilePanelExpanded)}
+                                        className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                        aria-label={profilePanelExpanded ? "Collapse panel" : "Expand panel"}
+                                    >
+                                        {profilePanelExpanded ? (
+                                            <Minimize2 className="h-5 w-5" />
+                                        ) : (
+                                            <Maximize2 className="h-5 w-5" />
+                                        )}
+                                    </button>
+                                </div>
 
                                 {/* Profile Hero Section */}
                                 <div className="flex flex-col items-center pt-8 pb-4">
@@ -3001,20 +3038,6 @@ export default function RolodexPage() {
                                 </div>
                             </SheetHeader>
                             <SheetContent className="p-4 space-y-6">
-                                {/* Touchpoint Button */}
-                                <button
-                                    onClick={() => handleLogTouchpoint(contact.id)}
-                                    disabled={updatingTouchpointFor === contact.id}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/30 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
-                                >
-                                    {updatingTouchpointFor === contact.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <CheckCircle2 className="h-4 w-4" />
-                                    )}
-                                    Log Touchpoint
-                                </button>
-
                                 {/* Bio Section */}
                                 <div>
                                     <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Bio</h3>
@@ -3042,12 +3065,12 @@ export default function RolodexPage() {
                                     ) : (
                                         <button onClick={() => { setEditBio(contact.custom_bio || xp?.bio || li?.headline || ""); setEditingBioFor(contact.id); }} className="group text-left w-full">
                                             {(contact.custom_bio || xp?.bio || li?.headline) ? (
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed flex items-start gap-1.5">
-                                                    <span className="flex-1">{contact.custom_bio || xp?.bio || li?.headline}</span>
-                                                    <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0 mt-1" />
-                                                </p>
+                                                <div className="flex items-start gap-1.5">
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed flex-1">{contact.custom_bio || xp?.bio || li?.headline}</p>
+                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
+                                                </div>
                                             ) : (
-                                                <p className="text-sm text-gray-400 italic flex items-center gap-1.5">+ Add bio <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" /></p>
+                                                <p className="text-sm text-gray-400 dark:text-gray-500">Add bio</p>
                                             )}
                                         </button>
                                     )}
@@ -3141,12 +3164,18 @@ export default function RolodexPage() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <button onClick={() => { setEditLocation(contact.custom_location || xp?.location || li?.location || ""); setEditingLocationFor(contact.id); }} className="group flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800">
-                                            <MapPin className="h-4 w-4" />
+                                        <button
+                                            onClick={() => { setEditLocation(contact.custom_location || xp?.location || li?.location || ""); setEditingLocationFor(contact.id); }}
+                                            className="group flex items-center gap-2 text-sm hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                                        >
+                                            <MapPin className="h-4 w-4 text-gray-400" />
                                             {(contact.custom_location || xp?.location || li?.location) ? (
-                                                <span className="flex items-center gap-1">{contact.custom_location || xp?.location || li?.location} <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" /></span>
+                                                <>
+                                                    <span className="text-gray-700 dark:text-gray-300">{contact.custom_location || xp?.location || li?.location}</span>
+                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </>
                                             ) : (
-                                                <span className="text-gray-400 italic">+ Add location <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50" /></span>
+                                                <span className="text-gray-400 dark:text-gray-500">Add location</span>
                                             )}
                                         </button>
                                     )}
@@ -3217,13 +3246,65 @@ export default function RolodexPage() {
                                 <div>
                                     <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Lists</h3>
                                     <div className="flex flex-wrap gap-2">
+                                        {/* Show lists the contact is in (with remove button) */}
                                         {lists.filter(l => l.member_ids.includes(contact.id)).map(list => (
-                                            <span key={list.id} className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: `${list.color}20`, color: list.color }}>
-                                                {list.name}
-                                            </span>
+                                            <div key={list.id} className="inline-flex items-center group/list">
+                                                <span
+                                                    className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-l-full"
+                                                    style={{ backgroundColor: `${list.color}20`, color: list.color }}
+                                                >
+                                                    {list.name}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleRemoveFromList(list.id, contact.id)}
+                                                    className="px-1.5 py-1 text-xs rounded-r-full transition-colors opacity-0 group-hover/list:opacity-100"
+                                                    style={{
+                                                        backgroundColor: `${list.color}20`,
+                                                        color: list.color,
+                                                    }}
+                                                    title={`Remove from ${list.name}`}
+                                                >
+                                                    <X className="h-3 w-3 hover:text-red-500" />
+                                                </button>
+                                            </div>
                                         ))}
-                                        {lists.filter(l => l.member_ids.includes(contact.id)).length === 0 && (
-                                            <span className="text-sm text-gray-400 italic">No lists</span>
+                                        {/* Dropdown to add to a list */}
+                                        {lists.filter(l => !l.member_ids.includes(contact.id)).length > 0 && (
+                                            <div className="relative">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setShowListDropdownFor(showListDropdownFor === contact.id ? null : contact.id);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400 transition-colors"
+                                                >
+                                                    <Plus className="h-3 w-3" />
+                                                    Add to list
+                                                </button>
+                                                {showListDropdownFor === contact.id && (
+                                                    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                                                        {lists.filter(l => !l.member_ids.includes(contact.id)).map(list => (
+                                                            <button
+                                                                key={list.id}
+                                                                onClick={() => {
+                                                                    handleAddToList(list.id, contact.id);
+                                                                    setShowListDropdownFor(null);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                            >
+                                                                <div
+                                                                    className="w-3 h-3 rounded-full flex-shrink-0"
+                                                                    style={{ backgroundColor: list.color }}
+                                                                />
+                                                                <span className="truncate">{list.name}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {lists.length === 0 && (
+                                            <span className="text-sm text-gray-400 italic">No lists created yet</span>
                                         )}
                                     </div>
                                 </div>
@@ -3385,7 +3466,56 @@ export default function RolodexPage() {
                                                             <>
                                                                 <p className="text-sm text-gray-700 dark:text-gray-300 pr-16">{renderNoteWithMentions(note.note)}</p>
                                                                 <div className="flex items-center gap-2 mt-1">
-                                                                    <span className="text-xs text-gray-400">{formatTimeAgo(note.created_at)}</span>
+                                                                    <Popover
+                                                                        open={editingNoteDate?.noteId === note.id && editingNoteDate?.contactId === contact.id}
+                                                                        modal={false}
+                                                                    >
+                                                                        <PopoverTrigger asChild>
+                                                                            <button
+                                                                                className="text-xs text-gray-400 hover:text-slate-600 dark:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                                                                title="Click to change date"
+                                                                                onClick={() => setEditingNoteDate({ noteId: note.id, contactId: contact.id, currentDate: new Date(note.created_at) })}
+                                                                            >
+                                                                                <Calendar className="h-3 w-3" />
+                                                                                {formatTimeAgo(note.created_at)}
+                                                                            </button>
+                                                                        </PopoverTrigger>
+                                                                        <PopoverContent
+                                                                            className="w-auto p-0"
+                                                                            align="start"
+                                                                            onInteractOutside={(e) => e.preventDefault()}
+                                                                            onPointerDownOutside={(e) => e.preventDefault()}
+                                                                            onFocusOutside={(e) => e.preventDefault()}
+                                                                            onEscapeKeyDown={(e) => e.preventDefault()}
+                                                                        >
+                                                                            <div className="flex items-center justify-between px-3 pt-2">
+                                                                                <span className="text-xs font-medium text-gray-500">Change date</span>
+                                                                                <button
+                                                                                    onClick={() => setEditingNoteDate(null)}
+                                                                                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                                                                                >
+                                                                                    <X className="h-3 w-3" />
+                                                                                </button>
+                                                                            </div>
+                                                                            <CalendarPicker
+                                                                                mode="single"
+                                                                                selected={editingNoteDate?.currentDate}
+                                                                                onSelect={(date) => {
+                                                                                    if (date) {
+                                                                                        // Preserve the time from the original date
+                                                                                        const originalDate = new Date(note.created_at);
+                                                                                        date.setHours(originalDate.getHours(), originalDate.getMinutes(), originalDate.getSeconds());
+                                                                                        handleUpdateNoteDate(note.id, contact.id, date);
+                                                                                    }
+                                                                                }}
+                                                                                disabled={(date: Date) => date > new Date()}
+                                                                                initialFocus
+                                                                            />
+                                                                            <div className="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 text-center">
+                                                                                {editNoteDateLoading ? "Saving..." : "Select a new date"}
+                                                                            </div>
+                                                                        </PopoverContent>
+                                                                    </Popover>
                                                                     {note.source_type === "website_analysis" && (
                                                                         <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/40 px-1.5 py-0.5 rounded">auto</span>
                                                                     )}
@@ -3672,11 +3802,9 @@ export default function RolodexPage() {
             {/* Full-width Header Bar */}
             <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800/50">
                 <div className="flex items-center justify-between px-4 sm:px-8 py-3">
-                    <div>
-                        <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
-                            Rolodex
-                        </h1>
-                    </div>
+                    <h1 className="text-2xl sm:text-2xl font-homemade text-gray-700 dark:text-white">
+                        Rolodex
+                    </h1>
 
                     <div className="flex items-center gap-2">
                         {/* Confidence Boost Button */}
@@ -3798,7 +3926,7 @@ export default function RolodexPage() {
             <div className="px-4 py-6 sm:px-8 sm:py-6">
                 <div className="w-full max-w-5xl mx-auto">
                     {/* Contributions Grid */}
-                    <ContributionsGrid />
+                    <ContributionsGrid refreshKey={contributionsRefreshKey} />
 
                     {/* Lists Bar with Filter */}
                     {!loading && contacts.length > 0 && (
@@ -4362,7 +4490,6 @@ export default function RolodexPage() {
                                         return getLastActivity(b) - getLastActivity(a);
                                     })
                                     .map((contact) => {
-                                        const isExpanded = expandedContact === contact.id;
                                         const isSelected = selectedContacts.has(contact.id);
                                         const xp = contact.x_profile;
                                         const li = contact.linkedin_profile;
@@ -4371,7 +4498,7 @@ export default function RolodexPage() {
                                         const profileImageUrl = contact.custom_profile_image_url || xp?.profile_image_url || li?.profile_image_url;
 
                                         return (
-                                            <div key={contact.id} ref={isExpanded ? expandedRowRef : undefined} data-contact-id={contact.id}>
+                                            <div key={contact.id} data-contact-id={contact.id}>
                                                 {/* Row */}
                                                 <div
                                                     className={`grid grid-cols-[1fr,auto] sm:grid-cols-[160px,1fr,100px,120px,1fr,40px] items-center px-4 py-3 cursor-pointer transition-colors select-none ${isSelected
@@ -4388,22 +4515,8 @@ export default function RolodexPage() {
                                                 >
                                                     {/* Contact Cell */}
                                                     <div className="flex items-center gap-3 min-w-0">
-                                                        {/* Avatar with optional camera overlay for image upload */}
-                                                        <div
-                                                            className="relative flex-shrink-0"
-                                                            onMouseEnter={() => isExpanded && setHoveringAvatarFor(contact.id)}
-                                                            onMouseLeave={() => setHoveringAvatarFor(null)}
-                                                            onClick={(e) => {
-                                                                if (isExpanded) {
-                                                                    e.stopPropagation();
-                                                                    imageInputRef.current?.click();
-                                                                    // Store the contactId for when file is selected
-                                                                    if (imageInputRef.current) {
-                                                                        imageInputRef.current.dataset.contactId = contact.id.toString();
-                                                                    }
-                                                                }
-                                                            }}
-                                                        >
+                                                        {/* Avatar */}
+                                                        <div className="relative flex-shrink-0">
                                                             {profileImageUrl ? (
                                                                 <Image
                                                                     src={contact.custom_profile_image_url || (xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url || "")}
@@ -4419,30 +4532,6 @@ export default function RolodexPage() {
                                                                     </span>
                                                                 </div>
                                                             )}
-                                                            {/* Camera overlay - only show when expanded and hovered or uploading */}
-                                                            {isExpanded && (hoveringAvatarFor === contact.id || uploadingImageFor === contact.id) && (
-                                                                <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center cursor-pointer">
-                                                                    {uploadingImageFor === contact.id ? (
-                                                                        <Loader2 className="h-4 w-4 text-white animate-spin" />
-                                                                    ) : (
-                                                                        <Camera className="h-4 w-4 text-white" />
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                            {/* Touchpoint indicator - subtle dot on bottom right of avatar */}
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleLogTouchpoint(contact.id);
-                                                                }}
-                                                                disabled={updatingTouchpointFor === contact.id}
-                                                                className="absolute -bottom-0 -right-0 w-3 h-3 rounded-full border border-white dark:border-gray-900 bg-gray-400 dark:bg-gray-500 hover:bg-gray-500 dark:hover:bg-gray-400 flex items-center justify-center transition-all hover:scale-110"
-                                                                title="Log a touchpoint"
-                                                            >
-                                                                {updatingTouchpointFor === contact.id && (
-                                                                    <Loader2 className="h-1.5 w-1.5 text-white animate-spin" />
-                                                                )}
-                                                            </button>
                                                         </div>
                                                         {/* Name and handle */}
                                                         {xp ? (
@@ -4562,776 +4651,6 @@ export default function RolodexPage() {
                                                         )}
                                                     </div>
                                                 </div>
-
-                                                {/* Expanded Notes Panel */}
-                                                {isExpanded && (
-                                                    <div className="bg-gray-50/80 dark:bg-gray-900/40 border-t border-gray-100 dark:border-gray-800 px-4 py-4">
-                                                        <div className="max-w-2xl ml-[52px] sm:ml-[52px]">
-                                                            {/* Editable Name */}
-                                                            <div className="mb-4" onClick={(e) => e.stopPropagation()}>
-                                                                {editingNameFor === contact.id ? (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={editName}
-                                                                            onChange={(e) => setEditName(e.target.value)}
-                                                                            onKeyDown={(e) => {
-                                                                                if (e.key === "Enter" && editName.trim()) {
-                                                                                    handleUpdateName(contact.id);
-                                                                                } else if (e.key === "Escape") {
-                                                                                    setEditingNameFor(null);
-                                                                                    setEditName("");
-                                                                                }
-                                                                            }}
-                                                                            autoFocus
-                                                                            className="flex-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
-                                                                        />
-                                                                        <button
-                                                                            onClick={() => handleUpdateName(contact.id)}
-                                                                            disabled={!editName.trim() || editNameLoading}
-                                                                            className="p-1.5 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
-                                                                        >
-                                                                            {editNameLoading ? (
-                                                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                                            ) : (
-                                                                                <Check className="h-4 w-4" />
-                                                                            )}
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditingNameFor(null);
-                                                                                setEditName("");
-                                                                            }}
-                                                                            className="p-1.5 text-gray-400 hover:text-gray-600"
-                                                                        >
-                                                                            <X className="h-4 w-4" />
-                                                                        </button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditingNameFor(contact.id);
-                                                                            setEditName(contact.name);
-                                                                        }}
-                                                                        className="group flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white hover:text-slate-700 dark:hover:text-slate-600"
-                                                                    >
-                                                                        {contact.name}
-                                                                        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Quick Info - Bio */}
-                                                            <div className="mb-2" onClick={(e) => e.stopPropagation()}>
-                                                                {editingBioFor === contact.id ? (
-                                                                    <div className="flex flex-col gap-2">
-                                                                        <textarea
-                                                                            value={editBio}
-                                                                            onChange={(e) => setEditBio(e.target.value)}
-                                                                            onKeyDown={(e) => {
-                                                                                if (e.key === "Enter" && !e.shiftKey) {
-                                                                                    e.preventDefault();
-                                                                                    handleUpdateBio(contact.id);
-                                                                                } else if (e.key === "Escape") {
-                                                                                    setEditingBioFor(null);
-                                                                                    setEditBio("");
-                                                                                }
-                                                                            }}
-                                                                            placeholder="Add a bio..."
-                                                                            autoFocus
-                                                                            rows={3}
-                                                                            className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent resize-none"
-                                                                        />
-                                                                        <div className="flex gap-2">
-                                                                            <button
-                                                                                onClick={() => handleUpdateBio(contact.id)}
-                                                                                disabled={editBioLoading}
-                                                                                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
-                                                                            >
-                                                                                {editBioLoading ? (
-                                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                                                ) : (
-                                                                                    <Check className="h-3.5 w-3.5" />
-                                                                                )}
-                                                                                Save
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setEditingBioFor(null);
-                                                                                    setEditBio("");
-                                                                                }}
-                                                                                className="px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-sm"
-                                                                            >
-                                                                                Cancel
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditBio(contact.custom_bio || xp?.bio || li?.headline || "");
-                                                                            setEditingBioFor(contact.id);
-                                                                        }}
-                                                                        className="group text-left w-full"
-                                                                    >
-                                                                        {(contact.custom_bio || xp?.bio || li?.headline) ? (
-                                                                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed flex items-start gap-1.5">
-                                                                                <span className="flex-1">{contact.custom_bio || xp?.bio || li?.headline}</span>
-                                                                                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0 mt-1" />
-                                                                            </p>
-                                                                        ) : (
-                                                                            <p className="text-sm text-gray-400 dark:text-gray-500 italic flex items-center gap-1.5">
-                                                                                <span>+ Add bio</span>
-                                                                                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                                                                            </p>
-                                                                        )}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Location - editable */}
-                                                            <div className="mb-2" onClick={(e) => e.stopPropagation()}>
-                                                                {editingLocationFor === contact.id ? (
-                                                                    <div className="flex flex-col gap-2">
-                                                                        <div className="flex items-center gap-2 relative">
-                                                                            <MapPin className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                                                                            <div className="flex-1 relative">
-                                                                                <input
-                                                                                    type="text"
-                                                                                    value={editLocation}
-                                                                                    onChange={(e) => {
-                                                                                        setEditLocation(e.target.value);
-                                                                                        setLocationSuggestionIndex(0);
-                                                                                    }}
-                                                                                    onKeyDown={(e) => {
-                                                                                        const suggestions = allLocations.filter(loc =>
-                                                                                            loc.toLowerCase().includes(editLocation.toLowerCase()) &&
-                                                                                            loc.toLowerCase() !== editLocation.toLowerCase()
-                                                                                        ).slice(0, 6);
-
-                                                                                        if (e.key === "ArrowDown" && suggestions.length > 0) {
-                                                                                            e.preventDefault();
-                                                                                            setLocationSuggestionIndex(prev =>
-                                                                                                prev < suggestions.length - 1 ? prev + 1 : 0
-                                                                                            );
-                                                                                        } else if (e.key === "ArrowUp" && suggestions.length > 0) {
-                                                                                            e.preventDefault();
-                                                                                            setLocationSuggestionIndex(prev =>
-                                                                                                prev > 0 ? prev - 1 : suggestions.length - 1
-                                                                                            );
-                                                                                        } else if (e.key === "Tab" && suggestions.length > 0 && editLocation.trim()) {
-                                                                                            e.preventDefault();
-                                                                                            setEditLocation(suggestions[locationSuggestionIndex]);
-                                                                                        } else if (e.key === "Enter") {
-                                                                                            e.preventDefault();
-                                                                                            if (suggestions.length > 0 && editLocation.trim() && suggestions[locationSuggestionIndex]) {
-                                                                                                setEditLocation(suggestions[locationSuggestionIndex]);
-                                                                                            } else {
-                                                                                                handleUpdateLocation(contact.id);
-                                                                                            }
-                                                                                        } else if (e.key === "Escape") {
-                                                                                            setEditingLocationFor(null);
-                                                                                            setEditLocation("");
-                                                                                            setLocationSuggestionIndex(0);
-                                                                                        }
-                                                                                    }}
-                                                                                    placeholder="City, Country"
-                                                                                    autoFocus
-                                                                                    className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
-                                                                                />
-                                                                                {/* Location suggestions dropdown */}
-                                                                                {editLocation.trim() && (() => {
-                                                                                    const suggestions = allLocations.filter(loc =>
-                                                                                        loc.toLowerCase().includes(editLocation.toLowerCase()) &&
-                                                                                        loc.toLowerCase() !== editLocation.toLowerCase()
-                                                                                    ).slice(0, 6);
-
-                                                                                    if (suggestions.length === 0) return null;
-
-                                                                                    return (
-                                                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
-                                                                                            {suggestions.map((loc, idx) => (
-                                                                                                <button
-                                                                                                    key={loc}
-                                                                                                    onClick={() => {
-                                                                                                        setEditLocation(loc);
-                                                                                                        setLocationSuggestionIndex(0);
-                                                                                                    }}
-                                                                                                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${idx === locationSuggestionIndex
-                                                                                                        ? "bg-slate-50 dark:bg-slate-800/30 text-slate-700 dark:text-slate-300"
-                                                                                                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                                                                                                        }`}
-                                                                                                >
-                                                                                                    <MapPin className="h-3 w-3 text-gray-400" />
-                                                                                                    {loc}
-                                                                                                </button>
-                                                                                            ))}
-                                                                                        </div>
-                                                                                    );
-                                                                                })()}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="flex gap-2 ml-5">
-                                                                            <button
-                                                                                onClick={() => handleUpdateLocation(contact.id)}
-                                                                                disabled={editLocationLoading}
-                                                                                className="px-3 py-1 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-xs font-medium rounded transition-colors flex items-center gap-1"
-                                                                            >
-                                                                                {editLocationLoading ? (
-                                                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                                                ) : (
-                                                                                    <Check className="h-3 w-3" />
-                                                                                )}
-                                                                                Save
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setEditingLocationFor(null);
-                                                                                    setEditLocation("");
-                                                                                    setLocationSuggestionIndex(0);
-                                                                                }}
-                                                                                className="px-3 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-xs"
-                                                                            >
-                                                                                Cancel
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditLocation(contact.custom_location || xp?.location || li?.location || "");
-                                                                            setEditingLocationFor(contact.id);
-                                                                        }}
-                                                                        className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors group"
-                                                                    >
-                                                                        <MapPin className="h-3.5 w-3.5" />
-                                                                        {(contact.custom_location || xp?.location || li?.location) ? (
-                                                                            <span className="flex items-center gap-1">
-                                                                                {contact.custom_location || xp?.location || li?.location}
-                                                                                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="text-gray-400 dark:text-gray-500 italic flex items-center gap-1">
-                                                                                + Add location
-                                                                                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                                                                            </span>
-                                                                        )}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Links section */}
-                                                            <div className="mb-4 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                                                {/* Show existing links */}
-                                                                {xp && (
-                                                                    <a
-                                                                        href={`https://x.com/${xp.username}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                                                    >
-                                                                        <AtSign className="h-3 w-3" />
-                                                                        {xp.username}
-                                                                    </a>
-                                                                )}
-                                                                {li && (
-                                                                    <a
-                                                                        href={li.linkedin_url}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                                                                    >
-                                                                        <ExternalLink className="h-3 w-3" />
-                                                                        LinkedIn
-                                                                    </a>
-                                                                )}
-                                                                {contact.websites.map(website => (
-                                                                    <div key={website.id} className="inline-flex items-center gap-0.5 group/website">
-                                                                        <a
-                                                                            href={website.url.startsWith("http") ? website.url : `https://${website.url}`}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-l-full hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
-                                                                        >
-                                                                            <ExternalLink className="h-3 w-3" />
-                                                                            {website.url.replace(/^https?:\/\//, "").replace(/\/$/, "").substring(0, 25)}{website.url.length > 30 ? "..." : ""}
-                                                                        </a>
-                                                                        <button
-                                                                            onClick={async (e) => {
-                                                                                e.stopPropagation();
-                                                                                const res = await fetch(`/api/rolodex/websites?id=${website.id}`, {
-                                                                                    method: "DELETE",
-                                                                                    credentials: "include",
-                                                                                });
-                                                                                if (res.ok) {
-                                                                                    setContacts((prev) =>
-                                                                                        prev.map((c) =>
-                                                                                            c.id === contact.id ? { ...c, websites: c.websites.filter(w => w.id !== website.id) } : c
-                                                                                        )
-                                                                                    );
-                                                                                }
-                                                                            }}
-                                                                            className="px-1.5 py-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400 rounded-r-full hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 transition-colors opacity-0 group-hover/website:opacity-100"
-                                                                            title="Remove website"
-                                                                        >
-                                                                            <X className="h-3 w-3" />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-
-                                                                {/* Add link input or button */}
-                                                                {addingLinkFor === contact.id ? (
-                                                                    <div className="w-full mt-2">
-                                                                        <div className="flex gap-2">
-                                                                            <input
-                                                                                type="text"
-                                                                                value={linkInput}
-                                                                                onChange={(e) => setLinkInput(e.target.value)}
-                                                                                onKeyDown={(e) => {
-                                                                                    if (e.key === "Enter" && linkInput.trim()) {
-                                                                                        handleAddLink(contact.id);
-                                                                                    } else if (e.key === "Escape") {
-                                                                                        setAddingLinkFor(null);
-                                                                                        setLinkInput("");
-                                                                                        setLinkError(null);
-                                                                                    }
-                                                                                }}
-                                                                                placeholder="@handle, linkedin.com/..., or website URL"
-                                                                                autoFocus
-                                                                                className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
-                                                                            />
-                                                                            <button
-                                                                                onClick={() => handleAddLink(contact.id)}
-                                                                                disabled={!linkInput.trim() || linkLoading}
-                                                                                className="px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
-                                                                            >
-                                                                                {linkLoading ? (
-                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                ) : (
-                                                                                    "Add"
-                                                                                )}
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setAddingLinkFor(null);
-                                                                                    setLinkInput("");
-                                                                                    setLinkError(null);
-                                                                                }}
-                                                                                className="px-3 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-sm"
-                                                                            >
-                                                                                Cancel
-                                                                            </button>
-                                                                        </div>
-                                                                        {linkInput.trim() && (
-                                                                            <p className="text-xs text-gray-400 mt-1">
-                                                                                Detected: {detectLinkType(linkInput) === "x" ? "X/Twitter" : detectLinkType(linkInput) === "linkedin" ? "LinkedIn" : "Website"}
-                                                                            </p>
-                                                                        )}
-                                                                        {linkError && (
-                                                                            <p className="text-sm text-red-500 mt-1">{linkError}</p>
-                                                                        )}
-                                                                    </div>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => setAddingLinkFor(contact.id)}
-                                                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                                                                    >
-                                                                        <Plus className="h-3 w-3" />
-                                                                        Add link
-                                                                    </button>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Add Note Input */}
-                                                            <div className="relative flex gap-2 mb-4">
-                                                                <div className="relative flex-1">
-                                                                    {/* Styled overlay for mentions */}
-                                                                    <div
-                                                                        className="absolute inset-0 px-3 py-2 text-sm pointer-events-none overflow-hidden whitespace-pre-wrap break-words"
-                                                                        aria-hidden="true"
-                                                                    >
-                                                                        {renderInputWithMentions(newNote)}
-                                                                    </div>
-                                                                    <textarea
-                                                                        ref={noteInputRef}
-                                                                        value={newNote}
-                                                                        onChange={(e) => {
-                                                                            handleNoteInputChange(e);
-                                                                            // Auto-resize
-                                                                            e.target.style.height = 'auto';
-                                                                            e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-                                                                        }}
-                                                                        onKeyDown={(e) => {
-                                                                            // Submit on Enter without shift, allow new lines with Shift+Enter
-                                                                            if (e.key === "Enter" && !e.shiftKey && !mentionQuery) {
-                                                                                e.preventDefault();
-                                                                                if (newNote.trim()) {
-                                                                                    handleAddNote(contact.id);
-                                                                                }
-                                                                            } else {
-                                                                                handleNoteKeyDown(e, contact.id);
-                                                                            }
-                                                                        }}
-                                                                        onBlur={() => {
-                                                                            // Delay to allow clicking on suggestions
-                                                                            setTimeout(() => {
-                                                                                setMentionQuery(null);
-                                                                                setMentionPosition(null);
-                                                                            }, 150);
-                                                                        }}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        placeholder="Add a note... (use @ to mention)"
-                                                                        rows={1}
-                                                                        className="w-full min-h-[38px] px-3 py-2 text-sm bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg text-transparent caret-black dark:caret-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent relative z-10 resize-none overflow-hidden"
-                                                                    />
-                                                                    {/* Mention Dropdown */}
-                                                                    {mentionQuery !== null && mentionSuggestions.length > 0 && mentionPosition && (
-                                                                        <div
-                                                                            className="fixed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[9999] max-h-48 overflow-y-auto min-w-[200px]"
-                                                                            style={{ top: mentionPosition.top, left: mentionPosition.left }}
-                                                                        >
-                                                                            {mentionSuggestions.map((c, idx) => (
-                                                                                <button
-                                                                                    key={c.id}
-                                                                                    onClick={(e) => {
-                                                                                        e.preventDefault();
-                                                                                        e.stopPropagation();
-                                                                                        insertMention(c);
-                                                                                    }}
-                                                                                    className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${idx === mentionIndex ? "bg-gray-100 dark:bg-gray-700" : ""
-                                                                                        }`}
-                                                                                >
-                                                                                    {(c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url) ? (
-                                                                                        <Image
-                                                                                            src={c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url || ""}
-                                                                                            alt={c.name}
-                                                                                            width={24}
-                                                                                            height={24}
-                                                                                            className="rounded-full"
-                                                                                        />
-                                                                                    ) : (
-                                                                                        <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
-                                                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                                                                                {c.name.charAt(0).toUpperCase()}
-                                                                                            </span>
-                                                                                        </div>
-                                                                                    )}
-                                                                                    <div className="min-w-0">
-                                                                                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                                                                            {c.name}
-                                                                                        </p>
-                                                                                        {c.x_profile?.username && (
-                                                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                                                                @{c.x_profile.username}
-                                                                                            </p>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </button>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleAddNote(contact.id);
-                                                                    }}
-                                                                    disabled={!newNote.trim() || addingNoteFor === contact.id}
-                                                                    className="px-3 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
-                                                                >
-                                                                    {addingNoteFor === contact.id ? (
-                                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                                    ) : (
-                                                                        <Plus className="h-4 w-4" />
-                                                                    )}
-                                                                </button>
-                                                            </div>
-
-                                                            {/* All Notes */}
-                                                            {contact.notes.length > 0 ? (
-                                                                <div className="space-y-2">
-                                                                    {contact.notes.map((note) => (
-                                                                        <div
-                                                                            key={note.id}
-                                                                            className={`group flex items-start gap-3 p-3 rounded-lg border ${note.source_type === "website_analysis" ? "bg-violet-50 dark:bg-violet-900/20 border-violet-100 dark:border-violet-800/30" : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700"}`}
-                                                                            onClick={(e) => e.stopPropagation()}
-                                                                        >
-                                                                            {editingNote?.noteId === note.id ? (
-                                                                                <div className="flex-1 relative flex items-center gap-2">
-                                                                                    <input
-                                                                                        ref={editNoteInputRef}
-                                                                                        type="text"
-                                                                                        value={editNoteText}
-                                                                                        onChange={handleEditNoteInputChange}
-                                                                                        onKeyDown={(e) => handleEditNoteKeyDown(e, note.id, contact.id)}
-                                                                                        onBlur={() => {
-                                                                                            // Delay to allow clicking on suggestions
-                                                                                            setTimeout(() => {
-                                                                                                setEditMentionQuery(null);
-                                                                                                setEditMentionPosition(null);
-                                                                                            }, 150);
-                                                                                        }}
-                                                                                        autoFocus
-                                                                                        className="flex-1 px-2 py-1 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600"
-                                                                                    />
-                                                                                    <button
-                                                                                        onClick={() => handleEditNote(note.id, contact.id)}
-                                                                                        disabled={!editNoteText.trim() || editNoteLoading}
-                                                                                        className="p-1 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
-                                                                                    >
-                                                                                        {editNoteLoading ? (
-                                                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                        ) : (
-                                                                                            <Check className="h-4 w-4" />
-                                                                                        )}
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => {
-                                                                                            setEditingNote(null);
-                                                                                            setEditNoteText("");
-                                                                                            setEditPendingMentions(new Map());
-                                                                                        }}
-                                                                                        className="p-1 text-gray-400 hover:text-gray-600"
-                                                                                    >
-                                                                                        <X className="h-4 w-4" />
-                                                                                    </button>
-                                                                                    {/* Edit mention suggestions dropdown */}
-                                                                                    {editMentionQuery !== null && editMentionSuggestions.length > 0 && editMentionPosition && (
-                                                                                        <div
-                                                                                            className="fixed z-[9999] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[200px]"
-                                                                                            style={{ top: editMentionPosition.top, left: editMentionPosition.left }}
-                                                                                        >
-                                                                                            {editMentionSuggestions.map((c, idx) => {
-                                                                                                const profileImg = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
-                                                                                                return (
-                                                                                                    <button
-                                                                                                        key={c.id}
-                                                                                                        onClick={() => insertEditMention(c)}
-                                                                                                        className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 ${idx === editMentionIndex ? "bg-gray-100 dark:bg-gray-700" : ""}`}
-                                                                                                    >
-                                                                                                        {profileImg ? (
-                                                                                                            <Image src={profileImg} alt="" width={24} height={24} className="rounded-full object-cover" />
-                                                                                                        ) : (
-                                                                                                            <div className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs">{c.name.charAt(0)}</div>
-                                                                                                        )}
-                                                                                                        <span className="text-gray-900 dark:text-white">{c.name}</span>
-                                                                                                    </button>
-                                                                                                );
-                                                                                            })}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </div>
-                                                                            ) : (
-                                                                                <>
-                                                                                    <div
-                                                                                        className="flex-1 text-sm text-gray-700 dark:text-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-white"
-                                                                                        onClick={() => {
-                                                                                            setEditingNote({ noteId: note.id, contactId: contact.id });
-                                                                                            setEditNoteText(note.note);
-                                                                                            initializeEditMentions(note.note);
-                                                                                        }}
-                                                                                    >
-                                                                                        {renderNoteWithMentions(note.note)}
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                                                                        <span className="text-xs text-gray-400">
-                                                                                            {formatTimeAgo(note.created_at)}
-                                                                                        </span>
-                                                                                        {note.source_type === "website_analysis" && (
-                                                                                            <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/40 px-1.5 py-0.5 rounded">auto</span>
-                                                                                        )}
-                                                                                        <button
-                                                                                            onClick={() => {
-                                                                                                setEditingNote({ noteId: note.id, contactId: contact.id });
-                                                                                                setEditNoteText(note.note);
-                                                                                                initializeEditMentions(note.note);
-                                                                                            }}
-                                                                                            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-slate-600 transition-all"
-                                                                                        >
-                                                                                            <Pencil className="h-3.5 w-3.5" />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            onClick={() => handleDeleteNote(note.id, contact.id)}
-                                                                                            className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
-                                                                                        >
-                                                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                </>
-                                                                            )}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            ) : null}
-
-                                                            {/* Compliments Section */}
-                                                            <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
-                                                                <div className="flex items-center justify-between mb-3">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Sparkles className="h-4 w-4 text-pink-500" />
-                                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                                            Compliments
-                                                                        </span>
-                                                                        {contact.compliments.length > 0 && (
-                                                                            <span className="text-xs text-gray-400">
-                                                                                ({contact.compliments.length})
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                    {showComplimentInput !== contact.id && (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setShowComplimentInput(contact.id);
-                                                                                setNewCompliment("");
-                                                                                setNewComplimentContext("");
-                                                                            }}
-                                                                            className="text-xs text-pink-500 hover:text-pink-600 dark:text-pink-400 dark:hover:text-pink-300 flex items-center gap-1"
-                                                                        >
-                                                                            <Plus className="h-3 w-3" />
-                                                                            Add
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-
-                                                                {/* Add Compliment Input */}
-                                                                {showComplimentInput === contact.id && (
-                                                                    <div className="mb-4 p-3 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-950/30 dark:to-rose-950/30 rounded-lg border border-pink-100 dark:border-pink-900/50">
-                                                                        <textarea
-                                                                            value={newCompliment}
-                                                                            onChange={(e) => setNewCompliment(e.target.value)}
-                                                                            placeholder="What nice thing did they say? ✨"
-                                                                            rows={2}
-                                                                            className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent resize-none"
-                                                                        />
-                                                                        <input
-                                                                            type="text"
-                                                                            value={newComplimentContext}
-                                                                            onChange={(e) => setNewComplimentContext(e.target.value)}
-                                                                            placeholder="Context (optional): at coffee, on Twitter, in meeting..."
-                                                                            className="w-full mt-2 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                                                                        />
-                                                                        <div className="flex justify-end gap-2 mt-3">
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setShowComplimentInput(null);
-                                                                                    setNewCompliment("");
-                                                                                    setNewComplimentContext("");
-                                                                                }}
-                                                                                className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                                                                            >
-                                                                                Cancel
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleAddCompliment(contact.id)}
-                                                                                disabled={!newCompliment.trim() || addingComplimentFor === contact.id}
-                                                                                className="px-4 py-1.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 disabled:from-gray-300 disabled:to-gray-300 dark:disabled:from-gray-700 dark:disabled:to-gray-700 text-white text-sm font-medium rounded-lg transition-all"
-                                                                            >
-                                                                                {addingComplimentFor === contact.id ? (
-                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                ) : (
-                                                                                    "Save"
-                                                                                )}
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Compliments List */}
-                                                                {contact.compliments.length > 0 ? (
-                                                                    <div className="space-y-2">
-                                                                        {contact.compliments.map((comp) => (
-                                                                            <div
-                                                                                key={comp.id}
-                                                                                className="group p-3 bg-gradient-to-r from-pink-50/50 to-rose-50/50 dark:from-pink-950/20 dark:to-rose-950/20 rounded-lg border border-pink-100 dark:border-pink-900/30"
-                                                                            >
-                                                                                {editingCompliment?.complimentId === comp.id ? (
-                                                                                    <div className="space-y-2">
-                                                                                        <textarea
-                                                                                            value={editComplimentText}
-                                                                                            onChange={(e) => setEditComplimentText(e.target.value)}
-                                                                                            rows={2}
-                                                                                            autoFocus
-                                                                                            className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500 resize-none"
-                                                                                        />
-                                                                                        <input
-                                                                                            type="text"
-                                                                                            value={editComplimentContext}
-                                                                                            onChange={(e) => setEditComplimentContext(e.target.value)}
-                                                                                            placeholder="Context (optional)"
-                                                                                            className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-pink-200 dark:border-pink-800 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
-                                                                                        />
-                                                                                        <div className="flex justify-end gap-2">
-                                                                                            <button
-                                                                                                onClick={() => {
-                                                                                                    setEditingCompliment(null);
-                                                                                                    setEditComplimentText("");
-                                                                                                    setEditComplimentContext("");
-                                                                                                }}
-                                                                                                className="p-1 text-gray-400 hover:text-gray-600"
-                                                                                            >
-                                                                                                <X className="h-4 w-4" />
-                                                                                            </button>
-                                                                                            <button
-                                                                                                onClick={() => handleEditCompliment(comp.id, contact.id)}
-                                                                                                disabled={!editComplimentText.trim() || editComplimentLoading}
-                                                                                                className="p-1 text-pink-600 hover:text-pink-700 disabled:text-gray-400"
-                                                                                            >
-                                                                                                {editComplimentLoading ? (
-                                                                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                                                                ) : (
-                                                                                                    <Check className="h-4 w-4" />
-                                                                                                )}
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <>
-                                                                                        <p className="text-sm text-gray-700 dark:text-gray-300 italic">
-                                                                                            &ldquo;{comp.compliment}&rdquo;
-                                                                                        </p>
-                                                                                        <div className="flex items-center justify-between mt-2">
-                                                                                            <div className="flex items-center gap-2 text-xs text-gray-400">
-                                                                                                {comp.context && (
-                                                                                                    <span className="text-pink-500/70 dark:text-pink-400/70">
-                                                                                                        {comp.context}
-                                                                                                    </span>
-                                                                                                )}
-                                                                                                {comp.context && <span>•</span>}
-                                                                                                <span>{formatTimeAgo(comp.created_at)}</span>
-                                                                                            </div>
-                                                                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                                <button
-                                                                                                    onClick={() => {
-                                                                                                        setEditingCompliment({ complimentId: comp.id, contactId: contact.id });
-                                                                                                        setEditComplimentText(comp.compliment);
-                                                                                                        setEditComplimentContext(comp.context || "");
-                                                                                                    }}
-                                                                                                    className="p-1 text-gray-400 hover:text-pink-500 transition-colors"
-                                                                                                >
-                                                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                                                </button>
-                                                                                                <button
-                                                                                                    onClick={() => handleDeleteCompliment(comp.id, contact.id)}
-                                                                                                    className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                                                                                >
-                                                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                                                </button>
-                                                                                            </div>
-                                                                                        </div>
-                                                                                    </>
-                                                                                )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : showComplimentInput !== contact.id ? (
-                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                                                                        No compliments recorded yet. Add the nice things they&apos;ve said! 💝
-                                                                    </p>
-                                                                ) : null}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     })}
