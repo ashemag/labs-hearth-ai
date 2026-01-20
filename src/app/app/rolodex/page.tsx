@@ -253,6 +253,7 @@ export default function RolodexPage() {
         }
         return false;
     });
+    const [showBoostSheet, setShowBoostSheet] = useState(false);
     const [completedTodosExpanded, setCompletedTodosExpanded] = useState(false);
     const [todoNameFilter, setTodoNameFilter] = useState<{ id: number; name: string; profileImage: string | null } | null>(null);
     const [todoNameSearch, setTodoNameSearch] = useState("");
@@ -2889,6 +2890,114 @@ export default function RolodexPage() {
                 </SheetContent>
             </Sheet>
 
+            {/* Boost (Compliments) Sheet */}
+            <Sheet open={showBoostSheet && !loading} onOpenChange={setShowBoostSheet}>
+                <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowBoostSheet(false)}
+                            className="p-1 -ml-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            aria-label="Collapse panel"
+                        >
+                            <PanelRightClose className="h-5 w-5" />
+                        </button>
+                        <Sparkles className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                        Confidence Boost
+                    </SheetTitle>
+                    <SheetDescription>
+                        {contacts.reduce((sum, c) => sum + c.compliments.length, 0)} compliments from your network
+                    </SheetDescription>
+                </SheetHeader>
+                <SheetContent className="p-4">
+                    {(() => {
+                        // Collect all compliments with contact info
+                        const allCompliments = contacts.flatMap(contact =>
+                            contact.compliments.map(comp => ({
+                                ...comp,
+                                contact: {
+                                    id: contact.id,
+                                    name: contact.name,
+                                    profileImage: contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url || null,
+                                },
+                            }))
+                        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+                        if (allCompliments.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                                        <Sparkles className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+                                    </div>
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                                        No compliments yet
+                                    </h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-[240px]">
+                                        Add compliments to contacts to build your confidence boost collection.
+                                    </p>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div className="space-y-3">
+                                {allCompliments.map(comp => (
+                                    <div
+                                        key={comp.id}
+                                        className="group bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                                        onClick={() => {
+                                            setShowBoostSheet(false);
+                                            setTimeout(() => {
+                                                setSelectedContactId(comp.contact.id);
+                                            }, 150);
+                                        }}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            {comp.contact.profileImage ? (
+                                                <Image
+                                                    src={comp.contact.profileImage}
+                                                    alt={comp.contact.name}
+                                                    width={36}
+                                                    height={36}
+                                                    className="rounded-full flex-shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                        {comp.contact.name.charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-gray-900 dark:text-white mb-0.5">
+                                                    {comp.contact.name}
+                                                </p>
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                                    &ldquo;{comp.compliment}&rdquo;
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    {comp.context && (
+                                                        <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700/50 px-2 py-0.5 rounded-full">
+                                                            {comp.context}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                                                        {new Date(comp.received_at || comp.created_at).toLocaleDateString("en-US", {
+                                                            month: "short",
+                                                            day: "numeric",
+                                                            year: new Date(comp.received_at || comp.created_at).getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    })()}
+                </SheetContent>
+            </Sheet>
+
             {/* Contact Profile Sheet */}
             <Sheet
                 open={selectedContactId !== null}
@@ -3802,37 +3911,33 @@ export default function RolodexPage() {
             {/* Full-width Header Bar */}
             <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800/50">
                 <div className="flex items-center justify-between px-4 sm:px-8 py-3">
-                    <h1 className="text-2xl sm:text-2xl font-homemade text-gray-700 dark:text-white">
-                        Rolodex
-                    </h1>
+                    <div className="flex items-center h-full">
+                        <h1 className="text-2xl sm:text-2xl font-homemade text-gray-600 dark:text-white leading-none translate-y-0.5">
+                            Rolodex
+                        </h1>
+                    </div>
 
                     <div className="flex items-center gap-2">
                         {/* Confidence Boost Button */}
-                        <Link
-                            href="/app/rolodex/compliments"
-                            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-950/30 dark:to-rose-950/30 hover:from-pink-100 hover:to-rose-100 dark:hover:from-pink-900/40 dark:hover:to-rose-900/40 rounded-lg border border-pink-200/60 dark:border-pink-800/50 hover:border-pink-300 dark:hover:border-pink-700/50 transition-colors"
+                        <button
+                            onClick={() => setShowBoostSheet(true)}
+                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
                         >
-                            <Sparkles className="h-4 w-4 text-pink-500" />
-                            <span className="text-sm font-medium text-pink-700 dark:text-pink-300 hidden sm:inline">Boost</span>
-                            {contacts.reduce((sum, c) => sum + c.compliments.length, 0) > 0 && (
-                                <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 text-xs font-semibold bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full">
-                                    {contacts.reduce((sum, c) => sum + c.compliments.length, 0)}
-                                </span>
-                            )}
-                        </Link>
+                            <Sparkles className="h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-300 group-hover:scale-110" />
+                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
+                                Boost
+                            </span>
+                        </button>
 
                         {/* Todo Button */}
                         <button
                             onClick={() => setShowTodoSheet(true)}
-                            className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg border border-gray-200/60 dark:border-gray-700 transition-colors"
+                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
                         >
-                            <ClipboardList className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">To Do</span>
-                            {todos.filter(t => !t.completed).length > 0 && (
-                                <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 text-xs font-semibold bg-slate-600 dark:bg-slate-700 text-white rounded-full">
-                                    {todos.filter(t => !t.completed).length}
-                                </span>
-                            )}
+                            <ClipboardList className="h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-300 group-hover:scale-110" />
+                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
+                                To Do
+                            </span>
                         </button>
 
                         {/* User Avatar with Dropdown */}
@@ -4049,7 +4154,7 @@ export default function RolodexPage() {
                                         }
                                     }}
                                     className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${showDiscovery
-                                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700"
+                                        ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
                                         : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
                                         }`}
                                 >
@@ -4235,13 +4340,11 @@ export default function RolodexPage() {
 
                     {/* Discovery Panel */}
                     {showDiscovery && (
-                        <div className="mb-6 bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-950/40 dark:to-fuchsia-950/40 rounded-2xl border border-violet-200/60 dark:border-violet-800/40 overflow-hidden">
-                            <div className="px-5 py-4 border-b border-violet-200/60 dark:border-violet-800/40">
+                        <div className="mb-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-1.5 bg-violet-100 dark:bg-violet-900/50 rounded-lg">
-                                            <Compass className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                                        </div>
+                                        <Compass className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                         <h3 className="font-semibold text-gray-900 dark:text-white">
                                             Discover Connections
                                         </h3>
@@ -4264,7 +4367,7 @@ export default function RolodexPage() {
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
                                         {discoveryPrefillLoading ? (
-                                            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-violet-500 animate-spin" />
+                                            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
                                         ) : (
                                             <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                         )}
@@ -4278,13 +4381,13 @@ export default function RolodexPage() {
                                                 }
                                             }}
                                             placeholder={discoveryPrefillLoading ? "Loading suggestion..." : "Enter X username..."}
-                                            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-violet-200 dark:border-violet-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"
+                                            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent text-sm"
                                         />
                                     </div>
                                     <button
                                         onClick={handleDiscoverySearch}
                                         disabled={discoveryLoading || !discoveryUsername.trim()}
-                                        className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 text-sm"
+                                        className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 text-sm"
                                     >
                                         {discoveryLoading ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -4315,7 +4418,7 @@ export default function RolodexPage() {
                                             href={`https://x.com/${discoveryResult.username}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-xs text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+                                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline flex items-center gap-1"
                                         >
                                             View profile
                                             <ExternalLink className="h-3 w-3" />
@@ -4340,7 +4443,7 @@ export default function RolodexPage() {
                                                         key={interaction.username}
                                                         className={`group flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-colors ${isInRolodex
                                                             ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50"
-                                                            : "bg-white dark:bg-gray-900/60 border-violet-200 dark:border-violet-800/50 hover:border-violet-400 dark:hover:border-violet-600"
+                                                            : "bg-white dark:bg-gray-900/60 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
                                                             }`}
                                                     >
                                                         {/* Profile image */}
@@ -4353,8 +4456,8 @@ export default function RolodexPage() {
                                                                 className="rounded-full"
                                                             />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
-                                                                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400">
+                                                            <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400">
                                                                     {interaction.username.charAt(0).toUpperCase()}
                                                                 </span>
                                                             </div>
@@ -4365,7 +4468,7 @@ export default function RolodexPage() {
                                                             href={interaction.profileUrl}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-sm text-gray-700 dark:text-gray-300 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                                                            className="text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
                                                         >
                                                             @{interaction.username}
                                                         </a>
@@ -4379,7 +4482,7 @@ export default function RolodexPage() {
                                                         {!isInRolodex && (
                                                             <button
                                                                 onClick={() => handleAddFromDiscovery(interaction.username)}
-                                                                className="opacity-0 group-hover:opacity-100 p-0.5 text-violet-500 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 transition-all"
+                                                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-all"
                                                                 title="Add to People"
                                                             >
                                                                 <Plus className="h-3.5 w-3.5" />
@@ -4428,7 +4531,7 @@ export default function RolodexPage() {
                     ) : (
                         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
                             {/* Table Header */}
-                            <div className="hidden sm:grid sm:grid-cols-[160px,1fr,100px,120px,1fr,40px] bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <div className="hidden sm:grid sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 <div>Contact</div>
                                 <div>Bio</div>
                                 <div>Location</div>
@@ -4501,7 +4604,7 @@ export default function RolodexPage() {
                                             <div key={contact.id} data-contact-id={contact.id}>
                                                 {/* Row */}
                                                 <div
-                                                    className={`grid grid-cols-[1fr,auto] sm:grid-cols-[160px,1fr,100px,120px,1fr,40px] items-center px-4 py-3 cursor-pointer transition-colors select-none ${isSelected
+                                                    className={`grid grid-cols-[1fr,auto] sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 items-center px-4 py-3 cursor-pointer transition-colors select-none ${isSelected
                                                         ? "bg-slate-50 dark:bg-slate-800/20"
                                                         : selectedContactId === contact.id
                                                             ? "bg-slate-50/50 dark:bg-slate-800/10 border-l-2 border-slate-600"
