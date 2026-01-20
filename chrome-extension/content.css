@@ -1,0 +1,128 @@
+/* Hearth Rolodex - LinkedIn Import Button Styles */
+
+#hearth-import-button {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+#hearth-import-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+    transition: all 0.2s ease;
+}
+
+#hearth-import-trigger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+}
+
+#hearth-import-trigger:active {
+    transform: translateY(0);
+}
+
+#hearth-import-trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+#hearth-import-trigger svg {
+    flex-shrink: 0;
+}
+
+/* Loading state */
+#hearth-import-trigger.hearth-loading {
+    background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+    pointer-events: none;
+}
+
+#hearth-import-trigger.hearth-loading::after {
+    content: '';
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    border: 2px solid transparent;
+    border-top-color: white;
+    border-radius: 50%;
+    animation: hearth-spin 0.8s linear infinite;
+}
+
+/* Success state */
+#hearth-import-trigger.hearth-success {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);
+}
+
+/* Error state */
+#hearth-import-trigger.hearth-error {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+}
+
+/* Status message */
+.hearth-status {
+    margin-top: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.hearth-status.hearth-success {
+    color: #16a34a;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
+.hearth-status.hearth-error {
+    color: #dc2626;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
+.hearth-status.hearth-hidden {
+    display: none;
+}
+
+/* Spin animation */
+@keyframes hearth-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    #hearth-import-button {
+        bottom: 16px;
+        right: 16px;
+    }
+
+    #hearth-import-trigger {
+        padding: 10px 16px;
+        font-size: 13px;
+    }
+
+    .hearth-button-text {
+        display: none;
+    }
+
+    #hearth-import-trigger svg {
+        width: 24px;
+        height: 24px;
+    }
+}

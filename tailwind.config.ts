@@ -43,6 +43,25 @@ module.exports = {
 				},
 
 				// ===========================================
+				// WARM ACCENT PALETTE (Alternative to gray)
+				// Based on hearth orange and watercolor tones
+				// To revert to gray: replace warm-* with gray-* in components
+				// ===========================================
+				warm: {
+					50: '#fdfbf9',         // Lightest - almost white with warm tint
+					100: '#faf6f3',        // Very light warm cream
+					200: '#f0e8e4',        // Light warm - backgrounds, subtle borders
+					300: '#e2d5cf',        // Medium light - borders, dividers
+					400: '#c9b5ab',        // Medium - muted text, icons
+					500: '#a7917f',        // Medium accent - secondary text
+					600: '#8a7265',        // Medium dark - body text, icons
+					700: '#6d574c',        // Dark - headings, important text
+					800: '#4d3d35',        // Darker - emphasis
+					900: '#352a24',        // Darkest - strong emphasis
+					950: '#1f1915',        // Near black with warm tint
+				},
+
+				// ===========================================
 				// THIRD-PARTY BRAND COLORS
 				// ===========================================
 				slack: {

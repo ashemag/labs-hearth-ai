@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hearth</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Import Section - Shows on LinkedIn/X profiles -->
+        <section id="import-section" class="import-section hidden">
+            <div class="profile-card">
+                <div class="profile-avatar" id="profile-avatar"></div>
+                <div class="profile-info">
+                    <div class="profile-name" id="profile-name">Loading...</div>
+                    <div class="profile-headline" id="profile-headline"></div>
+                </div>
+                <div id="existing-badge" class="existing-badge hidden">In Rolodex</div>
+            </div>
+            <div id="platform-badge" class="platform-badge">
+                <span id="platform-icon"></span>
+                <span id="platform-name"></span>
+            </div>
+            <button id="import-button" class="btn-save">
+                <svg class="icon-bookmark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <svg class="icon-refresh hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                </svg>
+                <span id="button-text">Save to Rolodex</span>
+            </button>
+            <div id="import-status" class="import-status hidden"></div>
+        </section>
+
+        <!-- Not on supported page message -->
+        <section id="not-supported-section" class="not-supported-section hidden">
+            <div class="empty-state">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p>Open a profile to save</p>
+                <small>Works on LinkedIn and X</small>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="popup-footer">
+            <a href="#" id="open-rolodex" class="footer-link">
+                Open Rolodex
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+            </a>
+            <div id="status-dot" class="status-dot"></div>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

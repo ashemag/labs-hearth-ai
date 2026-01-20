@@ -1,3 +1,11 @@
+// =============================================================================
+// WARM ACCENT THEME (Easily Reversible)
+// - UI chrome (backgrounds, borders, buttons, hover states) use warm-* colors
+// - Table body text (names, bios, locations, notes) uses gray-* for readability
+// 
+// To fully revert to gray theme: Find & Replace "warm-" → "gray-" in this file
+// The warm palette is defined in tailwind.config.ts
+// =============================================================================
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -152,6 +160,7 @@ interface DiscoveryResult {
 }
 
 interface UserProfile {
+    id: string;
     email: string;
     avatarUrl: string | null;
     fullName: string | null;
@@ -214,7 +223,7 @@ export default function RolodexPage() {
     const [allLocations, setAllLocations] = useState<string[]>([]);
     const [locationSuggestionIndex, setLocationSuggestionIndex] = useState(0);
     const [lists, setLists] = useState<RolodexList[]>([]);
-    const [activeList, setActiveList] = useState<number | null>(null);
+    const [activeList, setActiveList] = useState<number | "all" | "curated">("curated");
     const [showNewListInput, setShowNewListInput] = useState(false);
     const [newListName, setNewListName] = useState("");
     const [creatingList, setCreatingList] = useState(false);
@@ -314,6 +323,7 @@ export default function RolodexPage() {
                 }
 
                 setUser({
+                    id: user.id,
                     email: user.email || "",
                     avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
                     fullName: user.user_metadata?.full_name || user.user_metadata?.name || null,
@@ -408,6 +418,129 @@ export default function RolodexPage() {
             fetchLocations();
         }
     }, [authenticated, fetchContacts, fetchLists, fetchTodos, fetchLocations]);
+
+    // Set up Supabase real-time subscriptions for automatic data refresh
+    useEffect(() => {
+        if (!authenticated || !user?.id) return;
+
+        const supabase = createClient();
+        
+        console.log('[Realtime] Setting up subscriptions for user:', user.id);
+        
+        // Subscribe to contacts-related tables
+        // Note: RLS ensures users only see their own data, no filter needed
+        const peopleChannel = supabase
+            .channel('rolodex-people-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people' },
+                (payload) => {
+                    console.log('[Realtime] people change:', payload);
+                    fetchContacts();
+                    fetchLocations();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_x_profiles' },
+                (payload) => {
+                    console.log('[Realtime] people_x_profiles change:', payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_linkedin_profiles' },
+                (payload) => {
+                    console.log('[Realtime] people_linkedin_profiles change:', payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_notes' },
+                (payload) => {
+                    console.log('[Realtime] people_notes change:', payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_touchpoints' },
+                (payload) => {
+                    console.log('[Realtime] people_touchpoints change:', payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_websites' },
+                (payload) => {
+                    console.log('[Realtime] people_websites change:', payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'people_compliments' },
+                (payload) => {
+                    console.log('[Realtime] people_compliments change:', payload);
+                    fetchContacts();
+                }
+            )
+            .subscribe((status, err) => {
+                console.log('[Realtime] people channel status:', status);
+                if (err) console.error('[Realtime] people channel error:', err);
+            });
+
+        // Subscribe to lists-related tables
+        const listsChannel = supabase
+            .channel('rolodex-lists-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'rolodex_lists' },
+                (payload) => {
+                    console.log('[Realtime] rolodex_lists change:', payload);
+                    fetchLists();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'rolodex_list_members' },
+                (payload) => {
+                    console.log('[Realtime] rolodex_list_members change:', payload);
+                    fetchLists();
+                }
+            )
+            .subscribe((status, err) => {
+                console.log('[Realtime] lists channel status:', status);
+                if (err) console.error('[Realtime] lists channel error:', err);
+            });
+
+        // Subscribe to todos table
+        const todosChannel = supabase
+            .channel('rolodex-todos-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'rolodex_todos' },
+                (payload) => {
+                    console.log('[Realtime] rolodex_todos change:', payload);
+                    fetchTodos();
+                }
+            )
+            .subscribe((status, err) => {
+                console.log('[Realtime] todos channel status:', status);
+                if (err) console.error('[Realtime] todos channel error:', err);
+            });
+
+        // Cleanup subscriptions on unmount
+        return () => {
+            console.log('[Realtime] Cleaning up subscriptions');
+            supabase.removeChannel(peopleChannel);
+            supabase.removeChannel(listsChannel);
+            supabase.removeChannel(todosChannel);
+        };
+    }, [authenticated, user?.id, fetchContacts, fetchLists, fetchTodos, fetchLocations]);
 
     // Focus input when modal opens
     useEffect(() => {
@@ -551,7 +684,7 @@ export default function RolodexPage() {
         setCommandSearchQuery("");
         setCommandSearchIndex(0);
         // Clear any list filter to ensure the contact is visible
-        setActiveList(null);
+        setActiveList("all");
         setSearchQuery("");
         // Open the profile panel and scroll to the contact
         setTimeout(() => {
@@ -1208,7 +1341,7 @@ export default function RolodexPage() {
                             element?.scrollIntoView({ behavior: "smooth", block: "center" });
                         }
                     }}
-                    className="text-slate-700 dark:text-slate-400 font-medium hover:underline"
+                    className="text-warm-700 dark:text-warm-400 font-medium hover:underline"
                 >
                     {mentionName}
                 </button>
@@ -1239,7 +1372,7 @@ export default function RolodexPage() {
             // Add text before the mention
             if (match.index > lastIndex) {
                 parts.push(
-                    <span key={`text-${lastIndex}`} className="text-gray-900 dark:text-white">
+                    <span key={`text-${lastIndex}`} className="text-warm-900 dark:text-white">
                         {text.slice(lastIndex, match.index)}
                     </span>
                 );
@@ -1251,7 +1384,7 @@ export default function RolodexPage() {
             parts.push(
                 <span
                     key={`mention-${match.index}`}
-                    className="text-slate-700 dark:text-slate-400 font-medium"
+                    className="text-warm-700 dark:text-warm-400 font-medium"
                 >
                     @{mentionName}
                 </span>
@@ -1264,13 +1397,13 @@ export default function RolodexPage() {
         // Add remaining text
         if (lastIndex < text.length) {
             parts.push(
-                <span key={`text-${lastIndex}`} className="text-gray-900 dark:text-white">
+                <span key={`text-${lastIndex}`} className="text-warm-900 dark:text-white">
                     {text.slice(lastIndex)}
                 </span>
             );
         }
 
-        return parts.length > 0 ? parts : <span className="text-gray-900 dark:text-white">{text}</span>;
+        return parts.length > 0 ? parts : <span className="text-warm-900 dark:text-white">{text}</span>;
     };
 
     // Todo functions
@@ -1578,7 +1711,7 @@ export default function RolodexPage() {
             if (res.ok) {
                 setLists((prev) => prev.filter((l) => l.id !== listId));
                 if (activeList === listId) {
-                    setActiveList(null);
+                    setActiveList("curated");
                 }
             }
         } catch (error) {
@@ -2076,12 +2209,12 @@ export default function RolodexPage() {
                     }}
                 >
                     <div
-                        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+                        className="bg-white dark:bg-warm-900 rounded-2xl w-full max-w-lg shadow-2xl border border-warm-200 dark:border-warm-700 overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Search Input */}
-                        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                            <Search className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                        <div className="flex items-center gap-3 px-4 py-3 border-b border-warm-200 dark:border-warm-700">
+                            <Search className="h-5 w-5 text-warm-400 flex-shrink-0" />
                             <input
                                 ref={commandSearchInputRef}
                                 type="text"
@@ -2109,10 +2242,10 @@ export default function RolodexPage() {
                                     }
                                 }}
                                 placeholder="Search contacts..."
-                                className="flex-1 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none text-base"
+                                className="flex-1 bg-transparent text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none text-base"
                             />
-                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 font-mono">
+                            <div className="flex items-center gap-1 text-xs text-warm-400">
+                                <kbd className="px-1.5 py-0.5 bg-warm-100 dark:bg-warm-800 rounded border border-warm-200 dark:border-warm-700 font-mono">
                                     esc
                                 </kbd>
                             </div>
@@ -2121,7 +2254,7 @@ export default function RolodexPage() {
                         {/* Results */}
                         <div className="max-h-80 overflow-y-auto">
                             {commandSearchResults.length === 0 ? (
-                                <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                                <div className="px-4 py-8 text-center text-warm-500 dark:text-warm-400">
                                     {commandSearchQuery.trim() ? "No contacts found" : "No contacts yet"}
                                 </div>
                             ) : (
@@ -2138,8 +2271,8 @@ export default function RolodexPage() {
                                                 onClick={() => handleCommandSearchSelect(contact.id)}
                                                 onMouseEnter={() => setCommandSearchIndex(index)}
                                                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected
-                                                    ? "bg-slate-50 dark:bg-slate-800/20"
-                                                    : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                                                    ? "bg-warm-50 dark:bg-warm-800/20"
+                                                    : "hover:bg-warm-50 dark:hover:bg-warm-800/50"
                                                     }`}
                                             >
                                                 {profileImageUrl ? (
@@ -2151,30 +2284,30 @@ export default function RolodexPage() {
                                                         className="rounded-full flex-shrink-0"
                                                     />
                                                 ) : (
-                                                    <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    <div className="w-9 h-9 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-sm font-medium text-warm-500 dark:text-warm-400">
                                                             {contact.name.charAt(0).toUpperCase()}
                                                         </span>
                                                     </div>
                                                 )}
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-gray-900 dark:text-white truncate">
+                                                    <p className="font-medium text-warm-900 dark:text-white truncate">
                                                         {contact.name}
                                                     </p>
                                                     {xp?.username && (
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                        <p className="text-sm text-warm-500 dark:text-warm-400 truncate">
                                                             @{xp.username}
                                                         </p>
                                                     )}
                                                     {!xp?.username && li?.headline && (
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                        <p className="text-sm text-warm-500 dark:text-warm-400 truncate">
                                                             {li.headline}
                                                         </p>
                                                     )}
                                                 </div>
                                                 {isSelected && (
-                                                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                                                        <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 font-mono">
+                                                    <div className="flex items-center gap-1 text-xs text-warm-400">
+                                                        <kbd className="px-1.5 py-0.5 bg-warm-100 dark:bg-warm-800 rounded border border-warm-200 dark:border-warm-700 font-mono">
                                                             ↵
                                                         </kbd>
                                                     </div>
@@ -2187,15 +2320,15 @@ export default function RolodexPage() {
                         </div>
 
                         {/* Footer hint */}
-                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <div className="px-4 py-2.5 bg-warm-50 dark:bg-warm-800/50 border-t border-warm-200 dark:border-warm-700 flex items-center justify-between text-xs text-warm-500 dark:text-warm-400">
                             <div className="flex items-center gap-3">
                                 <span className="flex items-center gap-1">
-                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↑</kbd>
-                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↓</kbd>
+                                    <kbd className="px-1 py-0.5 bg-white dark:bg-warm-700 rounded border border-warm-200 dark:border-warm-600 font-mono">↑</kbd>
+                                    <kbd className="px-1 py-0.5 bg-white dark:bg-warm-700 rounded border border-warm-200 dark:border-warm-600 font-mono">↓</kbd>
                                     <span className="ml-1">navigate</span>
                                 </span>
                                 <span className="flex items-center gap-1">
-                                    <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↵</kbd>
+                                    <kbd className="px-1.5 py-0.5 bg-white dark:bg-warm-700 rounded border border-warm-200 dark:border-warm-600 font-mono">↵</kbd>
                                     <span className="ml-1">select</span>
                                 </span>
                             </div>
@@ -2211,7 +2344,7 @@ export default function RolodexPage() {
             {/* Context Menu */}
             {contextMenu && (
                 <div
-                    className="fixed z-50 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px]"
+                    className="fixed z-50 bg-white dark:bg-warm-900 rounded-lg shadow-xl border border-warm-200 dark:border-warm-700 py-1 min-w-[180px]"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -2226,7 +2359,7 @@ export default function RolodexPage() {
                                 }
                                 setContextMenu(null);
                             }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            className="w-full px-4 py-2 text-left text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 flex items-center gap-2"
                         >
                             <CheckCircle2 className="h-4 w-4" />
                             Add To Do
@@ -2236,7 +2369,7 @@ export default function RolodexPage() {
                         <button
                             onClick={handleMerge}
                             disabled={merging}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            className="w-full px-4 py-2 text-left text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 flex items-center gap-2"
                         >
                             {merging ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -2249,8 +2382,8 @@ export default function RolodexPage() {
                     {/* List options */}
                     {selectedContacts.size >= 1 && lists.length > 0 && (
                         <>
-                            {selectedContacts.size === 2 && <div className="border-t border-gray-100 dark:border-gray-800 my-1" />}
-                            <div className="px-3 py-1.5 text-xs font-medium text-gray-400 uppercase">
+                            {selectedContacts.size === 2 && <div className="border-t border-warm-100 dark:border-warm-800 my-1" />}
+                            <div className="px-3 py-1.5 text-xs font-medium text-warm-400 uppercase">
                                 Add to list
                             </div>
                             {lists.map((list) => {
@@ -2271,7 +2404,7 @@ export default function RolodexPage() {
                                             });
                                             setContextMenu(null);
                                         }}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 flex items-center gap-2"
                                     >
                                         <div
                                             className="w-3 h-3 rounded-full flex-shrink-0"
@@ -2279,7 +2412,7 @@ export default function RolodexPage() {
                                         />
                                         <span className="flex-1 truncate">{list.name}</span>
                                         {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
-                                        {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
+                                        {someInList && !allInList && <span className="text-xs text-warm-400">partial</span>}
                                     </button>
                                 );
                             })}
@@ -2287,7 +2420,7 @@ export default function RolodexPage() {
                     )}
 
                     {selectedContacts.size === 1 && lists.length === 0 && (
-                        <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">
+                        <div className="px-4 py-2 text-sm text-warm-400 dark:text-warm-500">
                             No lists yet
                         </div>
                     )}
@@ -2295,7 +2428,7 @@ export default function RolodexPage() {
                     {/* Hide/Unhide option */}
                     {selectedContacts.size === 1 && (
                         <>
-                            <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+                            <div className="border-t border-warm-100 dark:border-warm-800 my-1" />
                             {(() => {
                                 const contactId = Array.from(selectedContacts)[0];
                                 const contact = contacts.find((c) => c.id === contactId);
@@ -2304,7 +2437,7 @@ export default function RolodexPage() {
                                     <button
                                         onClick={() => handleToggleHidden(contactId, !isHidden)}
                                         disabled={togglingHiddenFor === contactId}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                        className="w-full px-4 py-2 text-left text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 flex items-center gap-2"
                                     >
                                         {togglingHiddenFor === contactId ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -2323,7 +2456,7 @@ export default function RolodexPage() {
                     {/* Delete option */}
                     {selectedContacts.size === 1 && (
                         <>
-                            <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
+                            <div className="border-t border-warm-100 dark:border-warm-800 my-1" />
                             <button
                                 onClick={() => {
                                     const contactId = Array.from(selectedContacts)[0];
@@ -2351,20 +2484,20 @@ export default function RolodexPage() {
                     onClick={() => setDeleteConfirm(null)}
                 >
                     <div
-                        className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-sm p-6 shadow-2xl"
+                        className="bg-white dark:bg-warm-900 rounded-xl w-full max-w-sm p-6 shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        <h3 className="text-lg font-semibold text-warm-900 dark:text-white mb-2">
                             Delete contact
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                            Are you sure you want to delete <span className="font-medium text-gray-900 dark:text-white">{deleteConfirm.name}</span>? This action cannot be undone.
+                        <p className="text-sm text-warm-600 dark:text-warm-400 mb-6">
+                            Are you sure you want to delete <span className="font-medium text-warm-900 dark:text-white">{deleteConfirm.name}</span>? This action cannot be undone.
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
                                 onClick={() => setDeleteConfirm(null)}
                                 disabled={deleteLoading}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
@@ -2392,29 +2525,29 @@ export default function RolodexPage() {
                     onClick={() => setShowAddModal(false)}
                 >
                     <div
-                        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+                        className="bg-white dark:bg-warm-900 rounded-2xl w-full max-w-md p-6 shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            <h2 className="text-lg font-semibold text-warm-900 dark:text-white">
                                 Add Contact
                             </h2>
                             <button
                                 onClick={() => setShowAddModal(false)}
-                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                className="p-1 text-warm-400 hover:text-warm-600 dark:hover:text-warm-300"
                             >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
 
                         {/* Mode Toggle */}
-                        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg mb-4">
+                        <div className="flex gap-1 p-1 bg-warm-100 dark:bg-warm-800 rounded-lg mb-4">
                             <button
                                 type="button"
                                 onClick={() => { setAddMode("social"); setAddError(null); }}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${addMode === "social"
-                                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                    ? "bg-white dark:bg-warm-700 text-warm-900 dark:text-white shadow-sm"
+                                    : "text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300"
                                     }`}
                             >
                                 Import from Social
@@ -2423,8 +2556,8 @@ export default function RolodexPage() {
                                 type="button"
                                 onClick={() => { setAddMode("name"); setAddError(null); }}
                                 className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${addMode === "name"
-                                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                    ? "bg-white dark:bg-warm-700 text-warm-900 dark:text-white shadow-sm"
+                                    : "text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300"
                                     }`}
                             >
                                 Add by Name
@@ -2434,7 +2567,7 @@ export default function RolodexPage() {
                         <form onSubmit={handleAddContact}>
                             {addMode === "social" ? (
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-warm-700 dark:text-warm-300 mb-2">
                                         X Handle, X URL, or LinkedIn URL
                                     </label>
                                     <input
@@ -2443,15 +2576,15 @@ export default function RolodexPage() {
                                         value={addHandle}
                                         onChange={(e) => setAddHandle(e.target.value)}
                                         placeholder="@username, x.com/..., or linkedin.com/in/..."
-                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
+                                        className="w-full px-4 py-3 bg-warm-50 dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-xl text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 focus:border-transparent"
                                     />
-                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <p className="mt-2 text-xs text-warm-500 dark:text-warm-400">
                                         Imports profile photo and bio automatically
                                     </p>
                                 </div>
                             ) : (
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    <label className="block text-sm font-medium text-warm-700 dark:text-warm-300 mb-2">
                                         Contact Name
                                     </label>
                                     <input
@@ -2460,9 +2593,9 @@ export default function RolodexPage() {
                                         onChange={(e) => setAddName(e.target.value)}
                                         placeholder="John Doe"
                                         autoFocus
-                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
+                                        className="w-full px-4 py-3 bg-warm-50 dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-xl text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 focus:border-transparent"
                                     />
-                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <p className="mt-2 text-xs text-warm-500 dark:text-warm-400">
                                         Add a contact without a social profile. You can link one later.
                                     </p>
                                 </div>
@@ -2475,7 +2608,7 @@ export default function RolodexPage() {
                             <button
                                 type="submit"
                                 disabled={addLoading || (addMode === "social" ? !addHandle.trim() : !addName.trim())}
-                                className="w-full py-3 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-warm-600 hover:bg-warm-700 disabled:bg-warm-300 dark:disabled:bg-warm-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
                             >
                                 {addLoading ? (
                                     <>
@@ -2500,7 +2633,7 @@ export default function RolodexPage() {
                     <SheetTitle className="flex items-center gap-2">
                         <button
                             onClick={() => setShowTodoSheet(false)}
-                            className="p-1 -ml-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="p-1 -ml-1 rounded-lg text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 transition-colors"
                             aria-label="Collapse panel"
                         >
                             <PanelRightClose className="h-5 w-5" />
@@ -2517,7 +2650,7 @@ export default function RolodexPage() {
                         <div className="space-y-3 mb-4">
                             {/* Name search with autocomplete */}
                             <div className="relative" ref={todoNameSearchRef}>
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-warm-400" />
                                 <input
                                     type="text"
                                     value={todoNameSearch}
@@ -2527,10 +2660,10 @@ export default function RolodexPage() {
                                     }}
                                     onFocus={() => setShowTodoNameDropdown(true)}
                                     placeholder="Filter by contact..."
-                                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600/50 focus:border-transparent"
+                                    className="w-full pl-9 pr-3 py-2 text-sm bg-warm-50 dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600/50 focus:border-transparent"
                                 />
                                 {showTodoNameDropdown && todoNameSearch && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-h-48 overflow-y-auto z-20">
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-warm-800 rounded-lg shadow-lg border border-warm-200 dark:border-warm-700 max-h-48 overflow-y-auto z-20">
                                         {(() => {
                                             // Get unique contacts from todos that match the search
                                             const todoContactIds = new Set(todos.map(t => t.contactId));
@@ -2541,7 +2674,7 @@ export default function RolodexPage() {
 
                                             if (matchingContacts.length === 0) {
                                                 return (
-                                                    <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                                    <div className="px-3 py-2 text-sm text-warm-500 dark:text-warm-400">
                                                         No matching contacts
                                                     </div>
                                                 );
@@ -2559,7 +2692,7 @@ export default function RolodexPage() {
                                                         setTodoNameSearch("");
                                                         setShowTodoNameDropdown(false);
                                                     }}
-                                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-left"
+                                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-warm-50 dark:hover:bg-warm-700 text-left"
                                                 >
                                                     {(contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url) ? (
                                                         <Image
@@ -2570,16 +2703,16 @@ export default function RolodexPage() {
                                                             className="rounded-full flex-shrink-0"
                                                         />
                                                     ) : (
-                                                        <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                                        <div className="w-6 h-6 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                            <span className="text-xs font-medium text-warm-500 dark:text-warm-400">
                                                                 {contact.name.charAt(0).toUpperCase()}
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <span className="text-sm text-gray-900 dark:text-white truncate">
+                                                    <span className="text-sm text-warm-900 dark:text-white truncate">
                                                         {contact.name}
                                                     </span>
-                                                    <span className="ml-auto text-xs text-gray-400">
+                                                    <span className="ml-auto text-xs text-warm-400">
                                                         {todos.filter(t => t.contactId === contact.id).length} todos
                                                     </span>
                                                 </button>
@@ -2592,8 +2725,8 @@ export default function RolodexPage() {
                             {/* Selected contact pill */}
                             {todoNameFilter && (
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Contact:</span>
-                                    <div className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-100 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 rounded-full text-xs font-medium">
+                                    <span className="text-xs text-warm-500 dark:text-warm-400">Contact:</span>
+                                    <div className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 bg-warm-100 dark:bg-warm-800/40 text-warm-700 dark:text-warm-300 rounded-full text-xs font-medium">
                                         {todoNameFilter.profileImage ? (
                                             <Image
                                                 src={todoNameFilter.profileImage}
@@ -2603,8 +2736,8 @@ export default function RolodexPage() {
                                                 className="rounded-full flex-shrink-0"
                                             />
                                         ) : (
-                                            <div className="w-[18px] h-[18px] rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-                                                <span className="text-[9px] font-semibold text-slate-700 dark:text-slate-300">
+                                            <div className="w-[18px] h-[18px] rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                <span className="text-[9px] font-semibold text-warm-700 dark:text-warm-300">
                                                     {todoNameFilter.name.charAt(0).toUpperCase()}
                                                 </span>
                                             </div>
@@ -2612,7 +2745,7 @@ export default function RolodexPage() {
                                         <span className="truncate max-w-[120px]">{todoNameFilter.name}</span>
                                         <button
                                             onClick={() => setTodoNameFilter(null)}
-                                            className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors"
+                                            className="p-0.5 hover:bg-warm-200 dark:hover:bg-warm-700 rounded-full transition-colors"
                                         >
                                             <X className="h-3 w-3" />
                                         </button>
@@ -2637,8 +2770,8 @@ export default function RolodexPage() {
                                         className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${todoDueDateFilter === filter.value
                                             ? filter.value === "overdue"
                                                 ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
-                                                : "bg-slate-100 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300"
-                                            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                                : "bg-warm-100 dark:bg-warm-800/40 text-warm-700 dark:text-warm-300"
+                                            : "bg-warm-100 dark:bg-warm-800 text-warm-600 dark:text-warm-400 hover:bg-warm-200 dark:hover:bg-warm-700"
                                             }`}
                                     >
                                         {filter.label}
@@ -2648,7 +2781,7 @@ export default function RolodexPage() {
 
                             {/* Active filter count */}
                             {(todoNameFilter || todoDueDateFilter !== "all") && (
-                                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                <div className="flex items-center justify-between text-xs text-warm-500 dark:text-warm-400">
                                     <span>
                                         Showing {filteredTodos.length} of {todos.length} todos
                                     </span>
@@ -2658,7 +2791,7 @@ export default function RolodexPage() {
                                             setTodoNameSearch("");
                                             setTodoDueDateFilter("all");
                                         }}
-                                        className="text-slate-700 dark:text-slate-400 hover:underline"
+                                        className="text-warm-700 dark:text-warm-400 hover:underline"
                                     >
                                         Clear filters
                                     </button>
@@ -2669,23 +2802,23 @@ export default function RolodexPage() {
 
                     {todos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <CheckCircle2 className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-                            <p className="text-sm text-gray-500 dark:text-gray-400">No todos yet</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            <CheckCircle2 className="h-12 w-12 text-warm-300 dark:text-warm-600 mb-3" />
+                            <p className="text-sm text-warm-500 dark:text-warm-400">No todos yet</p>
+                            <p className="text-xs text-warm-400 dark:text-warm-500 mt-1">
                                 Add a todo from a contact&apos;s dropdown menu
                             </p>
                         </div>
                     ) : filteredTodos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <Search className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-                            <p className="text-sm text-gray-500 dark:text-gray-400">No matching todos</p>
+                            <Search className="h-12 w-12 text-warm-300 dark:text-warm-600 mb-3" />
+                            <p className="text-sm text-warm-500 dark:text-warm-400">No matching todos</p>
                             <button
                                 onClick={() => {
                                     setTodoNameFilter(null);
                                     setTodoNameSearch("");
                                     setTodoDueDateFilter("all");
                                 }}
-                                className="text-xs text-slate-700 dark:text-slate-400 hover:underline mt-1"
+                                className="text-xs text-warm-700 dark:text-warm-400 hover:underline mt-1"
                             >
                                 Clear filters
                             </button>
@@ -2696,16 +2829,16 @@ export default function RolodexPage() {
                             {activeTodos.map((todo) => (
                                 <div
                                     key={todo.id}
-                                    className="group flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/20 border border-gray-100 dark:border-gray-800 hover:border-slate-200 dark:hover:border-slate-700/50 transition-colors"
+                                    className="group flex items-start gap-3 p-3 rounded-xl bg-warm-50 dark:bg-warm-800/50 hover:bg-warm-50 dark:hover:bg-warm-800/20 border border-warm-100 dark:border-warm-800 hover:border-warm-200 dark:hover:border-warm-700/50 transition-colors"
                                 >
                                     <button
                                         onClick={() => toggleTodoComplete(todo.id)}
-                                        className="flex-shrink-0 mt-0.5 text-slate-700 dark:text-slate-400 hover:text-green-600 dark:hover:text-green-500 transition-colors"
+                                        className="flex-shrink-0 mt-0.5 text-warm-700 dark:text-warm-400 hover:text-green-600 dark:hover:text-green-500 transition-colors"
                                     >
                                         <div className="h-5 w-5 rounded-full border-2 border-current" />
                                     </button>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-900 dark:text-gray-100">
+                                        <p className="text-sm text-warm-900 dark:text-warm-100">
                                             {todo.task}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1.5">
@@ -2718,7 +2851,7 @@ export default function RolodexPage() {
                                                         element?.scrollIntoView({ behavior: "smooth", block: "center" });
                                                     }, 300);
                                                 }}
-                                                className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-400 hover:underline truncate font-medium"
+                                                className="flex items-center gap-1.5 text-xs text-warm-700 dark:text-warm-400 hover:underline truncate font-medium"
                                             >
                                                 {(() => {
                                                     const contact = contacts.find(c => c.id === todo.contactId);
@@ -2732,8 +2865,8 @@ export default function RolodexPage() {
                                                             className="rounded-full flex-shrink-0"
                                                         />
                                                     ) : (
-                                                        <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-[8px] font-medium text-gray-500 dark:text-gray-400">
+                                                        <div className="w-4 h-4 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                            <span className="text-[8px] font-medium text-warm-500 dark:text-warm-400">
                                                                 {todo.contactName.charAt(0).toUpperCase()}
                                                             </span>
                                                         </div>
@@ -2747,7 +2880,7 @@ export default function RolodexPage() {
                                                         type="date"
                                                         value={editingTodoDueDate}
                                                         onChange={(e) => setEditingTodoDueDate(e.target.value)}
-                                                        className="text-xs px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600/50"
+                                                        className="text-xs px-2 py-1 bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-600 rounded-lg text-warm-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-warm-600/50"
                                                         autoFocus
                                                     />
                                                     <button
@@ -2761,7 +2894,7 @@ export default function RolodexPage() {
                                                             setEditingTodoId(null);
                                                             setEditingTodoDueDate("");
                                                         }}
-                                                        className="p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                                        className="p-1 text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-700 rounded"
                                                     >
                                                         <X className="h-3.5 w-3.5" />
                                                     </button>
@@ -2775,8 +2908,8 @@ export default function RolodexPage() {
                                                     className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-full transition-colors ${todo.dueDate
                                                         ? isDueOverdue(todo.dueDate)
                                                             ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium hover:bg-red-200 dark:hover:bg-red-900/50"
-                                                            : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                                        : "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                                            : "bg-warm-100 dark:bg-warm-700 text-warm-500 dark:text-warm-400 hover:bg-warm-200 dark:hover:bg-warm-600"
+                                                        : "bg-warm-100 dark:bg-warm-700 text-warm-400 dark:text-warm-500 hover:bg-warm-200 dark:hover:bg-warm-600"
                                                         }`}
                                                 >
                                                     <Calendar className="h-3 w-3" />
@@ -2787,7 +2920,7 @@ export default function RolodexPage() {
                                     </div>
                                     <button
                                         onClick={() => deleteTodo(todo.id)}
-                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-warm-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                                     >
                                         <X className="h-4 w-4" />
                                     </button>
@@ -2798,20 +2931,20 @@ export default function RolodexPage() {
                             {activeTodos.length === 0 && completedTodos.length > 0 && (
                                 <div className="flex flex-col items-center justify-center py-8 text-center">
                                     <CheckCircle2 className="h-10 w-10 text-green-400 dark:text-green-600 mb-2" />
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">All caught up!</p>
+                                    <p className="text-sm text-warm-500 dark:text-warm-400">All caught up!</p>
                                 </div>
                             )}
 
                             {/* Completed Todos Section */}
                             {completedTodos.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <div className="mt-4 pt-4 border-t border-warm-200 dark:border-warm-700">
                                     <button
                                         onClick={() => setCompletedTodosExpanded(!completedTodosExpanded)}
-                                        className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors mb-2"
+                                        className="flex items-center gap-2 w-full text-left text-sm font-medium text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300 transition-colors mb-2"
                                     >
                                         <ChevronRight className={`h-4 w-4 transition-transform ${completedTodosExpanded ? "rotate-90" : ""}`} />
                                         <span>Completed</span>
-                                        <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
+                                        <span className="text-xs font-normal text-warm-400 dark:text-warm-500">
                                             ({completedTodos.length})
                                         </span>
                                     </button>
@@ -2821,16 +2954,16 @@ export default function RolodexPage() {
                                             {completedTodos.map((todo) => (
                                                 <div
                                                     key={todo.id}
-                                                    className="group flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 border border-gray-100 dark:border-gray-800/50 transition-colors opacity-60"
+                                                    className="group flex items-start gap-3 p-3 rounded-xl bg-warm-50/50 dark:bg-warm-800/30 hover:bg-warm-100 dark:hover:bg-warm-800/50 border border-warm-100 dark:border-warm-800/50 transition-colors opacity-60"
                                                 >
                                                     <button
                                                         onClick={() => toggleTodoComplete(todo.id)}
-                                                        className="flex-shrink-0 mt-0.5 text-green-600 dark:text-green-500 hover:text-slate-700 dark:hover:text-slate-400 transition-colors"
+                                                        className="flex-shrink-0 mt-0.5 text-green-600 dark:text-green-500 hover:text-warm-700 dark:hover:text-warm-400 transition-colors"
                                                     >
                                                         <CheckCircle2 className="h-5 w-5" />
                                                     </button>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400 line-through">
+                                                        <p className="text-sm text-warm-500 dark:text-warm-400 line-through">
                                                             {todo.task}
                                                         </p>
                                                         <div className="flex items-center gap-2 mt-1.5">
@@ -2843,7 +2976,7 @@ export default function RolodexPage() {
                                                                         element?.scrollIntoView({ behavior: "smooth", block: "center" });
                                                                     }, 300);
                                                                 }}
-                                                                className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-slate-700 dark:hover:text-slate-400 hover:underline truncate"
+                                                                className="flex items-center gap-1.5 text-xs text-warm-400 dark:text-warm-500 hover:text-warm-700 dark:hover:text-warm-400 hover:underline truncate"
                                                             >
                                                                 {(() => {
                                                                     const contact = contacts.find(c => c.id === todo.contactId);
@@ -2857,8 +2990,8 @@ export default function RolodexPage() {
                                                                             className="rounded-full flex-shrink-0 grayscale"
                                                                         />
                                                                     ) : (
-                                                                        <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                                            <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500">
+                                                                        <div className="w-4 h-4 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                                            <span className="text-[8px] font-medium text-warm-400 dark:text-warm-500">
                                                                                 {todo.contactName.charAt(0).toUpperCase()}
                                                                             </span>
                                                                         </div>
@@ -2867,7 +3000,7 @@ export default function RolodexPage() {
                                                                 {todo.contactName}
                                                             </button>
                                                             {todo.dueDate && (
-                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500">
+                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-warm-100 dark:bg-warm-700 text-warm-400 dark:text-warm-500">
                                                                     {formatDueDate(todo.dueDate)}
                                                                 </span>
                                                             )}
@@ -2875,7 +3008,7 @@ export default function RolodexPage() {
                                                     </div>
                                                     <button
                                                         onClick={() => deleteTodo(todo.id)}
-                                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-warm-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                                                     >
                                                         <X className="h-4 w-4" />
                                                     </button>
@@ -2896,12 +3029,12 @@ export default function RolodexPage() {
                     <SheetTitle className="flex items-center gap-2">
                         <button
                             onClick={() => setShowBoostSheet(false)}
-                            className="p-1 -ml-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="p-1 -ml-1 rounded-lg text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 transition-colors"
                             aria-label="Collapse panel"
                         >
                             <PanelRightClose className="h-5 w-5" />
                         </button>
-                        <Sparkles className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                        <Sparkles className="h-5 w-5 text-warm-500 dark:text-warm-400" />
                         Confidence Boost
                     </SheetTitle>
                     <SheetDescription>
@@ -2925,13 +3058,13 @@ export default function RolodexPage() {
                         if (allCompliments.length === 0) {
                             return (
                                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                                    <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-                                        <Sparkles className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+                                    <div className="w-16 h-16 rounded-full bg-warm-100 dark:bg-warm-800 flex items-center justify-center mb-4">
+                                        <Sparkles className="h-8 w-8 text-warm-400 dark:text-warm-500" />
                                     </div>
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                                    <h3 className="text-lg font-medium text-warm-900 dark:text-white mb-2">
                                         No compliments yet
                                     </h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-[240px]">
+                                    <p className="text-sm text-warm-500 dark:text-warm-400 max-w-[240px]">
                                         Add compliments to contacts to build your confidence boost collection.
                                     </p>
                                 </div>
@@ -2943,7 +3076,7 @@ export default function RolodexPage() {
                                 {allCompliments.map(comp => (
                                     <div
                                         key={comp.id}
-                                        className="group bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                                        className="group bg-warm-50 dark:bg-warm-800/50 rounded-xl p-4 hover:bg-warm-100 dark:hover:bg-warm-800 transition-colors cursor-pointer"
                                         onClick={() => {
                                             setShowBoostSheet(false);
                                             setTimeout(() => {
@@ -2961,26 +3094,26 @@ export default function RolodexPage() {
                                                     className="rounded-full flex-shrink-0"
                                                 />
                                             ) : (
-                                                <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                <div className="w-9 h-9 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-sm font-medium text-warm-500 dark:text-warm-400">
                                                         {comp.contact.name.charAt(0).toUpperCase()}
                                                     </span>
                                                 </div>
                                             )}
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900 dark:text-white mb-0.5">
+                                                <p className="text-sm font-medium text-warm-900 dark:text-white mb-0.5">
                                                     {comp.contact.name}
                                                 </p>
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                                <p className="text-sm text-warm-700 dark:text-warm-300 leading-relaxed">
                                                     &ldquo;{comp.compliment}&rdquo;
                                                 </p>
                                                 <div className="flex items-center gap-2 mt-2">
                                                     {comp.context && (
-                                                        <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700/50 px-2 py-0.5 rounded-full">
+                                                        <span className="text-xs text-warm-600 dark:text-warm-400 bg-warm-200/70 dark:bg-warm-700/50 px-2 py-0.5 rounded-full">
                                                             {comp.context}
                                                         </span>
                                                     )}
-                                                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                                                    <span className="text-xs text-warm-400 dark:text-warm-500">
                                                         {new Date(comp.received_at || comp.created_at).toLocaleDateString("en-US", {
                                                             month: "short",
                                                             day: "numeric",
@@ -3023,7 +3156,7 @@ export default function RolodexPage() {
                                     {/* Close button */}
                                     <button
                                         onClick={() => setSelectedContactId(null)}
-                                        className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                        className="p-1.5 rounded-full text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 transition-all"
                                         aria-label="Close panel"
                                     >
                                         <PanelRightClose className="h-5 w-5" />
@@ -3031,7 +3164,7 @@ export default function RolodexPage() {
                                     {/* Expand/Collapse button */}
                                     <button
                                         onClick={() => setProfilePanelExpanded(!profilePanelExpanded)}
-                                        className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                                        className="p-1.5 rounded-full text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-800 transition-all"
                                         aria-label={profilePanelExpanded ? "Collapse panel" : "Expand panel"}
                                     >
                                         {profilePanelExpanded ? (
@@ -3057,18 +3190,18 @@ export default function RolodexPage() {
                                             }
                                         }}
                                     >
-                                        <div className="absolute -inset-1 bg-gradient-to-br from-slate-200/40 via-slate-100/20 to-transparent dark:from-slate-600/20 dark:via-slate-400/10 rounded-full blur-sm" />
+                                        <div className="absolute -inset-1 bg-gradient-to-br from-warm-200/40 via-warm-100/20 to-transparent dark:from-warm-600/20 dark:via-warm-400/10 rounded-full blur-sm" />
                                         {profileImageUrl ? (
                                             <Image
                                                 src={profileImageUrl.replace("_bigger", "_400x400").replace("_normal", "_400x400")}
                                                 alt={contact.name}
                                                 width={120}
                                                 height={120}
-                                                className="relative rounded-full ring-2 ring-white dark:ring-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 object-cover"
+                                                className="relative rounded-full ring-2 ring-white dark:ring-warm-800 shadow-xl shadow-warm-200/50 dark:shadow-warm-900/50 object-cover"
                                             />
                                         ) : (
-                                            <div className="relative w-[120px] h-[120px] rounded-full bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 ring-2 ring-white dark:ring-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 flex items-center justify-center">
-                                                <span className="text-4xl font-semibold text-gray-400 dark:text-gray-500">
+                                            <div className="relative w-[120px] h-[120px] rounded-full bg-gradient-to-br from-warm-100 to-warm-200 dark:from-warm-700 dark:to-warm-800 ring-2 ring-white dark:ring-warm-800 shadow-xl shadow-warm-200/50 dark:shadow-warm-900/50 flex items-center justify-center">
+                                                <span className="text-4xl font-semibold text-warm-400 dark:text-warm-500">
                                                     {contact.name.charAt(0).toUpperCase()}
                                                 </span>
                                             </div>
@@ -3102,23 +3235,23 @@ export default function RolodexPage() {
                                                         }
                                                     }}
                                                     autoFocus
-                                                    className="px-3 py-1.5 text-base bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                    className="px-3 py-1.5 text-base bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-warm-600"
                                                 />
                                                 <button
                                                     onClick={() => handleUpdateName(contact.id)}
                                                     disabled={!editName.trim() || editNameLoading}
-                                                    className="p-1.5 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
+                                                    className="p-1.5 text-warm-700 hover:text-warm-700 disabled:text-warm-400"
                                                 >
                                                     {editNameLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                                                 </button>
-                                                <button onClick={() => { setEditingNameFor(null); setEditName(""); }} className="p-1.5 text-gray-400 hover:text-gray-600">
+                                                <button onClick={() => { setEditingNameFor(null); setEditName(""); }} className="p-1.5 text-warm-400 hover:text-warm-600">
                                                     <X className="h-4 w-4" />
                                                 </button>
                                             </div>
                                         ) : (
                                             <button
                                                 onClick={() => { setEditingNameFor(contact.id); setEditName(contact.name); }}
-                                                className="group flex items-center justify-center gap-2 text-xl font-semibold text-gray-900 dark:text-white hover:text-slate-700 dark:hover:text-slate-400 transition-colors"
+                                                className="group flex items-center justify-center gap-2 text-xl font-semibold text-warm-900 dark:text-white hover:text-warm-700 dark:hover:text-warm-400 transition-colors"
                                             >
                                                 {contact.name}
                                                 <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -3131,7 +3264,7 @@ export default function RolodexPage() {
                                                 href={`https://x.com/${xp.username}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="inline-block mt-1 text-sm text-gray-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-slate-400 transition-colors"
+                                                className="inline-block mt-1 text-sm text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-400 transition-colors"
                                             >
                                                 @{xp.username}
                                             </a>
@@ -3139,7 +3272,7 @@ export default function RolodexPage() {
 
                                         {/* Last Touchpoint */}
                                         {contact.last_touchpoint && (
-                                            <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                            <p className="mt-2 text-xs text-warm-400 dark:text-warm-500">
                                                 Last connected {formatTimeAgo(contact.last_touchpoint)}
                                             </p>
                                         )}
@@ -3149,7 +3282,7 @@ export default function RolodexPage() {
                             <SheetContent className="p-4 space-y-6">
                                 {/* Bio Section */}
                                 <div>
-                                    <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Bio</h3>
+                                    <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider mb-2">Bio</h3>
                                     {editingBioFor === contact.id ? (
                                         <div className="space-y-2">
                                             <textarea
@@ -3162,24 +3295,24 @@ export default function RolodexPage() {
                                                 placeholder="Add a bio..."
                                                 autoFocus
                                                 rows={3}
-                                                className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 resize-none"
+                                                className="w-full px-3 py-2 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 resize-none"
                                             />
                                             <div className="flex gap-2">
-                                                <button onClick={() => handleUpdateBio(contact.id)} disabled={editBioLoading} className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
+                                                <button onClick={() => handleUpdateBio(contact.id)} disabled={editBioLoading} className="px-3 py-1.5 bg-warm-600 hover:bg-warm-700 disabled:bg-warm-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
                                                     {editBioLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
                                                 </button>
-                                                <button onClick={() => { setEditingBioFor(null); setEditBio(""); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+                                                <button onClick={() => { setEditingBioFor(null); setEditBio(""); }} className="px-3 py-1.5 text-warm-500 hover:text-warm-700 text-sm">Cancel</button>
                                             </div>
                                         </div>
                                     ) : (
                                         <button onClick={() => { setEditBio(contact.custom_bio || xp?.bio || li?.headline || ""); setEditingBioFor(contact.id); }} className="group text-left w-full">
                                             {(contact.custom_bio || xp?.bio || li?.headline) ? (
                                                 <div className="flex items-start gap-1.5">
-                                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed flex-1">{contact.custom_bio || xp?.bio || li?.headline}</p>
-                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
+                                                    <p className="text-sm text-warm-700 dark:text-warm-300 leading-relaxed flex-1">{contact.custom_bio || xp?.bio || li?.headline}</p>
+                                                    <Pencil className="h-3 w-3 text-warm-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" />
                                                 </div>
                                             ) : (
-                                                <p className="text-sm text-gray-400 dark:text-gray-500">Add bio</p>
+                                                <p className="text-sm text-warm-400 dark:text-warm-500">Add bio</p>
                                             )}
                                         </button>
                                     )}
@@ -3187,11 +3320,11 @@ export default function RolodexPage() {
 
                                 {/* Location Section */}
                                 <div>
-                                    <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Location</h3>
+                                    <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider mb-2">Location</h3>
                                     {editingLocationFor === contact.id ? (
                                         <div className="space-y-2">
                                             <div className="flex items-center gap-2 relative">
-                                                <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                                <MapPin className="h-4 w-4 text-warm-400 flex-shrink-0" />
                                                 <div className="flex-1 relative">
                                                     <input
                                                         type="text"
@@ -3231,7 +3364,7 @@ export default function RolodexPage() {
                                                         }}
                                                         placeholder="City, Country"
                                                         autoFocus
-                                                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600"
                                                     />
                                                     {/* Location suggestions dropdown */}
                                                     {editLocation.trim() && (() => {
@@ -3243,7 +3376,7 @@ export default function RolodexPage() {
                                                         if (suggestions.length === 0) return null;
 
                                                         return (
-                                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg shadow-lg z-50 overflow-hidden">
                                                                 {suggestions.map((loc, idx) => (
                                                                     <button
                                                                         key={loc}
@@ -3252,11 +3385,11 @@ export default function RolodexPage() {
                                                                             setLocationSuggestionIndex(0);
                                                                         }}
                                                                         className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${idx === locationSuggestionIndex
-                                                                            ? "bg-slate-50 dark:bg-slate-800/30 text-slate-700 dark:text-slate-300"
-                                                                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                                                            ? "bg-warm-50 dark:bg-warm-800/30 text-warm-700 dark:text-warm-300"
+                                                                            : "text-warm-700 dark:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-700"
                                                                             }`}
                                                                     >
-                                                                        <MapPin className="h-3 w-3 text-gray-400" />
+                                                                        <MapPin className="h-3 w-3 text-warm-400" />
                                                                         {loc}
                                                                     </button>
                                                                 ))}
@@ -3266,25 +3399,25 @@ export default function RolodexPage() {
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => handleUpdateLocation(contact.id)} disabled={editLocationLoading} className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
+                                                <button onClick={() => handleUpdateLocation(contact.id)} disabled={editLocationLoading} className="px-3 py-1.5 bg-warm-600 hover:bg-warm-700 disabled:bg-warm-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
                                                     {editLocationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
                                                 </button>
-                                                <button onClick={() => { setEditingLocationFor(null); setEditLocation(""); setLocationSuggestionIndex(0); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+                                                <button onClick={() => { setEditingLocationFor(null); setEditLocation(""); setLocationSuggestionIndex(0); }} className="px-3 py-1.5 text-warm-500 hover:text-warm-700 text-sm">Cancel</button>
                                             </div>
                                         </div>
                                     ) : (
                                         <button
                                             onClick={() => { setEditLocation(contact.custom_location || xp?.location || li?.location || ""); setEditingLocationFor(contact.id); }}
-                                            className="group flex items-center gap-2 text-sm hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                                            className="group flex items-center gap-2 text-sm hover:text-warm-800 dark:hover:text-warm-200 transition-colors"
                                         >
-                                            <MapPin className="h-4 w-4 text-gray-400" />
+                                            <MapPin className="h-4 w-4 text-warm-400" />
                                             {(contact.custom_location || xp?.location || li?.location) ? (
                                                 <>
-                                                    <span className="text-gray-700 dark:text-gray-300">{contact.custom_location || xp?.location || li?.location}</span>
-                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    <span className="text-warm-700 dark:text-warm-300">{contact.custom_location || xp?.location || li?.location}</span>
+                                                    <Pencil className="h-3 w-3 text-warm-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </>
                                             ) : (
-                                                <span className="text-gray-400 dark:text-gray-500">Add location</span>
+                                                <span className="text-warm-400 dark:text-warm-500">Add location</span>
                                             )}
                                         </button>
                                     )}
@@ -3292,10 +3425,10 @@ export default function RolodexPage() {
 
                                 {/* Links Section */}
                                 <div>
-                                    <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Links</h3>
+                                    <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider mb-2">Links</h3>
                                     <div className="flex flex-wrap gap-2">
                                         {xp && (
-                                            <a href={`https://x.com/${xp.username}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                                            <a href={`https://x.com/${xp.username}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-warm-100 dark:bg-warm-800 text-warm-700 dark:text-warm-300 rounded-full hover:bg-warm-200 dark:hover:bg-warm-700">
                                                 <AtSign className="h-3 w-3" />{xp.username}
                                             </a>
                                         )}
@@ -3335,15 +3468,15 @@ export default function RolodexPage() {
                                                     onKeyDown={(e) => { if (e.key === "Enter" && linkInput.trim()) handleAddLink(contact.id); else if (e.key === "Escape") { setAddingLinkFor(null); setLinkInput(""); } }}
                                                     placeholder="x.com/handle or URL"
                                                     autoFocus
-                                                    className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                    className="px-2 py-1 text-xs bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600"
                                                 />
-                                                <button onClick={() => handleAddLink(contact.id)} disabled={!linkInput.trim() || linkLoading} className="p-1 text-slate-700 hover:text-slate-700 disabled:text-gray-400">
+                                                <button onClick={() => handleAddLink(contact.id)} disabled={!linkInput.trim() || linkLoading} className="p-1 text-warm-700 hover:text-warm-700 disabled:text-warm-400">
                                                     {linkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                                                 </button>
-                                                <button onClick={() => { setAddingLinkFor(null); setLinkInput(""); }} className="p-1 text-gray-400 hover:text-gray-600"><X className="h-3 w-3" /></button>
+                                                <button onClick={() => { setAddingLinkFor(null); setLinkInput(""); }} className="p-1 text-warm-400 hover:text-warm-600"><X className="h-3 w-3" /></button>
                                             </div>
                                         ) : (
-                                            <button onClick={() => setAddingLinkFor(contact.id)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400">
+                                            <button onClick={() => setAddingLinkFor(contact.id)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-warm-500 hover:text-warm-700 dark:hover:text-warm-300 border border-dashed border-warm-300 dark:border-warm-700 rounded-full hover:border-warm-400">
                                                 <Plus className="h-3 w-3" />Add link
                                             </button>
                                         )}
@@ -3353,7 +3486,7 @@ export default function RolodexPage() {
 
                                 {/* Lists Section */}
                                 <div>
-                                    <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Lists</h3>
+                                    <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider mb-2">Lists</h3>
                                     <div className="flex flex-wrap gap-2">
                                         {/* Show lists the contact is in (with remove button) */}
                                         {lists.filter(l => l.member_ids.includes(contact.id)).map(list => (
@@ -3385,13 +3518,13 @@ export default function RolodexPage() {
                                                         e.stopPropagation();
                                                         setShowListDropdownFor(showListDropdownFor === contact.id ? null : contact.id);
                                                     }}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400 transition-colors"
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-warm-500 hover:text-warm-700 dark:hover:text-warm-300 border border-dashed border-warm-300 dark:border-warm-700 rounded-full hover:border-warm-400 transition-colors"
                                                 >
                                                     <Plus className="h-3 w-3" />
                                                     Add to list
                                                 </button>
                                                 {showListDropdownFor === contact.id && (
-                                                    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                                                    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
                                                         {lists.filter(l => !l.member_ids.includes(contact.id)).map(list => (
                                                             <button
                                                                 key={list.id}
@@ -3399,7 +3532,7 @@ export default function RolodexPage() {
                                                                     handleAddToList(list.id, contact.id);
                                                                     setShowListDropdownFor(null);
                                                                 }}
-                                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-700 transition-colors"
                                                             >
                                                                 <div
                                                                     className="w-3 h-3 rounded-full flex-shrink-0"
@@ -3413,14 +3546,14 @@ export default function RolodexPage() {
                                             </div>
                                         )}
                                         {lists.length === 0 && (
-                                            <span className="text-sm text-gray-400 italic">No lists created yet</span>
+                                            <span className="text-sm text-warm-400 italic">No lists created yet</span>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Timeline Section (Notes + Touchpoints) */}
                                 <div>
-                                    <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Timeline</h3>
+                                    <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider mb-2">Timeline</h3>
                                     {/* Add note input */}
                                     <div className="mb-3 relative">
                                         <textarea
@@ -3441,12 +3574,12 @@ export default function RolodexPage() {
                                             }}
                                             placeholder="Add a note... (use @ to mention)"
                                             rows={2}
-                                            className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 resize-none"
+                                            className="w-full px-3 py-2 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 resize-none"
                                         />
                                         {/* Mention Dropdown */}
                                         {mentionQuery !== null && mentionSuggestions.length > 0 && addingNoteFor === contact.id && mentionPosition && (
                                             <div
-                                                className="fixed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[9999] max-h-48 overflow-y-auto min-w-[200px]"
+                                                className="fixed bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg shadow-xl z-[9999] max-h-48 overflow-y-auto min-w-[200px]"
                                                 style={{ top: mentionPosition.top, left: mentionPosition.left }}
                                             >
                                                 {mentionSuggestions.map((c, idx) => {
@@ -3459,19 +3592,19 @@ export default function RolodexPage() {
                                                                 e.stopPropagation();
                                                                 insertMention(c);
                                                             }}
-                                                            className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${idx === mentionIndex ? "bg-gray-100 dark:bg-gray-700" : ""}`}
+                                                            className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-warm-100 dark:hover:bg-warm-700 transition-colors ${idx === mentionIndex ? "bg-warm-100 dark:bg-warm-700" : ""}`}
                                                         >
                                                             {profileImg ? (
                                                                 <Image src={profileImg} alt={c.name} width={24} height={24} className="rounded-full" />
                                                             ) : (
-                                                                <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
-                                                                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{c.name.charAt(0).toUpperCase()}</span>
+                                                                <div className="w-6 h-6 rounded-full bg-warm-200 dark:bg-warm-600 flex items-center justify-center">
+                                                                    <span className="text-xs font-medium text-warm-500 dark:text-warm-400">{c.name.charAt(0).toUpperCase()}</span>
                                                                 </div>
                                                             )}
                                                             <div className="min-w-0">
-                                                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.name}</p>
+                                                                <p className="text-sm font-medium text-warm-900 dark:text-white truncate">{c.name}</p>
                                                                 {c.x_profile?.username && (
-                                                                    <p className="text-xs text-gray-500 dark:text-gray-400">@{c.x_profile.username}</p>
+                                                                    <p className="text-xs text-warm-500 dark:text-warm-400">@{c.x_profile.username}</p>
                                                                 )}
                                                             </div>
                                                         </button>
@@ -3483,11 +3616,11 @@ export default function RolodexPage() {
                                             <div className="flex gap-2 mt-2">
                                                 <button
                                                     onClick={() => handleAddNote(contact.id)}
-                                                    className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-lg"
+                                                    className="px-3 py-1.5 bg-warm-600 hover:bg-warm-700 text-white text-sm font-medium rounded-lg"
                                                 >
                                                     Save
                                                 </button>
-                                                <button onClick={() => { setNewNote(""); setAddingNoteFor(null); setPendingMentions(new Map()); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
+                                                <button onClick={() => { setNewNote(""); setAddingNoteFor(null); setPendingMentions(new Map()); }} className="px-3 py-1.5 text-warm-500 hover:text-warm-700 text-sm">Cancel</button>
                                             </div>
                                         )}
                                     </div>
@@ -3501,22 +3634,22 @@ export default function RolodexPage() {
                                             ].sort((a, b) => new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime());
 
                                             if (timeline.length === 0) {
-                                                return <p className="text-sm text-gray-400 italic">No activity yet</p>;
+                                                return <p className="text-sm text-warm-400 italic">No activity yet</p>;
                                             }
 
                                             return timeline.map(item => {
                                                 if (item.type === "touchpoint") {
                                                     return (
-                                                        <div key={`tp-${item.data.id}`} className="flex items-center gap-2 py-2 px-3 bg-gray-100 dark:bg-gray-800/30 rounded-lg">
-                                                            <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500" />
-                                                            <span className="text-xs text-gray-500 dark:text-gray-400">Logged touchpoint</span>
-                                                            <span className="text-xs text-gray-400 ml-auto">{formatTimeAgo(item.data.created_at)}</span>
+                                                        <div key={`tp-${item.data.id}`} className="flex items-center gap-2 py-2 px-3 bg-warm-100 dark:bg-warm-800/30 rounded-lg">
+                                                            <div className="w-2 h-2 rounded-full bg-warm-400 dark:bg-warm-500" />
+                                                            <span className="text-xs text-warm-500 dark:text-warm-400">Logged touchpoint</span>
+                                                            <span className="text-xs text-warm-400 ml-auto">{formatTimeAgo(item.data.created_at)}</span>
                                                         </div>
                                                     );
                                                 }
                                                 const note = item.data;
                                                 return (
-                                                    <div key={`note-${note.id}`} className={`group relative rounded-lg p-3 ${note.source_type === "website_analysis" ? "bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30" : "bg-gray-50 dark:bg-gray-800/50"}`}>
+                                                    <div key={`note-${note.id}`} className={`group relative rounded-lg p-3 ${note.source_type === "website_analysis" ? "bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800/30" : "bg-warm-50 dark:bg-warm-800/50"}`}>
                                                         {editingNote?.noteId === note.id ? (
                                                             <div className="relative flex items-center gap-2">
                                                                 <input
@@ -3533,22 +3666,22 @@ export default function RolodexPage() {
                                                                         }, 150);
                                                                     }}
                                                                     autoFocus
-                                                                    className="flex-1 px-2 py-1 text-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                                    className="flex-1 px-2 py-1 text-sm bg-white dark:bg-warm-900 border border-warm-200 dark:border-warm-600 rounded text-warm-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-warm-600"
                                                                 />
                                                                 <button
                                                                     onClick={() => handleEditNote(note.id, contact.id)}
                                                                     disabled={!editNoteText.trim() || editNoteLoading}
-                                                                    className="p-1 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
+                                                                    className="p-1 text-warm-700 hover:text-warm-700 disabled:text-warm-400"
                                                                 >
                                                                     {editNoteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                                                                 </button>
-                                                                <button onClick={() => { setEditingNote(null); setEditNoteText(""); setEditPendingMentions(new Map()); }} className="p-1 text-gray-400 hover:text-gray-600">
+                                                                <button onClick={() => { setEditingNote(null); setEditNoteText(""); setEditPendingMentions(new Map()); }} className="p-1 text-warm-400 hover:text-warm-600">
                                                                     <X className="h-4 w-4" />
                                                                 </button>
                                                                 {/* Edit mention suggestions dropdown */}
                                                                 {editMentionQuery !== null && editMentionSuggestions.length > 0 && editMentionPosition && (
                                                                     <div
-                                                                        className="fixed z-[9999] bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[200px]"
+                                                                        className="fixed z-[9999] bg-white dark:bg-warm-800 rounded-lg shadow-xl border border-warm-200 dark:border-warm-700 py-1 min-w-[200px]"
                                                                         style={{ top: editMentionPosition.top, left: editMentionPosition.left }}
                                                                     >
                                                                         {editMentionSuggestions.map((c, idx) => {
@@ -3557,14 +3690,14 @@ export default function RolodexPage() {
                                                                                 <button
                                                                                     key={c.id}
                                                                                     onClick={() => insertEditMention(c)}
-                                                                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 ${idx === editMentionIndex ? "bg-gray-100 dark:bg-gray-700" : ""}`}
+                                                                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-warm-100 dark:hover:bg-warm-700 flex items-center gap-2 ${idx === editMentionIndex ? "bg-warm-100 dark:bg-warm-700" : ""}`}
                                                                                 >
                                                                                     {profileImg ? (
                                                                                         <Image src={profileImg} alt="" width={24} height={24} className="rounded-full object-cover" />
                                                                                     ) : (
-                                                                                        <div className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs">{c.name.charAt(0)}</div>
+                                                                                        <div className="w-6 h-6 rounded-full bg-warm-300 dark:bg-warm-600 flex items-center justify-center text-xs">{c.name.charAt(0)}</div>
                                                                                     )}
-                                                                                    <span className="text-gray-900 dark:text-white">{c.name}</span>
+                                                                                    <span className="text-warm-900 dark:text-white">{c.name}</span>
                                                                                 </button>
                                                                             );
                                                                         })}
@@ -3573,7 +3706,7 @@ export default function RolodexPage() {
                                                             </div>
                                                         ) : (
                                                             <>
-                                                                <p className="text-sm text-gray-700 dark:text-gray-300 pr-16">{renderNoteWithMentions(note.note)}</p>
+                                                                <p className="text-sm text-warm-700 dark:text-warm-300 pr-16">{renderNoteWithMentions(note.note)}</p>
                                                                 <div className="flex items-center gap-2 mt-1">
                                                                     <Popover
                                                                         open={editingNoteDate?.noteId === note.id && editingNoteDate?.contactId === contact.id}
@@ -3581,7 +3714,7 @@ export default function RolodexPage() {
                                                                     >
                                                                         <PopoverTrigger asChild>
                                                                             <button
-                                                                                className="text-xs text-gray-400 hover:text-slate-600 dark:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                                                                className="text-xs text-warm-400 hover:text-warm-600 dark:hover:text-warm-400 transition-colors flex items-center gap-1"
                                                                                 title="Click to change date"
                                                                                 onClick={() => setEditingNoteDate({ noteId: note.id, contactId: contact.id, currentDate: new Date(note.created_at) })}
                                                                             >
@@ -3598,10 +3731,10 @@ export default function RolodexPage() {
                                                                             onEscapeKeyDown={(e) => e.preventDefault()}
                                                                         >
                                                                             <div className="flex items-center justify-between px-3 pt-2">
-                                                                                <span className="text-xs font-medium text-gray-500">Change date</span>
+                                                                                <span className="text-xs font-medium text-warm-500">Change date</span>
                                                                                 <button
                                                                                     onClick={() => setEditingNoteDate(null)}
-                                                                                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                                                                                    className="p-1 text-warm-400 hover:text-warm-600 rounded"
                                                                                 >
                                                                                     <X className="h-3 w-3" />
                                                                                 </button>
@@ -3620,7 +3753,7 @@ export default function RolodexPage() {
                                                                                 disabled={(date: Date) => date > new Date()}
                                                                                 initialFocus
                                                                             />
-                                                                            <div className="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 text-center">
+                                                                            <div className="p-2 border-t border-warm-200 dark:border-warm-700 text-xs text-warm-500 text-center">
                                                                                 {editNoteDateLoading ? "Saving..." : "Select a new date"}
                                                                             </div>
                                                                         </PopoverContent>
@@ -3633,14 +3766,14 @@ export default function RolodexPage() {
                                                                 <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     <button
                                                                         onClick={() => { setEditingNote({ noteId: note.id, contactId: contact.id }); setEditNoteText(note.note); initializeEditMentions(note.note); }}
-                                                                        className="p-1 text-gray-400 hover:text-slate-600 transition-colors"
+                                                                        className="p-1 text-warm-400 hover:text-warm-600 transition-colors"
                                                                         title="Edit note"
                                                                     >
                                                                         <Pencil className="h-3 w-3" />
                                                                     </button>
                                                                     <button
                                                                         onClick={() => handleDeleteNote(note.id, contact.id)}
-                                                                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                                                        className="p-1 text-warm-400 hover:text-red-500 transition-colors"
                                                                         title="Delete note"
                                                                     >
                                                                         <Trash2 className="h-3 w-3" />
@@ -3658,7 +3791,7 @@ export default function RolodexPage() {
                                 {/* Compliments Section */}
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
-                                        <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        <h3 className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider">
                                             Compliments {contact.compliments.length > 0 && `(${contact.compliments.length})`}
                                         </h3>
                                         {showComplimentInput !== contact.id && (
@@ -3668,7 +3801,7 @@ export default function RolodexPage() {
                                                     setNewCompliment("");
                                                     setNewComplimentContext("");
                                                 }}
-                                                className="text-xs text-slate-600 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 flex items-center gap-1"
+                                                className="text-xs text-warm-600 hover:text-warm-700 dark:text-warm-400 dark:hover:text-warm-300 flex items-center gap-1"
                                             >
                                                 <Plus className="h-3 w-3" />
                                                 Add
@@ -3678,21 +3811,21 @@ export default function RolodexPage() {
 
                                     {/* Add Compliment Input */}
                                     {showComplimentInput === contact.id && (
-                                        <div className="mb-3 p-3 bg-slate-50 dark:bg-slate-800/20 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                                        <div className="mb-3 p-3 bg-warm-50 dark:bg-warm-800/20 rounded-lg border border-warm-200 dark:border-warm-700/50">
                                             <textarea
                                                 value={newCompliment}
                                                 onChange={(e) => setNewCompliment(e.target.value)}
                                                 placeholder="What nice thing did they say? ✨"
                                                 rows={2}
                                                 autoFocus
-                                                className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 resize-none"
+                                                className="w-full px-3 py-2 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 resize-none"
                                             />
                                             <input
                                                 type="text"
                                                 value={newComplimentContext}
                                                 onChange={(e) => setNewComplimentContext(e.target.value)}
                                                 placeholder="Context (optional): email, Twitter, in person..."
-                                                className="w-full mt-2 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                className="w-full mt-2 px-3 py-2 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600"
                                             />
                                             <div className="flex justify-end gap-2 mt-3">
                                                 <button
@@ -3701,14 +3834,14 @@ export default function RolodexPage() {
                                                         setNewCompliment("");
                                                         setNewComplimentContext("");
                                                     }}
-                                                    className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+                                                    className="px-3 py-1.5 text-sm text-warm-500 hover:text-warm-700"
                                                 >
                                                     Cancel
                                                 </button>
                                                 <button
                                                     onClick={() => handleAddCompliment(contact.id)}
                                                     disabled={!newCompliment.trim() || addingComplimentFor === contact.id}
-                                                    className="px-4 py-1.5 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg"
+                                                    className="px-4 py-1.5 bg-warm-600 hover:bg-warm-700 disabled:bg-warm-300 text-white text-sm font-medium rounded-lg"
                                                 >
                                                     {addingComplimentFor === contact.id ? (
                                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -3724,7 +3857,7 @@ export default function RolodexPage() {
                                     {contact.compliments.length > 0 ? (
                                         <div className="space-y-2">
                                             {contact.compliments.map(comp => (
-                                                <div key={comp.id} className="group bg-slate-50 dark:bg-slate-800/20 rounded-lg p-3">
+                                                <div key={comp.id} className="group bg-warm-50 dark:bg-warm-800/20 rounded-lg p-3">
                                                     {editingCompliment?.complimentId === comp.id && editingCompliment?.contactId === contact.id ? (
                                                         /* Edit mode */
                                                         <div className="space-y-2">
@@ -3733,14 +3866,14 @@ export default function RolodexPage() {
                                                                 onChange={(e) => setEditComplimentText(e.target.value)}
                                                                 rows={2}
                                                                 autoFocus
-                                                                className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600 resize-none"
+                                                                className="w-full px-2 py-1.5 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded text-warm-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-warm-600 resize-none"
                                                             />
                                                             <input
                                                                 type="text"
                                                                 value={editComplimentContext}
                                                                 onChange={(e) => setEditComplimentContext(e.target.value)}
                                                                 placeholder="Context (optional)"
-                                                                className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                                                className="w-full px-2 py-1.5 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded text-warm-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-warm-600"
                                                             />
                                                             <div className="flex justify-end gap-2">
                                                                 <button
@@ -3749,14 +3882,14 @@ export default function RolodexPage() {
                                                                         setEditComplimentText("");
                                                                         setEditComplimentContext("");
                                                                     }}
-                                                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                                                    className="p-1 text-warm-400 hover:text-warm-600"
                                                                 >
                                                                     <X className="h-4 w-4" />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleEditCompliment(comp.id, contact.id)}
                                                                     disabled={!editComplimentText.trim() || editComplimentLoading}
-                                                                    className="p-1 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
+                                                                    className="p-1 text-warm-700 hover:text-warm-700 disabled:text-warm-400"
                                                                 >
                                                                     {editComplimentLoading ? (
                                                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -3770,7 +3903,7 @@ export default function RolodexPage() {
                                                         /* View mode */
                                                         <>
                                                             <div className="flex items-start justify-between gap-2">
-                                                                <p className="text-sm text-slate-700 dark:text-slate-200 flex-1">&ldquo;{comp.compliment}&rdquo;</p>
+                                                                <p className="text-sm text-warm-700 dark:text-warm-200 flex-1">&ldquo;{comp.compliment}&rdquo;</p>
                                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     <button
                                                                         onClick={() => {
@@ -3778,33 +3911,33 @@ export default function RolodexPage() {
                                                                             setEditComplimentText(comp.compliment);
                                                                             setEditComplimentContext(comp.context || "");
                                                                         }}
-                                                                        className="p-1 text-slate-700/50 hover:text-slate-700 transition-colors"
+                                                                        className="p-1 text-warm-700/50 hover:text-warm-700 transition-colors"
                                                                         title="Edit"
                                                                     >
                                                                         <Pencil className="h-3.5 w-3.5" />
                                                                     </button>
                                                                     <button
                                                                         onClick={() => handleDeleteCompliment(comp.id, contact.id)}
-                                                                        className="p-1 text-slate-700/50 hover:text-red-500 transition-colors"
+                                                                        className="p-1 text-warm-700/50 hover:text-red-500 transition-colors"
                                                                         title="Delete"
                                                                     >
                                                                         <Trash2 className="h-3.5 w-3.5" />
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            {comp.context && <p className="text-xs text-slate-700 dark:text-slate-400 mt-1">{comp.context}</p>}
+                                                            {comp.context && <p className="text-xs text-warm-700 dark:text-warm-400 mt-1">{comp.context}</p>}
                                                         </>
                                                     )}
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-gray-400 italic">No compliments yet</p>
+                                        <p className="text-sm text-warm-400 italic">No compliments yet</p>
                                     )}
                                 </div>
 
                                 {/* Actions */}
-                                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <div className="pt-4 border-t border-warm-200 dark:border-warm-700">
                                     <button
                                         onClick={async () => {
                                             const res = await fetch("/api/rolodex/update", {
@@ -3817,7 +3950,7 @@ export default function RolodexPage() {
                                                 setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, hidden: !contact.hidden } : c));
                                             }
                                         }}
-                                        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                        className="flex items-center gap-2 text-sm text-warm-500 hover:text-warm-700 dark:hover:text-warm-300"
                                     >
                                         {contact.hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                         {contact.hidden ? "Show contact" : "Hide contact"}
@@ -3842,11 +3975,11 @@ export default function RolodexPage() {
                     }}
                 >
                     <div
-                        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+                        className="bg-white dark:bg-warm-900 rounded-2xl w-full max-w-md p-6 shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                            <h2 className="text-lg font-semibold text-warm-900 dark:text-white">
                                 Add To Do
                             </h2>
                             <button
@@ -3856,14 +3989,14 @@ export default function RolodexPage() {
                                     setNewTodoTask("");
                                     setNewTodoDueDate("");
                                 }}
-                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                className="p-1 text-warm-400 hover:text-warm-600 dark:hover:text-warm-300"
                             >
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
 
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                            For: <span className="font-medium text-gray-900 dark:text-white">{addTodoForContact.name}</span>
+                        <p className="text-sm text-warm-500 dark:text-warm-400 mb-4">
+                            For: <span className="font-medium text-warm-900 dark:text-white">{addTodoForContact.name}</span>
                         </p>
 
                         <div className="space-y-4">
@@ -3874,7 +4007,7 @@ export default function RolodexPage() {
                                     onChange={(e) => setNewTodoTask(e.target.value)}
                                     placeholder="What needs to be done?"
                                     autoFocus
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
+                                    className="w-full px-4 py-3 bg-warm-50 dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-xl text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600 focus:border-transparent"
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter" && newTodoTask.trim()) {
                                             handleAddTodo();
@@ -3884,21 +4017,21 @@ export default function RolodexPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                <label className="block text-sm font-medium text-warm-700 dark:text-warm-300 mb-2">
                                     Due date (optional)
                                 </label>
                                 <input
                                     type="date"
                                     value={newTodoDueDate}
                                     onChange={(e) => setNewTodoDueDate(e.target.value)}
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-600 focus:border-transparent"
+                                    className="w-full px-4 py-3 bg-warm-50 dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-xl text-warm-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-warm-600 focus:border-transparent"
                                 />
                             </div>
 
                             <button
                                 onClick={handleAddTodo}
                                 disabled={!newTodoTask.trim()}
-                                className="w-full py-3 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-warm-600 hover:bg-warm-700 disabled:bg-warm-300 dark:disabled:bg-warm-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
                             >
                                 <Plus className="h-4 w-4" />
                                 Add To Do
@@ -3909,10 +4042,10 @@ export default function RolodexPage() {
             )}
 
             {/* Full-width Header Bar */}
-            <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-800/50">
+            <header className="sticky top-0 z-40 bg-white/80 dark:bg-warm-900/80 backdrop-blur-xl border-b border-warm-200/50 dark:border-warm-800/50">
                 <div className="flex items-center justify-between px-4 sm:px-8 py-3">
                     <div className="flex items-center h-full">
-                        <h1 className="text-2xl sm:text-2xl font-homemade text-gray-600 dark:text-white leading-none translate-y-0.5">
+                        <h1 className="text-2xl sm:text-2xl font-homemade text-warm-600 dark:text-white leading-none translate-y-0.5">
                             Rolodex
                         </h1>
                     </div>
@@ -3923,8 +4056,8 @@ export default function RolodexPage() {
                             onClick={() => setShowBoostSheet(true)}
                             className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
                         >
-                            <Sparkles className="h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
+                            <Sparkles className="h-4 w-4 text-warm-500 dark:text-warm-400 transition-transform duration-300 group-hover:scale-110" />
+                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-warm-600 dark:text-warm-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
                                 Boost
                             </span>
                         </button>
@@ -3934,8 +4067,8 @@ export default function RolodexPage() {
                             onClick={() => setShowTodoSheet(true)}
                             className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
                         >
-                            <ClipboardList className="h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
+                            <ClipboardList className="h-4 w-4 text-warm-500 dark:text-warm-400 transition-transform duration-300 group-hover:scale-110" />
+                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-warm-600 dark:text-warm-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
                                 To Do
                             </span>
                         </button>
@@ -3952,10 +4085,10 @@ export default function RolodexPage() {
                                         alt={user?.fullName || "Profile"}
                                         width={32}
                                         height={32}
-                                        className="rounded-full ring-2 ring-white dark:ring-gray-800 shadow-sm object-cover"
+                                        className="rounded-full ring-2 ring-white dark:ring-warm-800 shadow-sm object-cover"
                                     />
                                 ) : (
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-orange-light to-brand-orange flex items-center justify-center ring-2 ring-white dark:ring-gray-800 shadow-sm">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-orange-light to-brand-orange flex items-center justify-center ring-2 ring-white dark:ring-warm-800 shadow-sm">
                                         <span className="text-white text-sm font-semibold">
                                             {user?.email?.charAt(0).toUpperCase() || "?"}
                                         </span>
@@ -3970,13 +4103,13 @@ export default function RolodexPage() {
 
                             {/* Dropdown Menu */}
                             {showUserMenu && (
-                                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xl shadow-gray-200/50 dark:shadow-black/50 py-1 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-warm-900 rounded-xl border border-warm-200 dark:border-warm-800 shadow-xl shadow-warm-200/50 dark:shadow-black/50 py-1 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
                                     {/* User Info */}
-                                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                    <div className="px-4 py-3 border-b border-warm-100 dark:border-warm-800">
+                                        <p className="text-sm font-medium text-warm-900 dark:text-white truncate">
                                             {user?.fullName || "User"}
                                         </p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                        <p className="text-xs text-warm-500 dark:text-warm-400 truncate">
                                             {user?.email}
                                         </p>
                                     </div>
@@ -3999,7 +4132,7 @@ export default function RolodexPage() {
                                         <button
                                             onClick={() => userAvatarInputRef.current?.click()}
                                             disabled={uploadingUserAvatar}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-800 rounded-lg transition-colors"
                                         >
                                             <Camera className="h-4 w-4" />
                                             {uploadingUserAvatar ? "Uploading..." : "Change avatar"}
@@ -4007,14 +4140,14 @@ export default function RolodexPage() {
                                     </div>
 
                                     {/* Sign Out */}
-                                    <div className="px-2 py-1 border-t border-gray-100 dark:border-gray-800">
+                                    <div className="px-2 py-1 border-t border-warm-100 dark:border-warm-800">
                                         <button
                                             onClick={async () => {
                                                 const supabase = createClient();
                                                 await supabase.auth.signOut();
                                                 window.location.href = "/";
                                             }}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-warm-700 dark:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-800 rounded-lg transition-colors"
                                         >
                                             <LogOut className="h-4 w-4" />
                                             Sign out
@@ -4029,53 +4162,75 @@ export default function RolodexPage() {
 
             {/* Main Content */}
             <div className="px-4 py-6 sm:px-8 sm:py-6">
-                <div className="w-full max-w-5xl mx-auto">
+                <div className="w-full max-w-6xl mx-auto">
                     {/* Contributions Grid */}
                     <ContributionsGrid refreshKey={contributionsRefreshKey} />
 
-                    {/* Lists Bar with Filter */}
+                    {/* Main layout with sidebar */}
                     {!loading && contacts.length > 0 && (
-                        <div className="flex items-center gap-2 mb-4 relative">
-                            <div className="flex items-center gap-2 overflow-x-auto pb-2 flex-1">
+                        <div className="flex gap-6">
+                            {/* Left Sidebar - Lists Navigation */}
+                            <div className="w-44 flex-shrink-0 space-y-1">
+                                {/* Main filters */}
                                 <button
-                                    onClick={() => setActiveList(null)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${activeList === null
-                                        ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    onClick={() => setActiveList("curated")}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "curated"
+                                        ? "bg-warm-900 dark:bg-white text-white dark:text-warm-900"
+                                        : "text-warm-600 dark:text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-800"
                                         }`}
                                 >
-                                    <Users className="h-3.5 w-3.5" />
-                                    All
+                                    <Sparkles className="h-4 w-4" />
+                                    <span className="flex-1 text-left">Curated</span>
+                                    <span className="text-xs opacity-60">{contacts.filter(c => c.notes.some(n => n.source_type !== "website_analysis")).length}</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveList("all")}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "all"
+                                        ? "bg-warm-900 dark:bg-white text-white dark:text-warm-900"
+                                        : "text-warm-600 dark:text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-800"
+                                        }`}
+                                >
+                                    <Users className="h-4 w-4" />
+                                    <span className="flex-1 text-left">All</span>
                                     <span className="text-xs opacity-60">{contacts.length}</span>
                                 </button>
 
-                                {/* Show only pinned lists */}
+                                {/* Divider */}
+                                {lists.filter(l => l.pinned).length > 0 && (
+                                    <div className="border-t border-warm-200 dark:border-warm-700 my-2" />
+                                )}
+
+                                {/* Pinned lists */}
                                 {lists.filter(l => l.pinned).map((list) => (
                                     <button
                                         key={list.id}
-                                        onClick={() => setActiveList(activeList === list.id ? null : list.id)}
+                                        onClick={() => setActiveList(activeList === list.id ? "curated" : list.id)}
                                         onContextMenu={(e) => {
                                             e.preventDefault();
                                             if (confirm(`Delete list "${list.name}"?`)) {
                                                 handleDeleteList(list.id);
                                             }
                                         }}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${activeList === list.id
-                                            ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === list.id
+                                            ? "bg-warm-900 dark:bg-white text-white dark:text-warm-900"
+                                            : "text-warm-600 dark:text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-800"
                                             }`}
                                     >
                                         <div
                                             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                                             style={{ backgroundColor: list.color }}
                                         />
-                                        {list.name}
+                                        <span className="flex-1 text-left truncate">{list.name}</span>
                                         <span className="text-xs opacity-60">{list.member_count}</span>
                                     </button>
                                 ))}
 
+                                {/* Divider before actions */}
+                                <div className="border-t border-warm-200 dark:border-warm-700 my-2" />
+
+                                {/* New List */}
                                 {showNewListInput ? (
-                                    <div className="flex items-center gap-1">
+                                    <div className="px-1 space-y-1">
                                         <input
                                             type="text"
                                             value={newListName}
@@ -4090,47 +4245,52 @@ export default function RolodexPage() {
                                             }}
                                             placeholder="List name..."
                                             autoFocus
-                                            className="w-32 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-600"
+                                            className="w-full px-2 py-1.5 text-sm bg-white dark:bg-warm-800 border border-warm-200 dark:border-warm-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-warm-600"
                                         />
-                                        <button
-                                            onClick={handleCreateList}
-                                            disabled={!newListName.trim() || creatingList}
-                                            className="p-1 text-slate-700 hover:text-slate-700 disabled:text-gray-400"
-                                        >
-                                            {creatingList ? (
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Check className="h-4 w-4" />
-                                            )}
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setShowNewListInput(false);
-                                                setNewListName("");
-                                            }}
-                                            className="p-1 text-gray-400 hover:text-gray-600"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={handleCreateList}
+                                                disabled={!newListName.trim() || creatingList}
+                                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-warm-700 hover:bg-warm-800 disabled:bg-warm-400 rounded transition-colors"
+                                            >
+                                                {creatingList ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <Check className="h-3 w-3" />
+                                                )}
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setShowNewListInput(false);
+                                                    setNewListName("");
+                                                }}
+                                                className="px-2 py-1 text-xs text-warm-500 hover:text-warm-700 dark:hover:text-warm-300"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     <button
                                         onClick={() => setShowNewListInput(true)}
-                                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-800/50 rounded-lg transition-colors"
                                     >
-                                        <Plus className="h-3.5 w-3.5" />
-                                        New List
+                                        <Plus className="h-4 w-4" />
+                                        <span>New List</span>
                                     </button>
                                 )}
 
+                                {/* New Contact */}
                                 <button
                                     onClick={() => setShowAddModal(true)}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-800/50 rounded-lg transition-colors"
                                 >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    New Contact
+                                    <Plus className="h-4 w-4" />
+                                    <span>New Contact</span>
                                 </button>
 
+                                {/* Discover */}
                                 <button
                                     onClick={async () => {
                                         const opening = !showDiscovery;
@@ -4153,157 +4313,109 @@ export default function RolodexPage() {
                                             }
                                         }
                                     }}
-                                    className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${showDiscovery
-                                        ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
-                                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${showDiscovery
+                                        ? "bg-warm-100 dark:bg-warm-800 text-warm-700 dark:text-warm-300"
+                                        : "text-warm-500 dark:text-warm-400 hover:text-warm-700 dark:hover:text-warm-300 hover:bg-warm-50 dark:hover:bg-warm-800/50"
                                         }`}
                                 >
-                                    <Compass className="h-3.5 w-3.5" />
-                                    Discover
+                                    <Compass className="h-4 w-4" />
+                                    <span>Discover</span>
                                 </button>
 
-                                {/* Filter */}
-                                <div className="relative flex-shrink-0">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                                    <input
-                                        type="text"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        placeholder="Filter..."
-                                        className="w-36 sm:w-44 pl-8 pr-14 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border-0 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-600"
-                                    />
-                                    {searchQuery ? (
+                                {/* More lists dropdown */}
+                                {lists.length > 0 && (
+                                    <div className="relative" ref={listsDropdownRef}>
                                         <button
-                                            onClick={() => setSearchQuery("")}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                            onClick={() => setShowListsDropdown(!showListsDropdown)}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${showListsDropdown
+                                                ? "bg-warm-200 dark:bg-warm-700 text-warm-700 dark:text-warm-300"
+                                                : hiddenListIds.size > 0
+                                                    ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                                    : "text-warm-500 dark:text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-800"
+                                                }`}
+                                            title={hiddenListIds.size > 0 ? `${hiddenListIds.size} list${hiddenListIds.size !== 1 ? 's' : ''} hidden` : "Manage lists"}
                                         >
-                                            <X className="h-3.5 w-3.5" />
+                                            <MoreHorizontal className="h-4 w-4" />
+                                            <span className="flex-1 text-left">Manage Lists</span>
+                                            {hiddenListIds.size > 0 && (
+                                                <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center">
+                                                    {hiddenListIds.size}
+                                                </span>
+                                            )}
                                         </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => setShowCommandSearch(true)}
-                                            className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
-                                            title="Search contacts (⌘K)"
-                                        >
-                                            <Command className="h-2.5 w-2.5" />
-                                            <span>K</span>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
 
-                            {/* Hidden contacts toggle */}
-                            {contacts.some(c => c.hidden) && (
-                                <button
-                                    onClick={() => setShowHiddenContacts(!showHiddenContacts)}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors flex-shrink-0 ${showHiddenContacts
-                                        ? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                        : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                        }`}
-                                    title={showHiddenContacts ? "Hide hidden contacts" : "Show hidden contacts"}
-                                >
-                                    {showHiddenContacts ? (
-                                        <Eye className="h-3.5 w-3.5" />
-                                    ) : (
-                                        <EyeOff className="h-3.5 w-3.5" />
-                                    )}
-                                    <span className="text-xs">{contacts.filter(c => c.hidden).length} hidden</span>
-                                </button>
-                            )}
-
-                            {/* More lists dropdown - outside scrollable container */}
-                            {lists.length > 0 && (
-                                <div className="relative flex-shrink-0" ref={listsDropdownRef}>
-                                    <button
-                                        onClick={() => setShowListsDropdown(!showListsDropdown)}
-                                        className={`relative flex items-center gap-1 px-2 py-1.5 text-sm rounded-lg transition-colors ${showListsDropdown
-                                            ? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                            : hiddenListIds.size > 0
-                                                ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
-                                                : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                            }`}
-                                        title={hiddenListIds.size > 0 ? `${hiddenListIds.size} list${hiddenListIds.size !== 1 ? 's' : ''} hidden` : "Manage lists"}
-                                    >
-                                        <MoreHorizontal className="h-4 w-4" />
-                                        {hiddenListIds.size > 0 && (
-                                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center">
-                                                {hiddenListIds.size}
-                                            </span>
-                                        )}
-                                    </button>
-
-                                    {showListsDropdown && (
-                                        <div className="absolute top-full right-0 mt-1 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1 max-h-80 overflow-y-auto">
-                                            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                                                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                                    Manage Lists
-                                                </p>
-                                                {hiddenListIds.size > 0 && (
-                                                    <button
-                                                        onClick={() => setHiddenListIds(new Set())}
-                                                        className="text-xs text-slate-700 dark:text-slate-400 hover:underline"
-                                                    >
-                                                        Show all
-                                                    </button>
-                                                )}
-                                            </div>
-                                            {lists.map((list) => {
-                                                const isHidden = hiddenListIds.has(list.id);
-                                                return (
-                                                    <div
-                                                        key={list.id}
-                                                        className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isHidden ? "opacity-50" : ""}`}
-                                                    >
+                                        {showListsDropdown && (
+                                            <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-warm-800 rounded-lg shadow-lg border border-warm-200 dark:border-warm-700 z-50 py-1 max-h-80 overflow-y-auto">
+                                                <div className="px-3 py-2 border-b border-warm-100 dark:border-warm-700 flex items-center justify-between">
+                                                    <p className="text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider">
+                                                        Manage Lists
+                                                    </p>
+                                                    {hiddenListIds.size > 0 && (
                                                         <button
-                                                            onClick={() => {
-                                                                setActiveList(activeList === list.id ? null : list.id);
-                                                                setShowListsDropdown(false);
-                                                            }}
-                                                            className="flex items-center gap-2 flex-1 min-w-0"
+                                                            onClick={() => setHiddenListIds(new Set())}
+                                                            className="text-xs text-warm-700 dark:text-warm-400 hover:underline"
                                                         >
-                                                            <div
-                                                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                                                style={{ backgroundColor: list.color }}
-                                                            />
-                                                            <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                                                                {list.name}
-                                                            </span>
-                                                            <span className="text-xs text-gray-400">
-                                                                {list.member_count}
-                                                            </span>
+                                                            Show all
                                                         </button>
-                                                        <div className="flex items-center gap-0.5">
-                                                            {/* Hide/Show toggle */}
+                                                    )}
+                                                </div>
+                                                {lists.map((list) => {
+                                                    const isHidden = hiddenListIds.has(list.id);
+                                                    return (
+                                                        <div
+                                                            key={list.id}
+                                                            className={`flex items-center justify-between px-3 py-2 hover:bg-warm-50 dark:hover:bg-warm-700/50 ${isHidden ? "opacity-50" : ""}`}
+                                                        >
                                                             <button
                                                                 onClick={() => {
-                                                                    setHiddenListIds(prev => {
-                                                                        const next = new Set(prev);
-                                                                        if (next.has(list.id)) {
-                                                                            next.delete(list.id);
-                                                                        } else {
-                                                                            next.add(list.id);
-                                                                        }
-                                                                        return next;
-                                                                    });
+                                                                    setActiveList(activeList === list.id ? "curated" : list.id);
+                                                                    setShowListsDropdown(false);
                                                                 }}
-                                                                className={`p-1 rounded transition-colors ${isHidden
-                                                                    ? "text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                                    }`}
-                                                                title={isHidden ? "Show in list" : "Hide from list"}
+                                                                className="flex items-center gap-2 flex-1 min-w-0"
                                                             >
-                                                                {isHidden ? (
-                                                                    <EyeOff className="h-3.5 w-3.5" />
-                                                                ) : (
-                                                                    <Eye className="h-3.5 w-3.5" />
-                                                                )}
+                                                                <div
+                                                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                                    style={{ backgroundColor: list.color }}
+                                                                />
+                                                                <span className="text-sm text-warm-700 dark:text-warm-300 truncate">
+                                                                    {list.name}
+                                                                </span>
+                                                                <span className="text-xs text-warm-400">
+                                                                    {list.member_count}
+                                                                </span>
                                                             </button>
+                                                            <div className="flex items-center gap-0.5">
+                                                                {/* Hide/Show toggle */}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setHiddenListIds(prev => {
+                                                                            const next = new Set(prev);
+                                                                            if (next.has(list.id)) {
+                                                                                next.delete(list.id);
+                                                                            } else {
+                                                                                next.add(list.id);
+                                                                            }
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    className={`p-1 rounded transition-colors ${isHidden
+                                                                        ? "text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                                        : "text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-700"
+                                                                        }`}
+                                                                    title={isHidden ? "Show in list" : "Hide from list"}
+                                                                >
+                                                                    {isHidden ? (
+                                                                        <EyeOff className="h-3.5 w-3.5" />
+                                                                    ) : (
+                                                                        <Eye className="h-3.5 w-3.5" />
+                                                                    )}
+                                                                </button>
                                                             {/* Pin toggle */}
                                                             <button
                                                                 onClick={() => handleToggleListPin(list.id, !list.pinned)}
                                                                 className={`p-1 rounded transition-colors ${list.pinned
-                                                                    ? "text-slate-600 hover:text-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/20"
-                                                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                                                    ? "text-warm-600 hover:text-warm-700 hover:bg-warm-50 dark:hover:bg-warm-800/20"
+                                                                    : "text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 hover:bg-warm-100 dark:hover:bg-warm-700"
                                                                     }`}
                                                                 title={list.pinned ? "Unpin from bar" : "Pin to bar"}
                                                             >
@@ -4318,9 +4430,9 @@ export default function RolodexPage() {
                                                 );
                                             })}
                                             {(lists.filter(l => !l.pinned).length > 0 || hiddenListIds.size > 0) && (
-                                                <div className="px-3 py-1.5 border-t border-gray-100 dark:border-gray-700 mt-1 flex items-center gap-3">
+                                                <div className="px-3 py-1.5 border-t border-warm-100 dark:border-warm-700 mt-1 flex items-center gap-3">
                                                     {lists.filter(l => !l.pinned).length > 0 && (
-                                                        <p className="text-xs text-gray-400">
+                                                        <p className="text-xs text-warm-400">
                                                             {lists.filter(l => !l.pinned).length} unpinned
                                                         </p>
                                                     )}
@@ -4335,17 +4447,69 @@ export default function RolodexPage() {
                                     )}
                                 </div>
                             )}
-                        </div>
-                    )}
+                            </div>
+
+                            {/* Main Content Area - Filter + Table */}
+                            <div className="flex-1 min-w-0">
+                                {/* Filter Bar */}
+                                <div className="flex items-center gap-3 mb-4">
+                                    {/* Search/Filter */}
+                                    <div className="relative flex-1 max-w-xs">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-warm-400" />
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder="Filter..."
+                                            className="w-full pl-8 pr-14 py-1.5 text-sm bg-warm-100 dark:bg-warm-800 border-0 rounded-lg text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-600"
+                                        />
+                                        {searchQuery ? (
+                                            <button
+                                                onClick={() => setSearchQuery("")}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 dark:hover:text-warm-300"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShowCommandSearch(true)}
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-warm-400 bg-white dark:bg-warm-700 rounded border border-warm-200 dark:border-warm-600 hover:border-warm-300 dark:hover:border-warm-500 transition-colors"
+                                                title="Search contacts (⌘K)"
+                                            >
+                                                <Command className="h-2.5 w-2.5" />
+                                                <span>K</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Hidden contacts toggle */}
+                                    {contacts.some(c => c.hidden) && (
+                                        <button
+                                            onClick={() => setShowHiddenContacts(!showHiddenContacts)}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${showHiddenContacts
+                                                ? "bg-warm-200 dark:bg-warm-700 text-warm-700 dark:text-warm-300"
+                                                : "text-warm-500 dark:text-warm-400 hover:bg-warm-100 dark:hover:bg-warm-800"
+                                                }`}
+                                            title={showHiddenContacts ? "Hide hidden contacts" : "Show hidden contacts"}
+                                        >
+                                            {showHiddenContacts ? (
+                                                <Eye className="h-3.5 w-3.5" />
+                                            ) : (
+                                                <EyeOff className="h-3.5 w-3.5" />
+                                            )}
+                                            <span className="text-xs">{contacts.filter(c => c.hidden).length} hidden</span>
+                                        </button>
+                                    )}
+                                </div>
 
                     {/* Discovery Panel */}
                     {showDiscovery && (
-                        <div className="mb-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <div className="mb-6 bg-warm-50 dark:bg-warm-800/50 rounded-2xl border border-warm-200 dark:border-warm-700 overflow-hidden">
+                            <div className="px-5 py-4 border-b border-warm-200 dark:border-warm-700">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
-                                        <Compass className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                                        <h3 className="font-semibold text-gray-900 dark:text-white">
+                                        <Compass className="h-4 w-4 text-warm-500 dark:text-warm-400" />
+                                        <h3 className="font-semibold text-warm-900 dark:text-white">
                                             Discover Connections
                                         </h3>
                                     </div>
@@ -4356,20 +4520,20 @@ export default function RolodexPage() {
                                             setDiscoveryUsername("");
                                             setDiscoveryError(null);
                                         }}
-                                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                        className="p-1 text-warm-400 hover:text-warm-600 dark:hover:text-warm-300 transition-colors"
                                     >
                                         <X className="h-4 w-4" />
                                     </button>
                                 </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                <p className="text-sm text-warm-600 dark:text-warm-400 mb-4">
                                     See who someone interacted with most recently on X
                                 </p>
                                 <div className="flex gap-2">
                                     <div className="relative flex-1">
                                         {discoveryPrefillLoading ? (
-                                            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
+                                            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-warm-400 animate-spin" />
                                         ) : (
-                                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-warm-400" />
                                         )}
                                         <input
                                             type="text"
@@ -4381,13 +4545,13 @@ export default function RolodexPage() {
                                                 }
                                             }}
                                             placeholder={discoveryPrefillLoading ? "Loading suggestion..." : "Enter X username..."}
-                                            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent text-sm"
+                                            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-warm-900 border border-warm-200 dark:border-warm-700 rounded-xl text-warm-900 dark:text-white placeholder-warm-400 focus:outline-none focus:ring-2 focus:ring-warm-400 focus:border-transparent text-sm"
                                         />
                                     </div>
                                     <button
                                         onClick={handleDiscoverySearch}
                                         disabled={discoveryLoading || !discoveryUsername.trim()}
-                                        className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 text-sm"
+                                        className="px-5 py-2.5 bg-warm-900 hover:bg-warm-800 dark:bg-warm-700 dark:hover:bg-warm-600 disabled:bg-warm-300 dark:disabled:bg-warm-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 text-sm"
                                     >
                                         {discoveryLoading ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -4407,10 +4571,10 @@ export default function RolodexPage() {
                                 <div className="p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                            <span className="text-sm font-medium text-warm-900 dark:text-white">
                                                 @{discoveryResult.username}
                                             </span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            <span className="text-xs text-warm-500 dark:text-warm-400">
                                                 · {discoveryResult.tweetCount} tweets analyzed
                                             </span>
                                         </div>
@@ -4418,7 +4582,7 @@ export default function RolodexPage() {
                                             href={`https://x.com/${discoveryResult.username}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline flex items-center gap-1"
+                                            className="text-xs text-warm-500 dark:text-warm-400 hover:underline flex items-center gap-1"
                                         >
                                             View profile
                                             <ExternalLink className="h-3 w-3" />
@@ -4426,7 +4590,7 @@ export default function RolodexPage() {
                                     </div>
 
                                     {discoveryResult.topInteractions.filter(i => i.username.toLowerCase() !== "ashebytes").length === 0 ? (
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                                        <p className="text-sm text-warm-500 dark:text-warm-400 text-center py-8">
                                             No interactions found in the last 7 days
                                         </p>
                                     ) : (
@@ -4443,7 +4607,7 @@ export default function RolodexPage() {
                                                         key={interaction.username}
                                                         className={`group flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-colors ${isInRolodex
                                                             ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50"
-                                                            : "bg-white dark:bg-gray-900/60 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                                                            : "bg-white dark:bg-warm-900/60 border-warm-200 dark:border-warm-700 hover:border-warm-400 dark:hover:border-warm-500"
                                                             }`}
                                                     >
                                                         {/* Profile image */}
@@ -4456,8 +4620,8 @@ export default function RolodexPage() {
                                                                 className="rounded-full"
                                                             />
                                                         ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                                                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400">
+                                                            <div className="w-6 h-6 rounded-full bg-warm-100 dark:bg-warm-800 flex items-center justify-center">
+                                                                <span className="text-[10px] font-medium text-warm-600 dark:text-warm-400">
                                                                     {interaction.username.charAt(0).toUpperCase()}
                                                                 </span>
                                                             </div>
@@ -4468,13 +4632,13 @@ export default function RolodexPage() {
                                                             href={interaction.profileUrl}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                                                            className="text-sm text-warm-700 dark:text-warm-300 hover:text-warm-900 dark:hover:text-white transition-colors"
                                                         >
                                                             @{interaction.username}
                                                         </a>
 
                                                         {/* Count */}
-                                                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                                                        <span className="text-xs text-warm-400 dark:text-warm-500">
                                                             {interaction.count}
                                                         </span>
 
@@ -4482,7 +4646,7 @@ export default function RolodexPage() {
                                                         {!isInRolodex && (
                                                             <button
                                                                 onClick={() => handleAddFromDiscovery(interaction.username)}
-                                                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-all"
+                                                                className="opacity-0 group-hover:opacity-100 p-0.5 text-warm-500 hover:text-warm-700 dark:text-warm-400 dark:hover:text-warm-300 transition-all"
                                                                 title="Add to People"
                                                             >
                                                                 <Plus className="h-3.5 w-3.5" />
@@ -4500,56 +4664,40 @@ export default function RolodexPage() {
                                     )}
 
 
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                        </div>
-                    ) : contacts.length === 0 ? (
-                        <div className="text-center py-16">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-                                <Users className="h-8 w-8 text-gray-400" />
-                            </div>
-                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                                No contacts yet
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                                Add someone by their X handle to get started
-                            </p>
-                            <button
-                                onClick={() => setShowAddModal(true)}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium rounded-xl transition-colors"
-                            >
-                                <Plus className="h-4 w-4" />
-                                Add First Contact
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
-                            {/* Table Header */}
-                            <div className="hidden sm:grid sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                <div>Contact</div>
-                                <div>Bio</div>
-                                <div>Location</div>
-                                <div>Lists</div>
-                                <div>Last Note</div>
-                                <div></div>
-                            </div>
+                                    {/* Table */}
+                                    <div className="bg-white dark:bg-warm-900 border border-warm-200 dark:border-warm-800 rounded-xl overflow-hidden shadow-sm">
+                                        {/* Table Header */}
+                                        <div className="hidden sm:grid sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 bg-warm-50/50 dark:bg-warm-800/50 border-b border-warm-100 dark:border-warm-800 px-4 py-3 text-xs font-medium text-warm-500 dark:text-warm-400 uppercase tracking-wider">
+                                            <div>Contact</div>
+                                            <div>Bio</div>
+                                            <div>Location</div>
+                                            <div>Lists</div>
+                                            <div>Last Note</div>
+                                            <div></div>
+                                        </div>
 
-                            {/* Table Body */}
-                            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                        {/* Table Body */}
+                                        <div className="divide-y divide-warm-100 dark:divide-warm-800">
                                 {contacts
                                     .filter((contact) => {
                                         // Hidden contacts filter
                                         if (contact.hidden && !showHiddenContacts) {
                                             return false;
                                         }
+                                        // Curated filter - contacts with manual notes (not auto-generated)
+                                        if (activeList === "curated") {
+                                            const hasManualNote = contact.notes.some(n => 
+                                                n.source_type !== "website_analysis" && n.source_type !== "auto"
+                                            );
+                                            if (!hasManualNote) return false;
+                                        }
                                         // List filter
-                                        if (activeList !== null) {
+                                        if (typeof activeList === "number") {
                                             const list = lists.find((l) => l.id === activeList);
                                             if (!list?.member_ids.includes(contact.id)) return false;
                                         }
@@ -4605,12 +4753,12 @@ export default function RolodexPage() {
                                                 {/* Row */}
                                                 <div
                                                     className={`grid grid-cols-[1fr,auto] sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 items-center px-4 py-3 cursor-pointer transition-colors select-none ${isSelected
-                                                        ? "bg-slate-50 dark:bg-slate-800/20"
+                                                        ? "bg-warm-50 dark:bg-warm-800/20"
                                                         : selectedContactId === contact.id
-                                                            ? "bg-slate-50/50 dark:bg-slate-800/10 border-l-2 border-slate-600"
+                                                            ? "bg-warm-50/50 dark:bg-warm-800/10 border-l-2 border-warm-600"
                                                             : contact.hidden
-                                                                ? "bg-gray-50/50 dark:bg-gray-900/20 opacity-60"
-                                                                : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                                                                ? "bg-warm-50/50 dark:bg-warm-900/20 opacity-60"
+                                                                : "hover:bg-warm-50 dark:hover:bg-warm-900/30"
                                                         }`}
                                                     onClick={(e) => handleRowClick(contact.id, e)}
                                                     onMouseDown={(e) => e.stopPropagation()}
@@ -4629,8 +4777,8 @@ export default function RolodexPage() {
                                                                     className="rounded-full"
                                                                 />
                                                             ) : (
-                                                                <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                                                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                                <div className="w-10 h-10 rounded-full bg-warm-200 dark:bg-warm-700 flex items-center justify-center">
+                                                                    <span className="text-sm font-medium text-warm-500 dark:text-warm-400">
                                                                         {contact.name.charAt(0).toUpperCase()}
                                                                     </span>
                                                                 </div>
@@ -4748,16 +4896,47 @@ export default function RolodexPage() {
                                                     {/* Open Panel Indicator */}
                                                     <div className="flex items-center justify-end">
                                                         {selectedContactId === contact.id ? (
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-warm-600" />
                                                         ) : (
-                                                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                                                            <ChevronRight className="h-4 w-4 text-warm-400" />
                                                         )}
                                                     </div>
                                                 </div>
                                             </div>
                                         );
                                     })}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+                        )}
+
+                    {/* Loading State */}
+                    {loading && (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-6 w-6 animate-spin text-warm-400" />
+                        </div>
+                    )}
+
+                    {/* Empty State */}
+                    {!loading && contacts.length === 0 && (
+                        <div className="text-center py-16">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-warm-100 dark:bg-warm-800 mb-4">
+                                <Users className="h-8 w-8 text-warm-400" />
+                            </div>
+                            <h3 className="text-lg font-medium text-warm-900 dark:text-white mb-2">
+                                No contacts yet
+                            </h3>
+                            <p className="text-sm text-warm-500 dark:text-warm-400 mb-6">
+                                Add someone by their X handle to get started
+                            </p>
+                            <button
+                                onClick={() => setShowAddModal(true)}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-warm-600 hover:bg-warm-700 text-white text-sm font-medium rounded-xl transition-colors"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Add First Contact
+                            </button>
                         </div>
                     )}
                 </div>

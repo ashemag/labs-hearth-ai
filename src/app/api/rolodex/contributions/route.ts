@@ -16,11 +16,13 @@ export async function GET() {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 365);
 
+        // Exclude auto-generated notes (website_analysis, auto) from contributions
         const { data: notes, error } = await supabase
             .from("people_notes")
-            .select("people_id, created_at")
+            .select("people_id, created_at, source_type")
             .eq("user_id", user.id)
             .gte("created_at", startDate.toISOString())
+            .or("source_type.is.null,source_type.in.(slack,rolodex,x)")
             .order("created_at", { ascending: true });
 
         if (error) {
