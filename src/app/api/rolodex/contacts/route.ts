@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isLinkedInUrl, fetchLinkedInProfile } from "@/lib/linkedin";
 import { isXHandle, extractXUsername, fetchXProfile } from "@/lib/x";
+import { normalizeLocation } from "@/lib/location/normalize";
 
 export interface RolodexContact {
     id: number;
@@ -308,7 +309,7 @@ async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: 
             linkedin_url: linkedInProfile.linkedinUrl,
             profile_image_url: linkedInProfile.profileImageUrl,
             headline: linkedInProfile.headline,
-            location: linkedInProfile.location,
+            location: normalizeLocation(linkedInProfile.location),
         });
 
     if (profileError) {
@@ -339,7 +340,7 @@ async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: 
             linkedin_url: linkedInProfile.linkedinUrl,
             profile_image_url: linkedInProfile.profileImageUrl,
             headline: linkedInProfile.headline,
-            location: linkedInProfile.location,
+            location: normalizeLocation(linkedInProfile.location),
         },
         notes: [],
         touchpoints: [],
@@ -412,7 +413,7 @@ async function handleXImport(supabase: any, userId: string, handle: string): Pro
             display_name: xProfile.displayName,
             bio: xProfile.bio,
             profile_image_url: xProfile.profileImageUrl,
-            location: xProfile.location,
+            location: normalizeLocation(xProfile.location),
             last_synced_at: new Date().toISOString(),
         });
 
@@ -450,7 +451,7 @@ async function handleXImport(supabase: any, userId: string, handle: string): Pro
             following_count: null,
             verified: false,
             website_url: null,
-            location: xProfile.location,
+            location: normalizeLocation(xProfile.location),
         },
         linkedin_profile: null,
         notes: [],

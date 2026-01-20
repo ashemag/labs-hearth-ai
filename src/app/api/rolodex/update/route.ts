@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeLocation } from "@/lib/location/normalize";
 
 // PATCH - Update a contact's details
 export async function PATCH(req: NextRequest) {
@@ -49,7 +50,7 @@ export async function PATCH(req: NextRequest) {
         }
 
         if (custom_location !== undefined) {
-            updateData.custom_location = custom_location?.trim() || null;
+            updateData.custom_location = normalizeLocation(custom_location);
         }
 
         if (last_touchpoint !== undefined) {

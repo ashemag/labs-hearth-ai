@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeLocation } from "@/lib/location/normalize";
 
 // Nitter instances to try (public mirrors of Twitter that are easier to scrape)
 const NITTER_INSTANCES = [
@@ -200,7 +201,7 @@ export async function POST(req: NextRequest) {
             display_name: profileData.display_name || cleanHandle,
             bio: profileData.bio || null,
             profile_image_url: profileData.profile_image_url || null,
-            location: profileData.location || null,
+            location: normalizeLocation(profileData.location),
             website_url: profileData.website_url || null,
             followers_count: profileData.followers_count || null,
             following_count: profileData.following_count || null,

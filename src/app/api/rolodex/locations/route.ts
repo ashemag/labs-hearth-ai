@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeLocation } from "@/lib/location/normalize";
 
 // GET - Fetch all unique locations for autocomplete
 export async function GET() {
@@ -46,24 +47,27 @@ export async function GET() {
             console.error("Error fetching LinkedIn locations:", liError);
         }
 
-        // Combine and deduplicate locations
+        // Combine and deduplicate locations, normalizing each one
         const allLocations = new Set<string>();
 
         customLocations?.forEach((row) => {
-            if (row.custom_location?.trim()) {
-                allLocations.add(row.custom_location.trim());
+            const normalized = normalizeLocation(row.custom_location);
+            if (normalized) {
+                allLocations.add(normalized);
             }
         });
 
         xLocations?.forEach((row) => {
-            if (row.location?.trim()) {
-                allLocations.add(row.location.trim());
+            const normalized = normalizeLocation(row.location);
+            if (normalized) {
+                allLocations.add(normalized);
             }
         });
 
         liLocations?.forEach((row) => {
-            if (row.location?.trim()) {
-                allLocations.add(row.location.trim());
+            const normalized = normalizeLocation(row.location);
+            if (normalized) {
+                allLocations.add(normalized);
             }
         });
 

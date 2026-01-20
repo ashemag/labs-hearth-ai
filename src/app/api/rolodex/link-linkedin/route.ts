@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchLinkedInProfile, extractLinkedInUsername } from "@/lib/linkedin";
+import { normalizeLocation } from "@/lib/location/normalize";
 
 // POST - Link a LinkedIn profile to a contact
 export async function POST(req: NextRequest) {
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
                 linkedin_url: profileData?.linkedinUrl || cleanUrl,
                 profile_image_url: profileData?.profileImageUrl || null,
                 headline: profileData?.headline || null,
-                location: profileData?.location || null,
+                location: normalizeLocation(profileData?.location),
             })
             .select()
             .single();
