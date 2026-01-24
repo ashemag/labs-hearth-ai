@@ -4,18 +4,13 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
 
-interface ContributionDay {
-    date: string;
-    count: number;
+interface NoteData {
+    people_id: number;
+    created_at: string;
 }
 
-interface ContributionsData {
-    contributions: ContributionDay[];
-    stats: {
-        today: number;
-        streak: number;
-        weekTotal: number;
-    };
+interface ApiResponse {
+    notes: NoteData[];
 }
 
 // Get intensity level (0-10) based on count
@@ -48,12 +43,17 @@ function formatDate(dateStr: string): string {
     });
 }
 
+// Helper to get local date string in YYYY-MM-DD format
+function toLocalDateString(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 interface ContributionsGridProps {
     refreshKey?: number; // Increment this to trigger a refresh
 }
 
 export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridProps) {
-    const [data, setData] = useState<ContributionsData | null>(null);
+    const [notes, setNotes] = useState<NoteData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDark, setIsDark] = useState(false);
 
@@ -73,8 +73,8 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                 credentials: "include",
             });
             if (res.ok) {
-                const json = await res.json();
-                setData(json);
+                const json: ApiResponse = await res.json();
+                setNotes(json.notes || []);
             }
         } catch (error) {
             console.error("Error fetching contributions:", error);
@@ -112,18 +112,34 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         };
     }, [fetchContributions]);
 
+    // Process notes into contributions grouped by LOCAL date
+    const contributionMap = useMemo(() => {
+        const byDate: Record<string, Set<number>> = {};
+        
+        notes.forEach((note) => {
+            // Convert UTC timestamp to local date string
+            const localDate = toLocalDateString(new Date(note.created_at));
+            if (!byDate[localDate]) {
+                byDate[localDate] = new Set();
+            }
+            byDate[localDate].add(note.people_id);
+        });
+
+        // Convert Sets to counts
+        const map = new Map<string, number>();
+        Object.entries(byDate).forEach(([date, peopleSet]) => {
+            map.set(date, peopleSet.size);
+        });
+        return map;
+    }, [notes]);
+
     // Generate the grid data for the last 52 weeks (364 days)
     const gridData = useMemo(() => {
         const weeks: { date: string; count: number }[][] = [];
-        const contributionMap = new Map<string, number>();
 
-        // Build lookup map
-        data?.contributions.forEach((c) => {
-            contributionMap.set(c.date, c.count);
-        });
-
-        // Start from today and go back 52 weeks
+        // Start from today and go back 52 weeks (use local dates)
         const today = new Date();
+        const todayStr = toLocalDateString(today);
         const startDate = new Date(today);
         startDate.setDate(startDate.getDate() - 363); // 364 days including today
 
@@ -134,8 +150,8 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         let currentWeek: { date: string; count: number }[] = [];
         const current = new Date(startDate);
 
-        while (current <= today) {
-            const dateStr = current.toISOString().split("T")[0];
+        while (toLocalDateString(current) <= todayStr) {
+            const dateStr = toLocalDateString(current);
             currentWeek.push({
                 date: dateStr,
                 count: contributionMap.get(dateStr) || 0,
@@ -155,7 +171,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         }
 
         return weeks;
-    }, [data]);
+    }, [contributionMap]);
 
     if (loading) {
         return (
@@ -163,10 +179,6 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                 <div className="h-[28px] bg-gray-100 dark:bg-gray-800/30 rounded" />
             </div>
         );
-    }
-
-    if (!data) {
-        return null;
     }
 
     return (
@@ -178,10 +190,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                         <div key={weekIndex} className="flex flex-col gap-[2px]">
                             {week.map((day) => {
                                 const intensity = getIntensity(day.count);
-                                // Use local date for "today" comparison
-                                const now = new Date();
-                                const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                                const isToday = day.date === todayLocal;
+                                const isToday = day.date === toLocalDateString(new Date());
                                 const bgColor = isDark ? intensityStyles[intensity].darkBg : intensityStyles[intensity].bg;
 
                                 return (

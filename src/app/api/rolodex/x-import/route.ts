@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
+import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
 
 interface XProfileData {
     profileUrl: string;
@@ -14,6 +15,7 @@ interface XProfileData {
     joinDate: string | null;
     followersCount: string | null;
     followingCount: string | null;
+    note?: string; // Optional user note from extension
 }
 
 // POST - Import or enrich a contact from X/Twitter
@@ -28,7 +30,10 @@ export async function POST(req: NextRequest) {
 
     try {
         const body: XProfileData = await req.json();
-        const { profileUrl, username, name, bio, location: rawLocation, website, profileImageUrl, pinnedTweet, joinDate, followersCount, followingCount } = body;
+        const { profileUrl, username, name, bio, location: rawLocation, website, profileImageUrl, pinnedTweet, joinDate, followersCount, followingCount, note: userNote } = body;
+
+        console.log(`[X Import] Received body keys:`, Object.keys(body));
+        console.log(`[X Import] User note:`, userNote ? `"${userNote}"` : '(none)');
         
         // Normalize location for consistency
         const location = normalizeLocation(rawLocation);
@@ -289,6 +294,38 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`[X Import] Created new contact: ${displayName} (ID: ${peopleId})`);
+        }
+
+        // Add user's custom note if provided (separate from auto-generated note)
+        console.log(`[X Import] Checking for user note: "${userNote}" (truthy: ${!!userNote?.trim()})`);
+        if (userNote?.trim()) {
+            let embedding: string | null = null;
+            try {
+                const embeddingVector = await generateEmbedding(userNote.trim());
+                embedding = formatEmbeddingForSupabase(embeddingVector);
+            } catch (embeddingError) {
+                console.error("[X Import] Error generating embedding for user note:", embeddingError);
+            }
+
+            const { data: noteData, error: noteError } = await supabase
+                .from("people_notes")
+                .insert({
+                    user_id: user.id,
+                    people_id: peopleId,
+                    note: userNote.trim(),
+                    source_type: "rolodex",
+                    embedding,
+                })
+                .select()
+                .single();
+
+            if (noteError) {
+                console.error(`[X Import] Error saving note:`, noteError);
+            } else {
+                console.log(`[X Import] Successfully saved note ID ${noteData.id} for contact ${peopleId}`);
+            }
+        } else {
+            console.log(`[X Import] No user note provided, skipping note creation`);
         }
 
         // Fetch the full contact data to return

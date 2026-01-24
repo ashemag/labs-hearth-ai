@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// GET - Fetch daily contribution data (unique people connected with via notes)
+// GET - Fetch raw note timestamps for contributions
+// The frontend will handle timezone-aware grouping
 export async function GET() {
     const supabase = await createClient();
 
@@ -17,12 +18,14 @@ export async function GET() {
         startDate.setDate(startDate.getDate() - 365);
 
         // Exclude auto-generated notes (website_analysis, auto) from contributions
+        // Include: null, slack, rolodex, x (manual notes)
+        // Exclude: auto, website_analysis (auto-generated)
         const { data: notes, error } = await supabase
             .from("people_notes")
             .select("people_id, created_at, source_type")
             .eq("user_id", user.id)
             .gte("created_at", startDate.toISOString())
-            .or("source_type.is.null,source_type.in.(slack,rolodex,x)")
+            .not("source_type", "in", "(auto,website_analysis)")
             .order("created_at", { ascending: true });
 
         if (error) {
@@ -30,69 +33,12 @@ export async function GET() {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        // Group by date and count unique people per day
-        const contributionsByDate: Record<string, Set<number>> = {};
-
-        notes?.forEach((note) => {
-            const date = new Date(note.created_at).toISOString().split("T")[0];
-            if (!contributionsByDate[date]) {
-                contributionsByDate[date] = new Set();
-            }
-            contributionsByDate[date].add(note.people_id);
-        });
-
-        // Convert to array format with unique people count
-        const contributions = Object.entries(contributionsByDate).map(([date, peopleSet]) => ({
-            date,
-            count: peopleSet.size,
-        }));
-
-        // Calculate stats
-        const today = new Date().toISOString().split("T")[0];
-        const todayCount = contributionsByDate[today]?.size || 0;
-        
-        // Calculate streak (consecutive days with at least 1 connection)
-        let streak = 0;
-        const checkDate = new Date();
-        
-        // Start from today and go backwards
-        while (true) {
-            const dateStr = checkDate.toISOString().split("T")[0];
-            if (contributionsByDate[dateStr]?.size > 0) {
-                streak++;
-                checkDate.setDate(checkDate.getDate() - 1);
-            } else {
-                // If today has no contributions, check if yesterday started a streak
-                if (streak === 0) {
-                    checkDate.setDate(checkDate.getDate() - 1);
-                    const yesterdayStr = checkDate.toISOString().split("T")[0];
-                    if (contributionsByDate[yesterdayStr]?.size > 0) {
-                        streak = 1;
-                        checkDate.setDate(checkDate.getDate() - 1);
-                        continue;
-                    }
-                }
-                break;
-            }
-        }
-
-        // Total unique people this week
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 7);
-        const weekPeople = new Set<number>();
-        notes?.forEach((note) => {
-            if (new Date(note.created_at) >= weekStart) {
-                weekPeople.add(note.people_id);
-            }
-        });
-
+        // Return raw data - let frontend handle timezone grouping
         return NextResponse.json({
-            contributions,
-            stats: {
-                today: todayCount,
-                streak,
-                weekTotal: weekPeople.size,
-            },
+            notes: notes?.map(n => ({
+                people_id: n.people_id,
+                created_at: n.created_at,
+            })) || [],
         });
     } catch (error) {
         console.error("Error:", error);

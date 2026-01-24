@@ -13,8 +13,8 @@
     "https://linkedin.com/*",
     "https://twitter.com/*",
     "https://x.com/*",
-    "http://localhost:3000/*",
-    "https://*.vercel.app/*"
+    "https://labs.hearth.ai/*",
+    "http://localhost:3000/*"
   ],
   "action": {
     "default_popup": "popup.html",

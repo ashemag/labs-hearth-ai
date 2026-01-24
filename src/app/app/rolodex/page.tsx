@@ -433,16 +433,24 @@ export default function RolodexPage() {
         if (!authenticated || !user?.id) return;
 
         const supabase = createClient();
-        
+
         console.log('[Realtime] Setting up subscriptions for user:', user.id);
+
+        // Ensure client has auth session for realtime
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session) {
+                console.warn('[Realtime] No active session for realtime');
+            } else {
+                console.log('[Realtime] Session active:', session.user.id);
+            }
+        });
         
-        // Subscribe to contacts-related tables
-        // Note: RLS ensures users only see their own data, no filter needed
+        // Subscribe to contacts-related tables with user_id filter
         const peopleChannel = supabase
             .channel('rolodex-people-changes')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people' },
+                { event: '*', schema: 'public', table: 'people', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people change:', payload);
                     fetchContacts();
@@ -451,7 +459,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_x_profiles' },
+                { event: '*', schema: 'public', table: 'people_x_profiles', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_x_profiles change:', payload);
                     fetchContacts();
@@ -459,7 +467,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_linkedin_profiles' },
+                { event: '*', schema: 'public', table: 'people_linkedin_profiles', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_linkedin_profiles change:', payload);
                     fetchContacts();
@@ -467,7 +475,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_notes' },
+                { event: '*', schema: 'public', table: 'people_notes', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_notes change:', payload);
                     fetchContacts();
@@ -475,7 +483,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_touchpoints' },
+                { event: '*', schema: 'public', table: 'people_touchpoints', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_touchpoints change:', payload);
                     fetchContacts();
@@ -483,7 +491,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_websites' },
+                { event: '*', schema: 'public', table: 'people_websites', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_websites change:', payload);
                     fetchContacts();
@@ -491,7 +499,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'people_compliments' },
+                { event: '*', schema: 'public', table: 'people_compliments', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] people_compliments change:', payload);
                     fetchContacts();
@@ -507,7 +515,7 @@ export default function RolodexPage() {
             .channel('rolodex-lists-changes')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'rolodex_lists' },
+                { event: '*', schema: 'public', table: 'rolodex_lists', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] rolodex_lists change:', payload);
                     fetchLists();
@@ -515,7 +523,7 @@ export default function RolodexPage() {
             )
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'rolodex_list_members' },
+                { event: '*', schema: 'public', table: 'rolodex_list_members', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] rolodex_list_members change:', payload);
                     fetchLists();
@@ -531,7 +539,7 @@ export default function RolodexPage() {
             .channel('rolodex-todos-changes')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'rolodex_todos' },
+                { event: '*', schema: 'public', table: 'rolodex_todos', filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log('[Realtime] rolodex_todos change:', payload);
                     fetchTodos();
@@ -4837,12 +4845,9 @@ export default function RolodexPage() {
                                         if (contact.hidden && !showHiddenContacts) {
                                             return false;
                                         }
-                                        // Curated filter - contacts with manual notes (not auto-generated)
+                                        // Curated filter - contacts with any note
                                         if (activeList === "curated") {
-                                            const hasManualNote = contact.notes.some(n => 
-                                                n.source_type !== "website_analysis" && n.source_type !== "auto"
-                                            );
-                                            if (!hasManualNote) return false;
+                                            if (contact.notes.length === 0) return false;
                                         }
                                         // List filter
                                         if (typeof activeList === "number") {

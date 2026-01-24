@@ -42,7 +42,7 @@ async function handleLinkedInImport(profileData, settings) {
     }
 
     const baseUrl = apiUrl.replace(/\/$/, '');
-    const endpoint = `${baseUrl}/api/rolodex/linkedin-import`;
+    const endpoint = `${baseUrl}/rolodex/linkedin-import`;
 
     console.log('[Hearth] Importing LinkedIn profile:', profileData.name);
 
@@ -73,7 +73,7 @@ async function handleXImport(profileData, settings) {
     }
 
     const baseUrl = apiUrl.replace(/\/$/, '');
-    const endpoint = `${baseUrl}/api/rolodex/x-import`;
+    const endpoint = `${baseUrl}/rolodex/x-import`;
 
     console.log('[Hearth] Importing X profile:', profileData.username);
 
@@ -106,7 +106,7 @@ async function checkAuthentication(settings) {
     const baseUrl = apiUrl.replace(/\/$/, '');
     
     try {
-        const response = await fetch(`${baseUrl}/api/rolodex/contacts`, {
+        const response = await fetch(`${baseUrl}/rolodex/contacts`, {
             method: 'GET',
             credentials: 'include',
         });
@@ -140,7 +140,7 @@ async function checkContactExists(data, settings) {
         if (data.username) params.append('xUsername', data.username);
         if (data.platform) params.append('platform', data.platform);
 
-        const response = await fetch(`${baseUrl}/api/rolodex/check-contact?${params}`, {
+        const response = await fetch(`${baseUrl}/rolodex/check-contact?${params}`, {
             method: 'GET',
             credentials: 'include',
         });
@@ -159,5 +159,5 @@ async function checkContactExists(data, settings) {
 
 // On install, set default API URL
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.sync.set({ apiUrl: 'http://localhost:3000' });
+    chrome.storage.sync.set({ apiUrl: 'https://labs.hearth.ai/api' });
 });

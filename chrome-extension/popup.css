@@ -112,6 +112,35 @@ body {
     color: #18181b;
 }
 
+/* Note Input */
+.note-input-container {
+    margin-bottom: 12px;
+}
+
+.note-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e4e4e7;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #18181b;
+    background: white;
+    resize: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.note-input:focus {
+    outline: none;
+    border-color: #a1a1aa;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+}
+
+.note-input::placeholder {
+    color: #a1a1aa;
+}
+
 /* Save Button */
 .btn-save {
     display: flex;

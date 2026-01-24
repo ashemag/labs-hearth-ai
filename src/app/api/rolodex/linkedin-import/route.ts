@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
+import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
 
 interface ExperienceItem {
     title: string;
@@ -22,6 +23,7 @@ interface LinkedInProfileData {
     about: string | null;
     experience?: ExperienceItem[];
     education?: EducationItem[];
+    note?: string; // Optional user note from extension
 }
 
 // POST - Import or enrich a contact from LinkedIn
@@ -36,7 +38,10 @@ export async function POST(req: NextRequest) {
 
     try {
         const body: LinkedInProfileData = await req.json();
-        const { linkedinUrl, name, headline, location: rawLocation, profileImageUrl, about, experience, education } = body;
+        const { linkedinUrl, name, headline, location: rawLocation, profileImageUrl, about, experience, education, note: userNote } = body;
+
+        console.log(`[LinkedIn Import] Received body keys:`, Object.keys(body));
+        console.log(`[LinkedIn Import] User note:`, userNote ? `"${userNote}"` : '(none)');
         
         // Normalize location for consistency
         const location = normalizeLocation(rawLocation);
@@ -262,6 +267,28 @@ export async function POST(req: NextRequest) {
             }
 
             console.log(`[LinkedIn Import] Created new contact: ${name} (ID: ${peopleId})`);
+        }
+
+        // Add user's custom note if provided (separate from auto-generated note)
+        if (userNote?.trim()) {
+            let embedding: string | null = null;
+            try {
+                const embeddingVector = await generateEmbedding(userNote.trim());
+                embedding = formatEmbeddingForSupabase(embeddingVector);
+            } catch (embeddingError) {
+                console.error("[LinkedIn Import] Error generating embedding for user note:", embeddingError);
+            }
+
+            await supabase
+                .from("people_notes")
+                .insert({
+                    user_id: user.id,
+                    people_id: peopleId,
+                    note: userNote.trim(),
+                    source_type: "rolodex",
+                    embedding,
+                });
+            console.log(`[LinkedIn Import] Added user note for contact ${peopleId}`);
         }
 
         // Fetch the full contact data to return

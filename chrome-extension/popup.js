@@ -2,7 +2,7 @@
  * Hearth Rolodex Extension Popup
  */
 
-const API_URL = 'http://localhost:3000';
+const API_URL = 'https://labs.hearth.ai/api';
 let currentProfileData = null;
 let isExistingContact = false;
 let currentPlatform = null; // 'linkedin' or 'x'
@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const platformName = document.getElementById('platform-name');
     const openRolodexLink = document.getElementById('open-rolodex');
     const statusDot = document.getElementById('status-dot');
+    const noteInput = document.getElementById('note-input');
 
     // Store API URL for background script
     await chrome.storage.sync.set({ apiUrl: API_URL });
@@ -47,10 +48,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         try {
             const messageType = currentPlatform === 'x' ? 'IMPORT_X_PROFILE' : 'IMPORT_PROFILE';
-            
+            const note = noteInput.value.trim();
+
             const response = await chrome.runtime.sendMessage({
                 type: messageType,
-                data: currentProfileData,
+                data: { ...currentProfileData, note },
                 settings: { apiUrl: API_URL },
             });
 
@@ -71,6 +73,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isExistingContact = true;
                 existingBadge.classList.remove('hidden');
             }
+
+            // Clear the note input after successful save
+            noteInput.value = '';
 
             setTimeout(() => {
                 importButton.classList.remove('success');
