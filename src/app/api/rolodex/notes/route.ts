@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
 
 // Extract mention IDs from note text
 // Supports @[Name](id) format
@@ -61,6 +62,16 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "people_id and note are required" }, { status: 400 });
         }
 
+        // Generate embedding for the note
+        let embedding: string | null = null;
+        try {
+            const embeddingVector = await generateEmbedding(note);
+            embedding = formatEmbeddingForSupabase(embeddingVector);
+        } catch (embeddingError) {
+            console.error("Error generating embedding:", embeddingError);
+            // Continue without embedding - we can backfill later
+        }
+
         const { data, error } = await supabase
             .from("people_notes")
             .insert({
@@ -68,6 +79,7 @@ export async function POST(req: NextRequest) {
                 people_id,
                 note,
                 source_type: "rolodex",
+                embedding,
             })
             .select()
             .single();
@@ -84,6 +96,7 @@ export async function POST(req: NextRequest) {
             console.log(`✓ Saved ${mentionIds.length} mention(s) for note ${data.id}`);
         }
 
+        console.log(`✓ Note ${data.id} created${embedding ? " with embedding" : " (no embedding)"}`);
         return NextResponse.json({ note: data });
     } catch (error) {
         console.error("Error:", error);
@@ -110,9 +123,18 @@ export async function PATCH(req: NextRequest) {
         }
 
         // Build update object - only include fields that are provided
-        const updateData: { note?: string; created_at?: string } = {};
+        const updateData: { note?: string; created_at?: string; embedding?: string } = {};
         if (note?.trim()) {
             updateData.note = note.trim();
+
+            // Regenerate embedding for updated note text
+            try {
+                const embeddingVector = await generateEmbedding(updateData.note);
+                updateData.embedding = formatEmbeddingForSupabase(embeddingVector);
+            } catch (embeddingError) {
+                console.error("Error generating embedding for update:", embeddingError);
+                // Continue without updating embedding
+            }
         }
         if (created_at) {
             updateData.created_at = created_at;
