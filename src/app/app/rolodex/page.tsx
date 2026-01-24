@@ -566,6 +566,17 @@ export default function RolodexPage() {
         }
     }, [showAddModal]);
 
+    // Focus note input when contact panel opens
+    useEffect(() => {
+        if (selectedContactId) {
+            // Delay to ensure the sheet animation completes and content is rendered
+            const timer = setTimeout(() => {
+                noteInputRef.current?.focus();
+            }, 350); // Sheet animation is 300ms
+            return () => clearTimeout(timer);
+        }
+    }, [selectedContactId]);
+
     // Close context menu on click outside
     useEffect(() => {
         const handleClick = () => setContextMenu(null);
