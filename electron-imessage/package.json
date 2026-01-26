@@ -1,0 +1,48 @@
+{
+  "name": "hearth-imessage-sync",
+  "version": "1.0.0",
+  "description": "Sync iMessages to Hearth Rolodex",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac"
+  },
+  "author": "Hearth",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "sql.js": "^1.10.0"
+  },
+  "build": {
+    "appId": "ai.hearth.imessage-sync",
+    "productName": "Hearth iMessage Sync",
+    "icon": "icon.icns",
+    "protocols": {
+      "name": "Hearth Sync Protocol",
+      "schemes": ["hearth-sync"]
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dir",
+      "icon": "icon.icns",
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "files": [
+      "**/*",
+      "!node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      }
+    ]
+  }
+}

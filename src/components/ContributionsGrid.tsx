@@ -4,13 +4,20 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/client";
 
-interface NoteData {
+interface TouchpointData {
     people_id: number;
-    created_at: string;
+    contact_name: string;
+    timestamp: string;
+    type: 'note' | 'imessage';
+}
+
+interface DayBreakdown {
+    contact_name: string;
+    types: Set<'note' | 'imessage'>;
 }
 
 interface ApiResponse {
-    notes: NoteData[];
+    touchpoints: TouchpointData[];
 }
 
 // Get intensity level (0-10) based on count
@@ -53,9 +60,10 @@ interface ContributionsGridProps {
 }
 
 export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridProps) {
-    const [notes, setNotes] = useState<NoteData[]>([]);
+    const [touchpoints, setTouchpoints] = useState<TouchpointData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDark, setIsDark] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
     // Detect dark mode
     useEffect(() => {
@@ -74,7 +82,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
             });
             if (res.ok) {
                 const json: ApiResponse = await res.json();
-                setNotes(json.notes || []);
+                setTouchpoints(json.touchpoints || []);
             }
         } catch (error) {
             console.error("Error fetching contributions:", error);
@@ -87,23 +95,29 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         fetchContributions();
     }, [fetchContributions, refreshKey]);
 
-    // Subscribe to notes table changes
+    // Subscribe to notes and iMessages table changes
     useEffect(() => {
         const supabase = createClient();
 
         const channel = supabase
-            .channel("contributions-notes-changes")
+            .channel("contributions-changes")
             .on(
                 "postgres_changes",
                 {
-                    event: "*", // Listen for INSERT, UPDATE, DELETE
+                    event: "*",
                     schema: "public",
                     table: "people_notes",
                 },
-                () => {
-                    // Refetch contributions when notes change
-                    fetchContributions();
-                }
+                () => fetchContributions()
+            )
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "people_imessages",
+                },
+                () => fetchContributions()
             )
             .subscribe();
 
@@ -112,26 +126,56 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         };
     }, [fetchContributions]);
 
-    // Process notes into contributions grouped by LOCAL date
+    // Process touchpoints into contributions grouped by LOCAL date
+    // Deduplicate per contact per day (1 touchpoint per contact per day, regardless of notes + messages)
     const contributionMap = useMemo(() => {
         const byDate: Record<string, Set<number>> = {};
         
-        notes.forEach((note) => {
+        touchpoints.forEach((tp) => {
+            if (!tp.people_id) return; // Skip if no contact linked
+            
             // Convert UTC timestamp to local date string
-            const localDate = toLocalDateString(new Date(note.created_at));
+            const localDate = toLocalDateString(new Date(tp.timestamp));
             if (!byDate[localDate]) {
                 byDate[localDate] = new Set();
             }
-            byDate[localDate].add(note.people_id);
+            // Add contact to the set for this date (Set automatically dedupes)
+            byDate[localDate].add(tp.people_id);
         });
 
-        // Convert Sets to counts
+        // Convert Sets to counts (count = number of unique contacts touched that day)
         const map = new Map<string, number>();
         Object.entries(byDate).forEach(([date, peopleSet]) => {
             map.set(date, peopleSet.size);
         });
         return map;
-    }, [notes]);
+    }, [touchpoints]);
+
+    // Get breakdown for selected date
+    const selectedDateBreakdown = useMemo(() => {
+        if (!selectedDate) return null;
+        
+        const breakdown = new Map<number, DayBreakdown>();
+        
+        touchpoints.forEach((tp) => {
+            if (!tp.people_id) return;
+            const localDate = toLocalDateString(new Date(tp.timestamp));
+            if (localDate !== selectedDate) return;
+            
+            if (!breakdown.has(tp.people_id)) {
+                breakdown.set(tp.people_id, {
+                    contact_name: tp.contact_name,
+                    types: new Set([tp.type]),
+                });
+            } else {
+                breakdown.get(tp.people_id)!.types.add(tp.type);
+            }
+        });
+        
+        return Array.from(breakdown.values()).sort((a, b) => 
+            a.contact_name.localeCompare(b.contact_name)
+        );
+    }, [selectedDate, touchpoints]);
 
     // Generate the grid data for the last 52 weeks (364 days)
     const gridData = useMemo(() => {
@@ -181,48 +225,81 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         );
     }
 
+    const handleDateClick = (date: string, count: number) => {
+        if (count === 0) {
+            setSelectedDate(null);
+            return;
+        }
+        setSelectedDate(selectedDate === date ? null : date);
+    };
+
     return (
         <div className="mb-5 pt-1">
-            {/* Grid only - no background/border */}
-            <TooltipProvider delayDuration={100}>
-                <div className="flex gap-[2px]">
-                    {gridData.map((week, weekIndex) => (
-                        <div key={weekIndex} className="flex flex-col gap-[2px]">
-                            {week.map((day) => {
-                                const intensity = getIntensity(day.count);
-                                const isToday = day.date === toLocalDateString(new Date());
-                                const bgColor = isDark ? intensityStyles[intensity].darkBg : intensityStyles[intensity].bg;
+            <div className="flex gap-4 items-start">
+                {/* Grid */}
+                <TooltipProvider delayDuration={100}>
+                    <div className="flex gap-[2px]">
+                        {gridData.map((week, weekIndex) => (
+                            <div key={weekIndex} className="flex flex-col gap-[2px]">
+                                {week.map((day) => {
+                                    const intensity = getIntensity(day.count);
+                                    const isToday = day.date === toLocalDateString(new Date());
+                                    const isSelected = day.date === selectedDate;
+                                    const bgColor = isDark ? intensityStyles[intensity].darkBg : intensityStyles[intensity].bg;
 
-                                return (
-                                    <Tooltip key={day.date}>
-                                        <TooltipTrigger asChild>
-                                            <div
-                                                style={{ backgroundColor: bgColor }}
-                                                className={`w-[10px] h-[10px] rounded-[2px] cursor-pointer transition-all hover:ring-1 hover:ring-brand-orange/50 ${
-                                                    isToday ? "ring-1 ring-brand-orange" : ""
-                                                }`}
-                                            />
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                            side="top"
-                                            className="text-xs bg-gray-900 text-white border-gray-800"
-                                        >
-                                            <div className="font-medium">
-                                                {day.count === 0
-                                                    ? "No activity"
-                                                    : day.count === 1
-                                                    ? "1 touchpoint"
-                                                    : `${day.count} touchpoints`}
-                                            </div>
-                                            <div className="text-gray-400">{formatDate(day.date)}</div>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                );
-                            })}
+                                    return (
+                                        <Tooltip key={day.date}>
+                                            <TooltipTrigger asChild>
+                                                <div
+                                                    onClick={() => handleDateClick(day.date, day.count)}
+                                                    style={{ backgroundColor: bgColor }}
+                                                    className={`w-[10px] h-[10px] rounded-[2px] cursor-pointer transition-all hover:ring-1 hover:ring-brand-orange/50 ${
+                                                        isToday ? "ring-1 ring-brand-orange" : ""
+                                                    } ${isSelected ? "ring-2 ring-brand-orange" : ""}`}
+                                                />
+                                            </TooltipTrigger>
+                                            <TooltipContent
+                                                side="top"
+                                                className="text-xs bg-gray-900 text-white border-gray-800"
+                                            >
+                                                <div className="font-medium">
+                                                    {day.count === 0
+                                                        ? "No activity"
+                                                        : day.count === 1
+                                                        ? "1 touchpoint"
+                                                        : `${day.count} touchpoints`}
+                                                </div>
+                                                <div className="text-gray-400">{formatDate(day.date)}</div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </TooltipProvider>
+
+                {/* Breakdown panel */}
+                {selectedDate && selectedDateBreakdown && selectedDateBreakdown.length > 0 && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 min-w-[140px] pl-2 border-l border-gray-200 dark:border-gray-700">
+                        <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            {formatDate(selectedDate)}
                         </div>
-                    ))}
-                </div>
-            </TooltipProvider>
+                        <div className="space-y-0.5">
+                            {selectedDateBreakdown.map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5">
+                                    <span className="truncate max-w-[100px]">{item.contact_name}</span>
+                                    <span className="text-gray-400 dark:text-gray-500">
+                                        {Array.from(item.types).map(t => 
+                                            t === 'note' ? '📝' : '💬'
+                                        ).join('')}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

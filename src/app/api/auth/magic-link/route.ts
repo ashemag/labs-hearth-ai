@@ -4,9 +4,26 @@ import { NextResponse } from 'next/server';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const ALLOWED_ELECTRON_REDIRECT_HOSTS = new Set(["localhost", "127.0.0.1", "labs.hearth.ai"]);
+
+function getSafeRedirectUrl(redirectTo?: string | null) {
+    if (!redirectTo) return null;
+    try {
+        const url = new URL(redirectTo);
+        const isAllowedHost = ALLOWED_ELECTRON_REDIRECT_HOSTS.has(url.hostname);
+        const isElectronCallback = url.pathname === "/auth/electron-callback";
+        if (isAllowedHost && isElectronCallback) {
+            return url.toString();
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 export async function POST(request: Request) {
     try {
-        const { email } = await request.json();
+        const { email, redirectTo } = await request.json();
 
         if (!email) {
             return NextResponse.json({ error: 'Email is required' }, { status: 400 });
@@ -14,6 +31,8 @@ export async function POST(request: Request) {
 
         // Get the origin from the request (works for both localhost and production)
         const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai';
+        const safeRedirectTo = getSafeRedirectUrl(redirectTo);
+        const callbackUrl = safeRedirectTo || `${origin}/auth/callback`;
 
         // Use service role to check allowlist and generate link
         const supabase = createClient(
@@ -38,7 +57,7 @@ export async function POST(request: Request) {
             type: 'magiclink',
             email: email.toLowerCase(),
             options: {
-                redirectTo: `${origin}/auth/callback`,
+                redirectTo: callbackUrl,
             },
         });
 
@@ -53,7 +72,7 @@ export async function POST(request: Request) {
 
         // Extract and replace the redirect_to parameter in the action link
         const actionUrl = new URL(actionLink);
-        actionUrl.searchParams.set('redirect_to', `${origin}/auth/callback`);
+        actionUrl.searchParams.set('redirect_to', callbackUrl);
         actionLink = actionUrl.toString();
 
         // Send email via Resend

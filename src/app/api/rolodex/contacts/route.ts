@@ -53,6 +53,12 @@ export interface RolodexContact {
         received_at: string | null;
         created_at: string;
     }[];
+    contact_info: {
+        id: number;
+        type: 'phone' | 'email';
+        value: string;
+        created_at: string;
+    }[];
 }
 
 // GET - Fetch all contacts with profiles and notes
@@ -117,6 +123,12 @@ export async function GET() {
                     context,
                     received_at,
                     created_at
+                ),
+                people_contact_info (
+                    id,
+                    type,
+                    value,
+                    created_at
                 )
             `)
             .eq("user_id", user.id)
@@ -156,6 +168,10 @@ export async function GET() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             compliments: (person.people_compliments || []).sort((a: any, b: any) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            ),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            contact_info: (person.people_contact_info || []).sort((a: any, b: any) =>
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             ),
         }));
 
@@ -244,6 +260,7 @@ async function handleNameOnlyImport(supabase: any, userId: string, name: string)
             touchpoints: [],
             websites: [],
             compliments: [],
+            contact_info: [],
         };
 
         return NextResponse.json({ contact });
@@ -346,6 +363,7 @@ async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: 
         touchpoints: [],
         websites: [],
         compliments: [],
+        contact_info: [],
     };
 
     return NextResponse.json({ contact });
@@ -458,6 +476,7 @@ async function handleXImport(supabase: any, userId: string, handle: string): Pro
         touchpoints: [],
         websites: [],
         compliments: [],
+        contact_info: [],
     };
 
     return NextResponse.json({ contact });

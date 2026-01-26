@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://labs.hearth.ai https://pqlkkgtbvaegqqqnozvl.supabase.co">
+    <title>Hearth iMessage Sync</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            color: #18181b;
+            -webkit-font-smoothing: antialiased;
+            -webkit-app-region: drag;
+            min-height: 100vh;
+        }
+
+        .container {
+            padding: 60px 24px 24px;
+            -webkit-app-region: no-drag;
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            display: block;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 8px;
+            letter-spacing: -0.3px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #71717a;
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .section {
+            background: #fafafa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #d4d4d8;
+        }
+
+        .status-dot.success { background: #22c55e; }
+        .status-dot.error { background: #ef4444; }
+        .status-dot.warning { background: #f59e0b; }
+        .status-dot.syncing { background: #3b82f6; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: #3f3f46;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px 20px;
+            background: #18181b;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+
+        .btn:hover {
+            background: #27272a;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: #a1a1aa;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f4f4f5;
+            color: #18181b;
+        }
+
+        .btn-secondary:hover {
+            background: #e4e4e7;
+        }
+
+        .btn-danger {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .btn-danger:hover {
+            background: #fee2e2;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .stat {
+            text-align: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #18181b;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #71717a;
+            margin-top: 4px;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: #71717a;
+            margin-bottom: 6px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e4e4e7;
+            border-radius: 8px;
+            font-size: 14px;
+            -webkit-app-region: no-drag;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #a1a1aa;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .message.error {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .message.success {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .message.info {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .link {
+            color: #3b82f6;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 12px;
+            color: #a1a1aa;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 12px;
+        }
+
+        .user-email {
+            font-size: 13px;
+            color: #3f3f46;
+            font-weight: 500;
+        }
+
+        .waiting-state {
+            text-align: center;
+            padding: 16px 0;
+        }
+
+        .waiting-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .waiting-text {
+            font-size: 14px;
+            color: #3f3f46;
+            margin-bottom: 4px;
+        }
+
+        .waiting-subtext {
+            font-size: 12px;
+            color: #71717a;
+        }
+
+        /* Menu */
+        .menu-container {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            -webkit-app-region: no-drag;
+            z-index: 100;
+        }
+
+        .menu-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .menu-btn.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .menu-btn:hover {
+            background: #f4f4f5;
+        }
+
+        .menu-btn svg {
+            width: 20px;
+            height: 20px;
+            color: #71717a;
+        }
+
+        .menu-dropdown {
+            position: absolute;
+            top: 36px;
+            right: 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+            min-width: 160px;
+            padding: 6px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-4px);
+            transition: all 0.15s ease;
+        }
+
+        .menu-dropdown.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 13px;
+            color: #3f3f46;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.1s ease;
+        }
+
+        .menu-item:hover {
+            background: #f4f4f5;
+        }
+
+        .menu-item.danger {
+            color: #dc2626;
+        }
+
+        .menu-item.danger:hover {
+            background: #fef2f2;
+        }
+
+        .menu-item svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
+        .menu-divider {
+            height: 1px;
+            background: #e4e4e7;
+            margin: 6px 0;
+        }
+
+        .menu-email {
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #a1a1aa;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body>
+    <!-- Menu -->
+    <div class="menu-container">
+        <button id="menu-btn" class="menu-btn">
+            <svg viewBox="0 0 24 24" fill="none">
+                <circle cx="6" cy="12" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+                <circle cx="18" cy="12" r="1.5" fill="currentColor"/>
+            </svg>
+        </button>
+        <div id="menu-dropdown" class="menu-dropdown">
+            <div id="menu-email" class="menu-email"></div>
+            <div class="menu-divider"></div>
+            <button id="menu-signout" class="menu-item danger">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Sign out
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <img src="logo.png" alt="Hearth" class="logo" onerror="this.style.display='none'">
+        <h1>Hearth iMessage Sync</h1>
+        <p class="subtitle">Sync your iMessages to your Rolodex</p>
+
+        <!-- Disk Access Section -->
+        <div id="disk-access-section" class="section">
+            <div class="section-title">1. Grant Disk Access</div>
+            <div class="status">
+                <div id="disk-status-dot" class="status-dot"></div>
+                <span id="disk-status-text" class="status-text">Checking...</span>
+            </div>
+            <button id="grant-access-btn" class="btn btn-secondary hidden" style="margin-top: 12px;">
+                Open System Preferences
+            </button>
+        </div>
+
+        <!-- Auth Section -->
+        <div id="auth-section" class="section">
+            <div class="section-title">2. Sign In to Hearth</div>
+            <div id="auth-status" class="status">
+                <div id="auth-status-dot" class="status-dot"></div>
+                <span id="auth-status-text" class="status-text">Not signed in</span>
+            </div>
+
+            <!-- Magic Link Form -->
+            <div id="auth-form" style="margin-top: 12px;">
+                <div id="auth-error" class="message error hidden"></div>
+                <div class="input-group">
+                    <label>Email</label>
+                    <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email">
+                </div>
+                <button id="send-link-btn" class="btn">Send Magic Link</button>
+                <p style="font-size: 12px; color: #71717a; text-align: center; margin-top: 12px;">
+                    Don't have an account? <a href="#" id="signup-link" class="link">Sign up at labs.hearth.ai</a>
+                </p>
+            </div>
+
+            <!-- Waiting for Magic Link -->
+            <div id="auth-waiting" class="hidden" style="margin-top: 12px;">
+                <div class="waiting-state">
+                    <div class="waiting-icon">✉️</div>
+                    <p class="waiting-text">Check your email!</p>
+                    <p class="waiting-subtext">Click the magic link to sign in</p>
+                </div>
+                <button id="resend-link-btn" class="btn btn-secondary" style="margin-top: 12px;">Send Again</button>
+                <button id="different-email-btn" class="btn btn-secondary" style="margin-top: 8px;">Use Different Email</button>
+            </div>
+
+            <!-- Signed In State -->
+            <div id="auth-signed-in" class="hidden" style="margin-top: 12px;">
+                <div class="user-info">
+                    <span id="user-email" class="user-email"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sync Section -->
+        <div id="sync-section" class="section">
+            <div class="section-title">3. Sync Messages</div>
+            <div class="status">
+                <div id="sync-status-dot" class="status-dot"></div>
+                <span id="sync-status-text" class="status-text">Ready to sync</span>
+            </div>
+            <div class="stats">
+                <div class="stat">
+                    <div id="contacts-count" class="stat-value">-</div>
+                    <div class="stat-label">Conversations</div>
+                </div>
+                <div class="stat">
+                    <div id="messages-count" class="stat-value">-</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+            </div>
+            <button id="sync-btn" class="btn" style="margin-top: 16px;" disabled>
+                Sync Now
+            </button>
+            <div id="sync-message" class="message hidden"></div>
+        </div>
+
+        <div class="footer">
+            Messages are synced securely to your Hearth account.<br>
+            Only messages from contacts with phone/email in your Rolodex will be matched.
+        </div>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+
+        let hasAccess = false;
+        let isAuthenticated = false;
+        let messageData = null;
+        let pendingEmail = null;
+        let autoSyncInterval = null;
+        const AUTO_SYNC_INTERVAL = 30000; // 30 seconds
+
+        // Initialize
+        async function init() {
+            await checkDiskAccess();
+            await checkAuth();
+            if (hasAccess) {
+                await loadMessageStats();
+            }
+
+            // Listen for auth success from magic link
+            window.hearthAPI.onAuthSuccess((data) => {
+                console.log('Auth success:', data);
+                handleAuthSuccess(data);
+            });
+        }
+
+        // Handle successful auth (from magic link callback)
+        async function handleAuthSuccess(data) {
+            isAuthenticated = true;
+            $('auth-status-dot').className = 'status-dot success';
+            $('auth-status-text').textContent = 'Signed in';
+            $('auth-form').classList.add('hidden');
+            $('auth-waiting').classList.add('hidden');
+            $('auth-signed-in').classList.remove('hidden');
+            $('user-email').textContent = data.user.email;
+            $('menu-email').textContent = data.user.email;
+            $('menu-btn').classList.add('visible');
+            updateSyncButton();
+            
+            // Do initial sync immediately after sign-in
+            if (hasAccess) {
+                await loadMessageStats();
+                performAutoSync();
+            }
+        }
+
+        // Check disk access
+        async function checkDiskAccess() {
+            const result = await window.hearthAPI.checkDiskAccess();
+            hasAccess = result.hasAccess;
+
+            $('disk-status-dot').className = `status-dot ${hasAccess ? 'success' : 'error'}`;
+            $('disk-status-text').textContent = hasAccess
+                ? 'Full Disk Access granted'
+                : 'Full Disk Access required';
+
+            if (!hasAccess) {
+                $('grant-access-btn').classList.remove('hidden');
+            } else {
+                $('grant-access-btn').classList.add('hidden');
+            }
+
+            updateSyncButton();
+        }
+
+        // Grant access button
+        $('grant-access-btn').addEventListener('click', async () => {
+            await window.hearthAPI.openDiskAccessSettings();
+        });
+
+        // Check auth
+        async function checkAuth() {
+            const result = await window.hearthAPI.getAuth();
+            isAuthenticated = result.isAuthenticated;
+
+            $('auth-status-dot').className = `status-dot ${isAuthenticated ? 'success' : 'warning'}`;
+            $('auth-status-text').textContent = isAuthenticated
+                ? 'Signed in'
+                : 'Not signed in';
+
+            if (isAuthenticated) {
+                $('auth-form').classList.add('hidden');
+                $('auth-waiting').classList.add('hidden');
+                $('auth-signed-in').classList.remove('hidden');
+                $('user-email').textContent = result.user.email;
+                $('menu-email').textContent = result.user.email;
+                $('menu-btn').classList.add('visible');
+            } else {
+                $('auth-form').classList.remove('hidden');
+                $('auth-waiting').classList.add('hidden');
+                $('auth-signed-in').classList.add('hidden');
+                $('menu-btn').classList.remove('visible');
+            }
+
+            updateSyncButton();
+        }
+
+        // Send magic link
+        async function sendMagicLink() {
+            const email = $('email-input').value.trim();
+
+            if (!email) {
+                showAuthError('Please enter your email');
+                return;
+            }
+
+            $('send-link-btn').disabled = true;
+            $('send-link-btn').textContent = 'Sending...';
+            $('auth-error').classList.add('hidden');
+
+            const result = await window.hearthAPI.sendMagicLink({ email });
+
+            if (result.success) {
+                pendingEmail = email;
+                $('auth-form').classList.add('hidden');
+                $('auth-waiting').classList.remove('hidden');
+                $('auth-status-dot').className = 'status-dot syncing';
+                $('auth-status-text').textContent = 'Check your email';
+            } else {
+                showAuthError(result.error || 'Failed to send magic link');
+            }
+
+            $('send-link-btn').disabled = false;
+            $('send-link-btn').textContent = 'Send Magic Link';
+        }
+
+        $('send-link-btn').addEventListener('click', sendMagicLink);
+
+        // Resend magic link
+        $('resend-link-btn').addEventListener('click', async () => {
+            if (!pendingEmail) return;
+
+            $('resend-link-btn').disabled = true;
+            $('resend-link-btn').textContent = 'Sending...';
+
+            const result = await window.hearthAPI.sendMagicLink({ email: pendingEmail });
+
+            if (!result.success) {
+                showAuthError(result.error || 'Failed to send magic link');
+                $('auth-form').classList.remove('hidden');
+                $('auth-waiting').classList.add('hidden');
+            }
+
+            $('resend-link-btn').disabled = false;
+            $('resend-link-btn').textContent = 'Send Again';
+        });
+
+        // Use different email
+        $('different-email-btn').addEventListener('click', () => {
+            pendingEmail = null;
+            $('auth-form').classList.remove('hidden');
+            $('auth-waiting').classList.add('hidden');
+            $('auth-status-dot').className = 'status-dot warning';
+            $('auth-status-text').textContent = 'Not signed in';
+            $('email-input').value = '';
+            $('email-input').focus();
+        });
+
+        // Menu toggle
+        $('menu-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            $('menu-dropdown').classList.toggle('open');
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', () => {
+            $('menu-dropdown').classList.remove('open');
+        });
+
+        // Sign out (from menu)
+        $('menu-signout').addEventListener('click', async () => {
+            $('menu-dropdown').classList.remove('open');
+            stopAutoSync();
+            await window.hearthAPI.signOut();
+            isAuthenticated = false;
+            pendingEmail = null;
+            $('auth-status-dot').className = 'status-dot warning';
+            $('auth-status-text').textContent = 'Not signed in';
+            $('auth-form').classList.remove('hidden');
+            $('auth-waiting').classList.add('hidden');
+            $('auth-signed-in').classList.add('hidden');
+            $('menu-btn').classList.remove('visible');
+            $('email-input').value = '';
+            updateSyncButton();
+        });
+
+        // Show auth error
+        function showAuthError(message) {
+            $('auth-error').textContent = message;
+            $('auth-error').classList.remove('hidden');
+        }
+
+        // Signup link
+        $('signup-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            window.hearthAPI.openExternal('https://labs.hearth.ai');
+        });
+
+        // Enter key to submit
+        $('email-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMagicLink();
+        });
+
+        // Load message stats (for initial display - shows last 30 days)
+        async function loadMessageStats() {
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const result = await window.hearthAPI.getRecentMessages({
+                sinceDate: thirtyDaysAgo.toISOString(),
+                limit: 1000
+            });
+
+            if (result.success) {
+                messageData = result;
+                $('contacts-count').textContent = result.contacts.length;
+                $('messages-count').textContent = result.total_messages;
+            }
+        }
+        
+        // Load messages incrementally (since last sync)
+        async function loadMessagesSinceLastSync() {
+            // Get last synced message ID from server
+            const lastSyncResult = await window.hearthAPI.getLastSync();
+            let options = { limit: 1000 };
+            
+            if (lastSyncResult.success && lastSyncResult.lastMessageId) {
+                // Use message ID for incremental sync (most reliable)
+                options.sinceMessageId = lastSyncResult.lastMessageId;
+                console.log('Incremental sync since message ID:', lastSyncResult.lastMessageId);
+            } else {
+                // First sync - get last 30 days
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                options.sinceDate = thirtyDaysAgo.toISOString();
+                console.log('First sync - getting last 30 days');
+            }
+
+            const result = await window.hearthAPI.getRecentMessages(options);
+
+            if (result.success) {
+                messageData = result;
+                return result;
+            }
+            return null;
+        }
+
+        // Update sync button state
+        function updateSyncButton() {
+            const canSync = hasAccess && isAuthenticated;
+            $('sync-btn').disabled = !canSync;
+            
+            // Start/stop auto-sync based on state
+            if (canSync && !autoSyncInterval) {
+                startAutoSync();
+            } else if (!canSync && autoSyncInterval) {
+                stopAutoSync();
+            }
+        }
+        
+        // Auto-sync functionality
+        function startAutoSync() {
+            if (autoSyncInterval) return;
+            console.log('Starting auto-sync (every 30s)');
+            // Do immediate sync, then every 30s
+            performAutoSync();
+            autoSyncInterval = setInterval(performAutoSync, AUTO_SYNC_INTERVAL);
+        }
+        
+        function stopAutoSync() {
+            if (autoSyncInterval) {
+                console.log('Stopping auto-sync');
+                clearInterval(autoSyncInterval);
+                autoSyncInterval = null;
+            }
+        }
+        
+        async function performAutoSync() {
+            if (!hasAccess || !isAuthenticated) return;
+            
+            console.log('Auto-syncing...');
+            $('sync-status-dot').className = 'status-dot syncing';
+            $('sync-status-text').textContent = 'Checking for new messages...';
+            
+            // Load only new messages since last sync
+            const data = await loadMessagesSinceLastSync();
+            
+            if (!data || !data.contacts || data.contacts.length === 0) {
+                $('sync-status-dot').className = 'status-dot success';
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                $('sync-status-text').textContent = `Up to date (${now})`;
+                return;
+            }
+            
+            $('sync-status-text').textContent = `Syncing ${data.total_messages} new messages...`;
+            
+            const result = await window.hearthAPI.syncToHearth({
+                messages: data.contacts
+            });
+            
+            if (result.success) {
+                $('sync-status-dot').className = 'status-dot success';
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                $('sync-status-text').textContent = `Synced ${data.total_messages} messages (${now})`;
+                // Update stats display
+                await loadMessageStats();
+            } else {
+                $('sync-status-dot').className = 'status-dot error';
+                $('sync-status-text').textContent = 'Auto-sync failed';
+            }
+        }
+
+        // Sync button (manual sync uses incremental too)
+        $('sync-btn').addEventListener('click', async () => {
+            $('sync-btn').disabled = true;
+            $('sync-btn').textContent = 'Checking...';
+            $('sync-status-dot').className = 'status-dot syncing';
+            $('sync-status-text').textContent = 'Checking for new messages...';
+            $('sync-message').classList.add('hidden');
+            
+            // Load only new messages since last sync
+            const data = await loadMessagesSinceLastSync();
+
+            if (!data || !data.contacts || data.contacts.length === 0) {
+                $('sync-status-dot').className = 'status-dot success';
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                $('sync-status-text').textContent = `Already up to date (${now})`;
+                $('sync-message').className = 'message info';
+                $('sync-message').textContent = 'No new messages to sync';
+                $('sync-message').classList.remove('hidden');
+                $('sync-btn').disabled = false;
+                $('sync-btn').textContent = 'Sync Now';
+                return;
+            }
+
+            $('sync-btn').textContent = 'Syncing...';
+            $('sync-status-text').textContent = `Syncing ${data.total_messages} new messages...`;
+
+            const result = await window.hearthAPI.syncToHearth({
+                messages: data.contacts
+            });
+
+            if (result.success) {
+                $('sync-status-dot').className = 'status-dot success';
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                $('sync-status-text').textContent = `Synced ${data.total_messages} messages (${now})`;
+                $('sync-message').className = 'message success';
+                $('sync-message').textContent = `Successfully synced to ${result.matched || 0} contacts`;
+                $('sync-message').classList.remove('hidden');
+                // Update stats display
+                await loadMessageStats();
+            } else {
+                $('sync-status-dot').className = 'status-dot error';
+                $('sync-status-text').textContent = 'Sync failed';
+                $('sync-message').className = 'message error';
+                $('sync-message').textContent = result.error || 'Unknown error';
+                $('sync-message').classList.remove('hidden');
+            }
+
+            $('sync-btn').disabled = false;
+            $('sync-btn').textContent = 'Sync Now';
+        });
+
+        // Initialize on load
+        init();
+
+        // Re-check disk access when window gains focus (user may have granted access)
+        window.addEventListener('focus', async () => {
+            if (!hasAccess) {
+                await checkDiskAccess();
+                if (hasAccess) {
+                    await loadMessageStats();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

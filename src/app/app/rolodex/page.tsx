@@ -90,6 +90,13 @@ interface Touchpoint {
     created_at: string;
 }
 
+interface ContactInfo {
+    id: number;
+    type: 'phone' | 'email';
+    value: string;
+    created_at: string;
+}
+
 interface Website {
     id: number;
     url: string;
@@ -112,6 +119,7 @@ interface Contact {
     touchpoints: Touchpoint[];
     websites: Website[];
     compliments: Compliment[];
+    contact_info: ContactInfo[];
 }
 
 interface ContextMenuState {
@@ -308,6 +316,20 @@ export default function RolodexPage() {
         person: { id: number; name: string; custom_profile_image_url?: string } | null;
     }>>([]);
     const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
+    // Contact info (phone/email) state
+    const [addingContactInfoFor, setAddingContactInfoFor] = useState<number | null>(null);
+    const [contactInfoType, setContactInfoType] = useState<'phone' | 'email'>('phone');
+    const [contactInfoValue, setContactInfoValue] = useState("");
+    const [contactInfoLoading, setContactInfoLoading] = useState(false);
+    // iMessage timeline state
+    const [showMessagesFor, setShowMessagesFor] = useState<Set<number>>(new Set());
+    const [contactMessages, setContactMessages] = useState<Record<number, Array<{
+        id: number;
+        message_text: string;
+        is_from_me: boolean;
+        message_date: string;
+    }>>>({});
+    const [loadingMessagesFor, setLoadingMessagesFor] = useState<number | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const addInputRef = useRef<HTMLInputElement>(null);
     const noteInputRef = useRef<HTMLTextAreaElement>(null);
@@ -2155,6 +2177,99 @@ export default function RolodexPage() {
         }
     };
 
+    // Add contact info (phone/email)
+    const handleAddContactInfo = async (contactId: number) => {
+        if (!contactInfoValue.trim()) return;
+
+        setContactInfoLoading(true);
+        try {
+            const res = await fetch("/api/rolodex/contact-info", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    people_id: contactId,
+                    type: contactInfoType,
+                    value: contactInfoValue.trim(),
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error("Error adding contact info:", data.error);
+                return;
+            }
+
+            // Update local state
+            setContacts(prev => prev.map(c =>
+                c.id === contactId
+                    ? { ...c, contact_info: [...(c.contact_info || []), data.contact_info] }
+                    : c
+            ));
+
+            setAddingContactInfoFor(null);
+            setContactInfoValue("");
+            setContactInfoType('phone');
+        } catch (error) {
+            console.error("Error adding contact info:", error);
+        } finally {
+            setContactInfoLoading(false);
+        }
+    };
+
+    // Delete contact info
+    const handleDeleteContactInfo = async (infoId: number, contactId: number) => {
+        try {
+            const res = await fetch(`/api/rolodex/contact-info?id=${infoId}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+
+            if (res.ok) {
+                setContacts(prev => prev.map(c =>
+                    c.id === contactId
+                        ? { ...c, contact_info: (c.contact_info || []).filter(i => i.id !== infoId) }
+                        : c
+                ));
+            }
+        } catch (error) {
+            console.error("Error deleting contact info:", error);
+        }
+    };
+
+    // Toggle iMessages visibility for a contact
+    const toggleMessagesForContact = async (contactId: number) => {
+        const newShowMessages = new Set(showMessagesFor);
+        
+        if (newShowMessages.has(contactId)) {
+            // Hide messages
+            newShowMessages.delete(contactId);
+            setShowMessagesFor(newShowMessages);
+        } else {
+            // Show messages - fetch if not already loaded
+            newShowMessages.add(contactId);
+            setShowMessagesFor(newShowMessages);
+            
+            if (!contactMessages[contactId]) {
+                setLoadingMessagesFor(contactId);
+                try {
+                    const res = await fetch(`/api/rolodex/imessages?people_id=${contactId}&limit=100`, {
+                        credentials: "include",
+                    });
+                    if (res.ok) {
+                        const { messages } = await res.json();
+                        setContactMessages(prev => ({ ...prev, [contactId]: messages || [] }));
+                    }
+                } catch (error) {
+                    console.error("Error fetching messages:", error);
+                } finally {
+                    setLoadingMessagesFor(null);
+                }
+            }
+        }
+    };
+
     // Discovery - fetch top interactions for a username
     const handleDiscoverySearch = async () => {
         if (!discoveryUsername.trim()) return;
@@ -3714,9 +3829,104 @@ export default function RolodexPage() {
                                     </div>
                                 </div>
 
-                                {/* Timeline Section (Notes + Touchpoints) */}
+                                {/* Contact Info Section (Phone/Email for iMessage matching) */}
                                 <div>
-                                    <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">Timeline</h3>
+                                    <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">Contact Info</h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Display existing contact info */}
+                                        {(contact.contact_info || []).map(info => (
+                                            <div key={info.id} className="inline-flex items-center group/info">
+                                                <span
+                                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-l-full ${
+                                                        info.type === 'phone'
+                                                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                                            : 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                                    }`}
+                                                >
+                                                    {info.type === 'phone' ? '📱' : '✉️'}
+                                                    {info.type === 'phone'
+                                                        ? info.value.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')
+                                                        : info.value}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleDeleteContactInfo(info.id, contact.id)}
+                                                    className={`px-1.5 py-1 text-xs rounded-r-full transition-colors opacity-0 group-hover/info:opacity-100 ${
+                                                        info.type === 'phone'
+                                                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500'
+                                                            : 'bg-amber-50 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500'
+                                                    }`}
+                                                    title="Remove"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {/* Add contact info button/form */}
+                                        {addingContactInfoFor === contact.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={contactInfoType}
+                                                    onChange={(e) => setContactInfoType(e.target.value as 'phone' | 'email')}
+                                                    className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-600"
+                                                >
+                                                    <option value="phone">Phone</option>
+                                                    <option value="email">Email</option>
+                                                </select>
+                                                <input
+                                                    type={contactInfoType === 'email' ? 'email' : 'tel'}
+                                                    value={contactInfoValue}
+                                                    onChange={(e) => setContactInfoValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter" && contactInfoValue.trim()) handleAddContactInfo(contact.id);
+                                                        else if (e.key === "Escape") { setAddingContactInfoFor(null); setContactInfoValue(""); }
+                                                    }}
+                                                    placeholder={contactInfoType === 'phone' ? '555-123-4567' : 'email@example.com'}
+                                                    autoFocus
+                                                    className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600 w-36"
+                                                />
+                                                <button
+                                                    onClick={() => handleAddContactInfo(contact.id)}
+                                                    disabled={!contactInfoValue.trim() || contactInfoLoading}
+                                                    className="p-1 text-gray-700 hover:text-gray-700 disabled:text-gray-400"
+                                                >
+                                                    {contactInfoLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setAddingContactInfoFor(null); setContactInfoValue(""); }}
+                                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => setAddingContactInfoFor(contact.id)}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400 transition-colors"
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                                Add phone/email
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 mt-2">Used for matching iMessages to this contact</p>
+                                </div>
+
+                                {/* Timeline Section (Notes + Touchpoints + optional Messages) */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest">Timeline</h3>
+                                        <button
+                                            onClick={() => toggleMessagesForContact(contact.id)}
+                                            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                                                showMessagesFor.has(contact.id)
+                                                    ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
+                                                    : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                            }`}
+                                            title={showMessagesFor.has(contact.id) ? "Hide iMessages" : "Show iMessages"}
+                                        >
+                                            {loadingMessagesFor === contact.id ? "..." : showMessagesFor.has(contact.id) ? "iMessages on" : "iMessages"}
+                                        </button>
+                                    </div>
                                     {/* Add note input */}
                                     <div className="mb-3 relative">
                                         <textarea
@@ -3787,20 +3997,51 @@ export default function RolodexPage() {
                                             </div>
                                         )}
                                     </div>
-                                    {/* Timeline list (notes + touchpoints interspersed) */}
+                                    {/* Timeline list (notes + touchpoints + optional messages interspersed) */}
                                     <div className="space-y-3 max-h-64 overflow-y-auto">
                                         {(() => {
-                                            // Combine notes and touchpoints into a unified timeline
-                                            const timeline: Array<{ type: "note"; data: Note } | { type: "touchpoint"; data: Touchpoint }> = [
-                                                ...contact.notes.map(n => ({ type: "note" as const, data: n })),
-                                                ...contact.touchpoints.map(t => ({ type: "touchpoint" as const, data: t })),
-                                            ].sort((a, b) => new Date(b.data.created_at).getTime() - new Date(a.data.created_at).getTime());
+                                            // Combine notes, touchpoints, and optionally messages into a unified timeline
+                                            type TimelineItem = 
+                                                | { type: "note"; data: Note; date: string }
+                                                | { type: "touchpoint"; data: Touchpoint; date: string }
+                                                | { type: "message"; data: { id: number; message_text: string; is_from_me: boolean; message_date: string }; date: string };
+                                            
+                                            const timeline: TimelineItem[] = [
+                                                ...contact.notes.map(n => ({ type: "note" as const, data: n, date: n.created_at })),
+                                                ...contact.touchpoints.map(t => ({ type: "touchpoint" as const, data: t, date: t.created_at })),
+                                            ];
+                                            
+                                            // Include messages if toggle is on
+                                            if (showMessagesFor.has(contact.id) && contactMessages[contact.id]) {
+                                                timeline.push(...contactMessages[contact.id].map(m => ({
+                                                    type: "message" as const,
+                                                    data: m,
+                                                    date: m.message_date,
+                                                })));
+                                            }
+                                            
+                                            timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
                                             if (timeline.length === 0) {
                                                 return <p className="text-sm text-gray-400 italic">No activity yet</p>;
                                             }
 
                                             return timeline.map(item => {
+                                                if (item.type === "message") {
+                                                    const msg = item.data;
+                                                    return (
+                                                        <div key={`msg-${msg.id}`} className={`flex gap-2 py-2 px-3 rounded-lg ${msg.is_from_me ? "bg-blue-50 dark:bg-blue-900/20" : "bg-gray-50 dark:bg-gray-800/30"}`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${msg.is_from_me ? "bg-blue-400" : "bg-gray-400"}`} />
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-xs text-gray-600 dark:text-gray-300 break-words">{msg.message_text.length > 150 ? msg.message_text.slice(0, 150) + "..." : msg.message_text}</p>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <span className="text-[10px] text-gray-400">{msg.is_from_me ? "You" : "Them"}</span>
+                                                                    <span className="text-[10px] text-gray-400">{formatTimeAgo(msg.message_date)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
                                                 if (item.type === "touchpoint") {
                                                     return (
                                                         <div key={`tp-${item.data.id}`} className="flex items-center gap-2 py-2 px-3 bg-gray-100 dark:bg-gray-800/30 rounded-lg">
