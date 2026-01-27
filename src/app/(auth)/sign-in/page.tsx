@@ -102,7 +102,7 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-watercolor-paper">
+    <div className="min-h-screen w-full flex items-center justify-center bg-white">
       {/* Handle auth redirects from magic links */}
       <AuthHandler />
 
@@ -119,11 +119,10 @@ export default function SignInPage() {
             />
             {/* Circle to cover the original orange dot */}
             <div
-              className="absolute w-[14px] h-[14px] rounded-full"
+              className="absolute w-[14px] h-[14px] rounded-full bg-white"
               style={{
                 left: '13px',
                 top: '22px',
-                backgroundColor: '#faf8f5',
               }}
             />
             {/* Pulsing orange dot */}
@@ -153,8 +152,8 @@ export default function SignInPage() {
               <h2
                 className="text-2xl font-medium tracking-tight"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Check your email
@@ -162,8 +161,8 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 We sent a magic link to <span className="font-medium">{email}</span>
@@ -171,8 +170,8 @@ export default function SignInPage() {
               <p
                 className="mt-1 text-sm"
                 style={{
-                  color: '#b8b2aa',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#9ca3af',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Click the link to sign in
@@ -181,7 +180,7 @@ export default function SignInPage() {
             <button
               onClick={resetForm}
               className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-              style={{ color: '#b8b2aa' }}
+              style={{ color: '#9ca3af' }}
             >
               Use a different email
             </button>
@@ -195,8 +194,8 @@ export default function SignInPage() {
               <h2
                 className="text-2xl font-medium tracking-tight"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Not on the list yet
@@ -204,8 +203,8 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 <span className="font-medium">{email}</span> isn&apos;t on our private beta list.
@@ -213,8 +212,8 @@ export default function SignInPage() {
               <p
                 className="mt-1 text-sm"
                 style={{
-                  color: '#b8b2aa',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#9ca3af',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Want to join the waitlist?
@@ -250,22 +249,13 @@ export default function SignInPage() {
 
                 {/* Inner overlay - creates metallic border effect, fades on hover */}
                 <div
-                  className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md"
-                  style={{ backgroundColor: '#faf8f5' }}
+                  className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md bg-white"
                 >
-                  {/* Paper texture overlay */}
-                  <div
-                    className="absolute inset-0 opacity-30 mix-blend-multiply"
-                    style={{
-                      backgroundImage: "url('/backgrounds/noise.png')",
-                      backgroundSize: '100px 100px',
-                    }}
-                  />
                   <span
                     className="relative flex items-center justify-center h-full font-medium"
                     style={{
-                      color: '#5c564e',
-                      textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                      color: '#6b7280',
+                      textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                     }}
                   >
                     {loading ? "Joining..." : "Join waitlist"}
@@ -280,7 +270,7 @@ export default function SignInPage() {
               <button
                 onClick={resetForm}
                 className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-                style={{ color: '#5c564e' }}
+                style={{ color: '#6b7280' }}
               >
                 Try a different email
               </button>
@@ -295,8 +285,8 @@ export default function SignInPage() {
               <h2
                 className="text-2xl font-medium tracking-tight"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Chat soon
@@ -304,8 +294,8 @@ export default function SignInPage() {
               <p
                 className="mt-3 text-sm"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 We&apos;ll notify <span className="font-medium">{email}</span> when you get access.
@@ -313,8 +303,8 @@ export default function SignInPage() {
               <p
                 className="mt-1 text-sm"
                 style={{
-                  color: '#b8b2aa',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#9ca3af',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Thanks for your interest in Hearth
@@ -323,7 +313,7 @@ export default function SignInPage() {
             <button
               onClick={resetForm}
               className="text-sm transition-colors hover:opacity-70 cursor-pointer"
-              style={{ color: '#5c564e' }}
+              style={{ color: '#6b7280' }}
             >
               Back to sign in
             </button>
@@ -337,8 +327,8 @@ export default function SignInPage() {
               <h2
                 className="text-2xl font-medium tracking-tight"
                 style={{
-                  color: '#5c564e',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#6b7280',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Sign in
@@ -346,8 +336,8 @@ export default function SignInPage() {
               <p
                 className="mt-2 text-sm"
                 style={{
-                  color: '#b8b2aa',
-                  textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                  color: '#9ca3af',
+                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 Play with Fire
@@ -359,7 +349,7 @@ export default function SignInPage() {
                 <Label
                   htmlFor="email"
                   className="text-xs uppercase tracking-wider font-medium"
-                  style={{ color: '#5c564e' }}
+                  style={{ color: '#6b7280' }}
                 >
                   Email
                 </Label>
@@ -371,10 +361,9 @@ export default function SignInPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
                   required
-                  className="h-12 border transition-all"
+                  className="h-12 border transition-all bg-white"
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                    borderColor: 'rgba(184, 178, 170, 0.3)',
+                    borderColor: 'rgba(156, 163, 175, 0.3)',
                   }}
                 />
               </div>
@@ -409,22 +398,13 @@ export default function SignInPage() {
 
                 {/* Inner overlay - creates metallic border effect, fades on hover */}
                 <div
-                  className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md"
-                  style={{ backgroundColor: '#faf8f5' }}
+                  className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md bg-white"
                 >
-                  {/* Paper texture overlay */}
-                  <div
-                    className="absolute inset-0 opacity-30 mix-blend-multiply"
-                    style={{
-                      backgroundImage: "url('/backgrounds/noise.png')",
-                      backgroundSize: '100px 100px',
-                    }}
-                  />
                   <span
                     className="relative flex items-center justify-center h-full font-medium"
                     style={{
-                      color: '#5c564e',
-                      textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+                      color: '#6b7280',
+                      textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
                     }}
                   >
                     {loading ? (

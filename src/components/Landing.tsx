@@ -30,12 +30,12 @@ export default function Landing() {
   };
 
   return (
-    <div className="relative w-screen min-h-screen flex flex-col items-center justify-center bg-watercolor-paper">
+    <div className="relative w-screen min-h-screen flex flex-col items-center justify-center bg-white">
       {/* Handle auth redirects from magic links */}
       <AuthHandler />
 
       {/* Sign In Button - Top Right */}
-      <div className="absolute top-6 right-8 z-10">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-8 z-10">
         <LiquidGlassButton onClick={handleSignIn} disabled={signingIn}>
           {signingIn ? "Kindling..." : "Play with Fire"}
         </LiquidGlassButton>
@@ -51,13 +51,12 @@ export default function Landing() {
             height={40}
             priority
           />
-          {/* Circle to cover the original orange dot - matches watercolor paper */}
+          {/* Circle to cover the original orange dot - matches white background */}
           <div
-            className="absolute w-[14px] h-[14px] rounded-full"
+            className="absolute w-[14px] h-[14px] rounded-full bg-white"
             style={{
               left: '13px',
               top: '22px',
-              backgroundColor: '#faf8f5',
             }}
           />
           {/* Pulsing orange dot on top */}
@@ -79,19 +78,19 @@ export default function Landing() {
           />
         </div>
         <span
-          className="mt-3 text-xs tracking-wide"
+          className="mt-3 text-xs tracking-wide etched-text"
           style={{
-            color: '#b8b2aa',
-            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+            color: '#9ca3af',
+            textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
           }}
         >
           Relational Intelligence
         </span>
         <span
-          className="mt-1 text-xs tracking-wide"
+          className="mt-1 text-xs tracking-wide etched-text"
           style={{
-            color: '#b8b2aa',
-            textShadow: '1px 1px 0px rgba(255, 255, 255, 0.7)',
+            color: '#9ca3af',
+            textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
           }}
         >
           Your Second Brain for Your People
