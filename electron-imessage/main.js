@@ -3,14 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// Debug log file
-const DEBUG_LOG = path.join(os.homedir(), 'Desktop', 'hearth-debug.log');
 function debugLog(...args) {
-    const msg = `[${new Date().toISOString()}] ${args.join(' ')}\n`;
-    fs.appendFileSync(DEBUG_LOG, msg);
     console.log(...args);
 }
-debugLog('=== Electron app starting ===');
 
 let mainWindow;
 let SQL;
