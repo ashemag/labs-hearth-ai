@@ -278,6 +278,67 @@ function clearAuthData() {
     }
 }
 
+// Refresh the access token using the refresh token
+async function refreshAccessToken() {
+    if (!authData.refreshToken) {
+        console.log('No refresh token available');
+        return false;
+    }
+
+    try {
+        console.log('Refreshing access token...');
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({
+                refresh_token: authData.refreshToken
+            })
+        });
+
+        if (!response.ok) {
+            console.log('Token refresh failed:', response.status);
+            return false;
+        }
+
+        const data = await response.json();
+        authData.accessToken = data.access_token;
+        authData.refreshToken = data.refresh_token;
+        authData.user = data.user || authData.user;
+        saveAuthData(authData);
+        console.log('Token refreshed successfully for:', authData.user?.email);
+        return true;
+    } catch (error) {
+        console.error('Error refreshing token:', error);
+        return false;
+    }
+}
+
+// Ensure we have a valid token, refreshing if needed
+async function ensureValidToken() {
+    if (!authData.accessToken) return false;
+
+    try {
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: {
+                'Authorization': `Bearer ${authData.accessToken}`,
+                'apikey': SUPABASE_ANON_KEY
+            }
+        });
+
+        if (response.ok) return true;
+
+        // Token expired, try refresh
+        console.log('Token expired, attempting refresh...');
+        return await refreshAccessToken();
+    } catch (error) {
+        console.error('Error validating token:', error);
+        return await refreshAccessToken();
+    }
+}
+
 // Token storage (loaded from disk on startup)
 let authData = { accessToken: null, refreshToken: null, user: null };
 
@@ -419,25 +480,15 @@ app.whenReady().then(async () => {
     // Load saved auth data
     authData = loadAuthData();
 
-    // Validate saved token if present
+    // Validate saved token if present, refresh if expired
     if (authData.accessToken) {
-        try {
-            const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-                headers: {
-                    'Authorization': `Bearer ${authData.accessToken}`,
-                    'apikey': SUPABASE_ANON_KEY
-                }
-            });
-            if (!response.ok) {
-                // Token is invalid, clear it
-                console.log('Saved token is invalid, clearing...');
-                authData = { accessToken: null, refreshToken: null, user: null };
-                clearAuthData();
-            } else {
-                console.log('Saved token is valid, user:', authData.user?.email);
-            }
-        } catch (error) {
-            console.error('Error validating token:', error);
+        const valid = await ensureValidToken();
+        if (!valid) {
+            console.log('Could not validate or refresh token, clearing auth...');
+            authData = { accessToken: null, refreshToken: null, user: null };
+            clearAuthData();
+        } else {
+            console.log('Auth valid for:', authData.user?.email);
         }
     }
 
@@ -711,6 +762,12 @@ ipcMain.handle('get-last-sync', async () => {
         return { success: false, error: 'Not authenticated' };
     }
 
+    // Ensure token is valid before making the call
+    const valid = await ensureValidToken();
+    if (!valid) {
+        return { success: false, error: 'Session expired. Please sign in again.' };
+    }
+
     try {
         const response = await fetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
             method: 'GET',
@@ -736,6 +793,12 @@ ipcMain.handle('get-last-sync', async () => {
 ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
     if (!authData.accessToken) {
         return { success: false, error: 'Not authenticated' };
+    }
+
+    // Ensure token is valid before making the call
+    const valid = await ensureValidToken();
+    if (!valid) {
+        return { success: false, error: 'Session expired. Please sign in again.' };
     }
 
     try {

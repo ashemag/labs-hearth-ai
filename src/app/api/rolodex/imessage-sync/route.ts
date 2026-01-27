@@ -332,11 +332,17 @@ export async function POST(req: NextRequest) {
                 matchedContactIds.add(contactId);
 
                 // Update last_touchpoint on the contact
-                await supabase
+                // First try updating if current touchpoint is older
+                const { data: updated } = await supabase
                     .from("people")
                     .update({ last_touchpoint: last_message_date })
                     .eq("id", contactId)
-                    .lt("last_touchpoint", last_message_date);
+                    .or(`last_touchpoint.is.null,last_touchpoint.lt.${last_message_date}`)
+                    .select("id");
+
+                if (updated && updated.length > 0) {
+                    console.log(`[iMessage Sync] Updated touchpoint for contact ${contactId} to ${last_message_date}`);
+                }
 
                 syncedCount++;
             }
