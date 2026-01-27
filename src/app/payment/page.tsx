@@ -129,8 +129,8 @@ function SuccessView() {
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            router.push("/app/rolodex");
-        }, 2500);
+            router.push("/welcome");
+        }, 2000);
         return () => clearTimeout(timer);
     }, [router]);
 
@@ -148,7 +148,7 @@ function SuccessView() {
                 </p>
             </div>
             <p className="text-xs text-gray-400">
-                Redirecting...
+                Setting things up...
             </p>
         </div>
     );
