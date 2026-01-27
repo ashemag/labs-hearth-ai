@@ -43,6 +43,7 @@ import {
     LogOut,
     Maximize2,
     Minimize2,
+    Palette,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
@@ -50,6 +51,8 @@ import ContributionsGrid from "@/components/ContributionsGrid";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import data from "@emoji-mart/data";
+import Picker from "@emoji-mart/react";
 
 interface Note {
     id: number;
@@ -132,6 +135,7 @@ interface RolodexList {
     id: number;
     name: string;
     color: string;
+    emoji: string | null;
     pinned: boolean;
     member_count: number;
     member_ids: number[];
@@ -233,6 +237,10 @@ export default function RolodexPage() {
     const [lists, setLists] = useState<RolodexList[]>([]);
     const [activeList, setActiveList] = useState<number | "all" | "curated">("curated");
     const [showNewListInput, setShowNewListInput] = useState(false);
+    const [listPickerOpen, setListPickerOpen] = useState<number | null>(null);
+    const [listContextMenu, setListContextMenu] = useState<{ x: number; y: number; listId: number } | null>(null);
+    const [renamingListId, setRenamingListId] = useState<number | null>(null);
+    const [renameListValue, setRenameListValue] = useState("");
     const [newListName, setNewListName] = useState("");
     const [creatingList, setCreatingList] = useState(false);
     const [showListsDropdown, setShowListsDropdown] = useState(false);
@@ -601,10 +609,11 @@ export default function RolodexPage() {
 
     // Close context menu on click outside
     useEffect(() => {
-        const handleClick = () => setContextMenu(null);
+        const handleClick = () => { setContextMenu(null); setListContextMenu(null); };
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
                 setContextMenu(null);
+                setListContextMenu(null);
                 setSelectedContacts(new Set());
             }
         };
@@ -1807,6 +1816,40 @@ export default function RolodexPage() {
         }
     };
 
+    const handleUpdateListAppearance = async (listId: number, updates: { color?: string; emoji?: string }) => {
+        // Optimistic update
+        setLists((prev) =>
+            prev.map((l) => (l.id === listId ? { ...l, ...updates, emoji: updates.emoji ?? l.emoji } : l))
+        );
+
+        try {
+            await fetch("/api/rolodex/lists", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ id: listId, ...updates }),
+            });
+        } catch (error) {
+            console.error("Error updating list appearance:", error);
+        }
+    };
+
+    const handleRenameList = async (listId: number, name: string) => {
+        if (!name.trim()) return;
+        setLists((prev) => prev.map((l) => (l.id === listId ? { ...l, name: name.trim() } : l)));
+        try {
+            await fetch("/api/rolodex/lists", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ id: listId, name: name.trim() }),
+            });
+        } catch (error) {
+            console.error("Error renaming list:", error);
+        }
+        setRenamingListId(null);
+    };
+
     const handleToggleListPin = async (listId: number, pinned: boolean) => {
         // Optimistic update
         setLists((prev) =>
@@ -2687,10 +2730,14 @@ export default function RolodexPage() {
                                         }}
                                         className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
                                     >
-                                        <div
-                                            className="w-3 h-3 rounded-full flex-shrink-0"
-                                            style={{ backgroundColor: list.color }}
-                                        />
+                                        {list.emoji ? (
+                                            <span className="text-sm flex-shrink-0">{list.emoji}</span>
+                                        ) : (
+                                            <div
+                                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                                style={{ backgroundColor: list.color }}
+                                            />
+                                        )}
                                         <span className="flex-1 truncate">{list.name}</span>
                                         {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
                                         {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
@@ -2757,6 +2804,65 @@ export default function RolodexPage() {
                 </div>
             )}
 
+
+            {/* List Context Menu */}
+            {listContextMenu && (() => {
+                const list = lists.find(l => l.id === listContextMenu.listId);
+                if (!list) return null;
+                return (
+                    <>
+                        <div className="fixed inset-0 z-40" onClick={() => setListContextMenu(null)} />
+                        <div
+                            className="fixed z-50 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px]"
+                            style={{ left: listContextMenu.x, top: listContextMenu.y }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={() => {
+                                    setRenamingListId(list.id);
+                                    setRenameListValue(list.name);
+                                    setListContextMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            >
+                                <Pencil className="h-4 w-4" />
+                                Rename
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setListPickerOpen(list.id);
+                                    setListContextMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            >
+                                <Palette className="h-4 w-4" />
+                                Change icon
+                            </button>
+                            <button
+                                onClick={() => {
+                                    handleToggleListPin(list.id, !list.pinned);
+                                    setListContextMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            >
+                                {list.pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                                {list.pinned ? "Unpin" : "Pin to sidebar"}
+                            </button>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+                            <button
+                                onClick={() => {
+                                    handleDeleteList(list.id);
+                                    setListContextMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete list
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
 
             {/* Delete Confirmation Modal */}
             {deleteConfirm && (
@@ -3771,17 +3877,14 @@ export default function RolodexPage() {
                                             <div key={list.id} className="inline-flex items-center group/list">
                                                 <span
                                                     className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-l-full"
-                                                    style={{ backgroundColor: `${list.color}20`, color: list.color }}
+                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
                                                 >
-                                                    {list.name}
+                                                    {list.emoji ? `${list.emoji} ` : ""}{list.name}
                                                 </span>
                                                 <button
                                                     onClick={() => handleRemoveFromList(list.id, contact.id)}
                                                     className="px-1.5 py-1 text-xs rounded-r-full transition-colors opacity-0 group-hover/list:opacity-100"
-                                                    style={{
-                                                        backgroundColor: `${list.color}20`,
-                                                        color: list.color,
-                                                    }}
+                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
                                                     title={`Remove from ${list.name}`}
                                                 >
                                                     <X className="h-3 w-3 hover:text-red-500" />
@@ -3812,10 +3915,14 @@ export default function RolodexPage() {
                                                                 }}
                                                                 className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                                                             >
-                                                                <div
-                                                                    className="w-3 h-3 rounded-full flex-shrink-0"
-                                                                    style={{ backgroundColor: list.color }}
-                                                                />
+                                                                {list.emoji ? (
+                                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                                                        style={{ backgroundColor: list.color }}
+                                                                    />
+                                                                )}
                                                                 <span className="truncate">{list.name}</span>
                                                             </button>
                                                         ))}
@@ -4610,27 +4717,78 @@ export default function RolodexPage() {
 
                                 {/* Pinned lists */}
                                 {lists.filter(l => l.pinned).map((list) => (
-                                    <button
-                                        key={list.id}
-                                        onClick={() => setActiveList(activeList === list.id ? "curated" : list.id)}
-                                        onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            if (confirm(`Delete list "${list.name}"?`)) {
-                                                handleDeleteList(list.id);
-                                            }
-                                        }}
-                                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === list.id
-                                            ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                            : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                            }`}
-                                    >
-                                        <div
-                                            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                            style={{ backgroundColor: list.color }}
-                                        />
-                                        <span className="flex-1 text-left truncate">{list.name}</span>
-                                        <span className="text-xs opacity-60">{list.member_count}</span>
-                                    </button>
+                                    <div key={list.id} className="relative">
+                                        <button
+                                            onClick={() => setActiveList(activeList === list.id ? "curated" : list.id)}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                setListContextMenu({ x: e.clientX, y: e.clientY, listId: list.id });
+                                            }}
+                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === list.id
+                                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                }`}
+                                        >
+                                            {list.emoji ? (
+                                                <span className="text-sm leading-none flex-shrink-0">{list.emoji}</span>
+                                            ) : (
+                                                <div
+                                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                    style={{ backgroundColor: list.color }}
+                                                />
+                                            )}
+                                            {renamingListId === list.id ? (
+                                                <input
+                                                    autoFocus
+                                                    value={renameListValue}
+                                                    onChange={(e) => setRenameListValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === "Enter") handleRenameList(list.id, renameListValue);
+                                                        if (e.key === "Escape") setRenamingListId(null);
+                                                    }}
+                                                    onBlur={() => handleRenameList(list.id, renameListValue)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="flex-1 text-left text-sm bg-transparent border-b border-gray-300 dark:border-gray-600 outline-none"
+                                                />
+                                            ) : (
+                                                <span className="flex-1 text-left truncate">{list.name}</span>
+                                            )}
+                                            <span className="text-xs opacity-60">{list.member_count}</span>
+                                        </button>
+
+                                        {/* Emoji picker popover */}
+                                        {listPickerOpen === list.id && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setListPickerOpen(null)} />
+                                                <div className="absolute left-0 top-full mt-1 z-50">
+                                                    <Picker
+                                                        data={data}
+                                                        onEmojiSelect={(emoji: { native: string }) => {
+                                                            handleUpdateListAppearance(list.id, { emoji: emoji.native });
+                                                            setListPickerOpen(null);
+                                                        }}
+                                                        theme="light"
+                                                        previewPosition="none"
+                                                        skinTonePosition="none"
+                                                        perLine={8}
+                                                    />
+                                                    {list.emoji && (
+                                                        <div className="bg-white dark:bg-gray-800 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-xl px-3 py-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    handleUpdateListAppearance(list.id, { emoji: "" });
+                                                                    setListPickerOpen(null);
+                                                                }}
+                                                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                            >
+                                                                Remove emoji
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 ))}
 
                                 {/* Divider before actions */}
@@ -4781,10 +4939,14 @@ export default function RolodexPage() {
                                                                 }}
                                                                 className="flex items-center gap-2 flex-1 min-w-0"
                                                             >
-                                                                <div
-                                                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                                                    style={{ backgroundColor: list.color }}
-                                                                />
+                                                                {list.emoji ? (
+                                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                                        style={{ backgroundColor: list.color }}
+                                                                    />
+                                                                )}
                                                                 <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
                                                                     {list.name}
                                                                 </span>
@@ -5266,12 +5428,9 @@ export default function RolodexPage() {
                                                                 <span
                                                                     key={list.id}
                                                                     className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded"
-                                                                    style={{
-                                                                        backgroundColor: `${list.color}20`,
-                                                                        color: list.color,
-                                                                    }}
+                                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
                                                                 >
-                                                                    {list.name}
+                                                                    {list.emoji ? `${list.emoji} ` : ""}{list.name}
                                                                 </span>
                                                             ))}
                                                         {lists.filter((l) => l.member_ids.includes(contact.id)).length > 2 && (

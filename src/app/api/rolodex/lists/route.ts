@@ -18,6 +18,7 @@ export async function GET() {
                 id,
                 name,
                 color,
+                emoji,
                 pinned,
                 created_at,
                 rolodex_list_members (
@@ -37,6 +38,7 @@ export async function GET() {
             id: list.id,
             name: list.name,
             color: list.color,
+            emoji: list.emoji || null,
             pinned: list.pinned ?? true,
             created_at: list.created_at,
             member_count: list.rolodex_list_members?.length || 0,
@@ -109,7 +111,7 @@ export async function PATCH(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { id, pinned, name, color } = body;
+        const { id, pinned, name, color, emoji } = body;
 
         if (!id) {
             return NextResponse.json({ error: "List ID is required" }, { status: 400 });
@@ -119,6 +121,7 @@ export async function PATCH(req: NextRequest) {
         if (typeof pinned === "boolean") updates.pinned = pinned;
         if (name?.trim()) updates.name = name.trim();
         if (color) updates.color = color;
+        if (typeof emoji === "string") updates.emoji = emoji || null;
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: "No updates provided" }, { status: 400 });
