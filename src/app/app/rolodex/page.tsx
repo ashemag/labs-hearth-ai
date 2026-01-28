@@ -3612,17 +3612,6 @@ export default function RolodexPage() {
                                     >
                                         <PanelRightClose className="h-4 w-4" />
                                     </button>
-                                    <button
-                                        onClick={() => setProfilePanelExpanded(!profilePanelExpanded)}
-                                        className="p-2 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
-                                        aria-label={profilePanelExpanded ? "Collapse panel" : "Expand panel"}
-                                    >
-                                        {profilePanelExpanded ? (
-                                            <Minimize2 className="h-4 w-4" />
-                                        ) : (
-                                            <Maximize2 className="h-4 w-4" />
-                                        )}
-                                    </button>
                                 </div>
 
                                 {/* More menu - top right */}
@@ -5449,49 +5438,19 @@ export default function RolodexPage() {
                                                             )}
                                                         </div>
                                                         {/* Name and handle */}
-                                                        {xp ? (
-                                                            <a
-                                                                href={`https://x.com/${xp.username}`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="min-w-0 overflow-hidden hover:opacity-80 transition-opacity"
+                                                        <div className="min-w-0 overflow-hidden">
+                                                            <p
+                                                                className="font-medium text-gray-900 dark:text-white truncate text-sm"
+                                                                title={contact.name}
                                                             >
-                                                                <p
-                                                                    className="font-medium text-gray-900 dark:text-white truncate text-sm"
-                                                                    title={contact.name}
-                                                                >
-                                                                    {contact.name}
-                                                                </p>
+                                                                {contact.name}
+                                                            </p>
+                                                            {xp && (
                                                                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                                                     @{xp.username}
                                                                 </p>
-                                                            </a>
-                                                        ) : li ? (
-                                                            <a
-                                                                href={li.linkedin_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="min-w-0 overflow-hidden hover:opacity-80 transition-opacity"
-                                                            >
-                                                                <p
-                                                                    className="font-medium text-gray-900 dark:text-white truncate text-sm"
-                                                                    title={contact.name}
-                                                                >
-                                                                    {contact.name}
-                                                                </p>
-                                                            </a>
-                                                        ) : (
-                                                            <div className="min-w-0 overflow-hidden">
-                                                                <p
-                                                                    className="font-medium text-gray-900 dark:text-white truncate text-sm"
-                                                                    title={contact.name}
-                                                                >
-                                                                    {contact.name}
-                                                                </p>
-                                                            </div>
-                                                        )}
+                                                            )}
+                                                        </div>
                                                     </div>
 
                                                     {/* Bio/Headline Cell */}
