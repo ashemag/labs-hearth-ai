@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('hearthAPI', {
     getLastSync: () => ipcRenderer.invoke('get-last-sync'),
     syncToHearth: (data) => ipcRenderer.invoke('sync-to-hearth', data),
     backfillContactInfo: () => ipcRenderer.invoke('backfill-contact-info'),
+    uploadHandleImages: () => ipcRenderer.invoke('upload-handle-images'),
+    getContactImages: (handleIds) => ipcRenderer.invoke('get-contact-images', handleIds),
 
     // Utilities
     openExternal: (url) => ipcRenderer.invoke('open-external', url)

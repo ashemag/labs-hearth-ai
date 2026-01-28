@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://labs.hearth.ai https://pqlkkgtbvaegqqqnozvl.supabase.co">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https://labs.hearth.ai http://localhost:3000 https://pqlkkgtbvaegqqqnozvl.supabase.co">
     <title>Hearth iMessage Sync</title>
     <style>
         * {
@@ -488,6 +488,14 @@
             <div id="sync-message" class="message hidden"></div>
         </div>
 
+        <!-- Upload Contact Images (one-time backfill) -->
+        <div id="upload-images-section" class="section hidden">
+            <div class="section-title">Upload Contact Images</div>
+            <p style="font-size: 13px; color: #71717a; margin-bottom: 12px;">Upload Apple contact photos for all your iMessage handles to Hearth.</p>
+            <button id="upload-images-btn" class="btn btn-secondary btn-small">Upload Images</button>
+            <div id="upload-images-message" class="message hidden" style="margin-top: 8px;"></div>
+        </div>
+
         <div class="footer">
             Messages are synced securely to your Hearth account.<br>
             Only messages from contacts with phone/email in your Rolodex will be matched.
@@ -530,8 +538,9 @@
             $('user-email').textContent = data.user.email;
             $('menu-email').textContent = data.user.email;
             $('menu-btn').classList.add('visible');
+            $('upload-images-section').classList.remove('hidden');
             updateSyncButton();
-            
+
             // Do initial sync immediately after sign-in
             if (hasAccess) {
                 await loadMessageStats();
@@ -580,11 +589,13 @@
                 $('user-email').textContent = result.user.email;
                 $('menu-email').textContent = result.user.email;
                 $('menu-btn').classList.add('visible');
+                $('upload-images-section').classList.remove('hidden');
             } else {
                 $('auth-form').classList.remove('hidden');
                 $('auth-waiting').classList.add('hidden');
                 $('auth-signed-in').classList.add('hidden');
                 $('menu-btn').classList.remove('visible');
+                $('upload-images-section').classList.add('hidden');
             }
 
             updateSyncButton();
@@ -854,6 +865,26 @@
 
             $('sync-btn').disabled = false;
             $('sync-btn').textContent = 'Sync Now';
+        });
+
+        // Upload contact images button
+        $('upload-images-btn').addEventListener('click', async () => {
+            $('upload-images-btn').disabled = true;
+            $('upload-images-btn').textContent = 'Uploading...';
+            $('upload-images-message').classList.add('hidden');
+
+            const result = await window.hearthAPI.uploadHandleImages();
+
+            if (result.success) {
+                $('upload-images-message').className = 'message success';
+                $('upload-images-message').textContent = `Uploaded ${result.uploaded} contact images`;
+            } else {
+                $('upload-images-message').className = 'message error';
+                $('upload-images-message').textContent = result.error || 'Upload failed';
+            }
+            $('upload-images-message').classList.remove('hidden');
+            $('upload-images-btn').disabled = false;
+            $('upload-images-btn').textContent = 'Upload Images';
         });
 
         // Initialize on load

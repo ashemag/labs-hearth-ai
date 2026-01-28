@@ -125,6 +125,147 @@ function getContactNamesFromAddressBook() {
     return handleToName;
 }
 
+// Build a handle (phone/email) to contact image (base64) map from macOS Contacts
+function getContactImagesFromAddressBook() {
+    const handleToImage = new Map(); // normalized handle -> { base64, mimeType }
+
+    try {
+        const dbPath = findAddressBookDB();
+        if (!dbPath) return handleToImage;
+
+        const dbDir = path.dirname(dbPath);
+        const externalDataDir = path.join(dbDir, '.AddressBook-v22_SUPPORT', '_EXTERNAL_DATA');
+
+        const buffer = fs.readFileSync(dbPath);
+        const db = new SQL.Database(buffer);
+
+        // Build Z_PK -> image data map from ZTHUMBNAILIMAGEDATA blobs
+        const zpkToImage = new Map();
+        const imgResult = db.exec(`
+            SELECT Z_PK, ZTHUMBNAILIMAGEDATA
+            FROM ZABCDRECORD
+            WHERE ZTHUMBNAILIMAGEDATA IS NOT NULL AND length(ZTHUMBNAILIMAGEDATA) > 0
+        `);
+
+        if (imgResult.length && imgResult[0].values.length) {
+            for (const row of imgResult[0].values) {
+                const zpk = row[0];
+                const blob = row[1];
+                if (!blob) continue;
+
+                const imgBuf = Buffer.from(blob);
+                const imageData = extractContactImageFromBlob(imgBuf, externalDataDir);
+                if (imageData) {
+                    zpkToImage.set(zpk, imageData);
+                }
+            }
+        }
+
+        debugLog(`Found ${zpkToImage.size} contact images in AddressBook DB`);
+
+        // Map phone handles to images
+        const phoneQuery = `
+            SELECT r.Z_PK, p.ZFULLNUMBER
+            FROM ZABCDRECORD r
+            JOIN ZABCDPHONENUMBER p ON r.Z_PK = p.ZOWNER
+            WHERE p.ZFULLNUMBER IS NOT NULL
+        `;
+        const phoneResult = db.exec(phoneQuery);
+        if (phoneResult.length && phoneResult[0].values.length) {
+            for (const row of phoneResult[0].values) {
+                const zpk = row[0];
+                const phone = row[1];
+                const normalizedPhone = normalizePhoneForLookup(phone);
+                if (normalizedPhone && zpkToImage.has(zpk)) {
+                    handleToImage.set(normalizedPhone, zpkToImage.get(zpk));
+                }
+            }
+        }
+
+        // Map email handles to images
+        const emailQuery = `
+            SELECT r.Z_PK, e.ZADDRESS
+            FROM ZABCDRECORD r
+            JOIN ZABCDEMAILADDRESS e ON r.Z_PK = e.ZOWNER
+            WHERE e.ZADDRESS IS NOT NULL
+        `;
+        const emailResult = db.exec(emailQuery);
+        if (emailResult.length && emailResult[0].values.length) {
+            for (const row of emailResult[0].values) {
+                const zpk = row[0];
+                const email = row[1];
+                if (email && zpkToImage.has(zpk)) {
+                    const normalizedEmail = email.toLowerCase();
+                    if (!handleToImage.has(normalizedEmail)) {
+                        handleToImage.set(normalizedEmail, zpkToImage.get(zpk));
+                    }
+                }
+            }
+        }
+
+        db.close();
+        debugLog(`Loaded ${handleToImage.size} contact images from AddressBook`);
+    } catch (error) {
+        console.error('Error reading AddressBook images:', error);
+    }
+
+    return handleToImage;
+}
+
+// Extract image data from a ZTHUMBNAILIMAGEDATA blob
+// Inline images: start with 0x01 header byte followed by JPEG/PNG data
+// External refs: 38 bytes containing 0x02 + UUID string + 0x00 -> file in _EXTERNAL_DATA/
+function extractContactImageFromBlob(imgBuf, externalDataDir) {
+    try {
+        if (imgBuf.length <= 1) return null;
+
+        const firstByte = imgBuf[0];
+
+        if (firstByte === 0x01 && imgBuf.length > 100) {
+            // Inline image: skip the 0x01 header byte
+            const imageData = imgBuf.slice(1);
+            const mimeType = detectMimeType(imageData);
+            return { base64: imageData.toString('base64'), mimeType };
+        }
+
+        if (firstByte === 0x02 && imgBuf.length === 38) {
+            // External reference: extract UUID from bytes 1..37 (null-terminated ASCII)
+            const uuidStr = imgBuf.slice(1, 37).toString('ascii');
+            if (uuidStr && fs.existsSync(externalDataDir)) {
+                const extPath = path.join(externalDataDir, uuidStr);
+                if (fs.existsSync(extPath)) {
+                    const fileData = fs.readFileSync(extPath);
+                    if (fileData.length > 0) {
+                        const mimeType = detectMimeType(fileData);
+                        return { base64: fileData.toString('base64'), mimeType };
+                    }
+                }
+            }
+        }
+
+        // Try treating the whole blob as image data (fallback)
+        if (imgBuf.length > 100) {
+            const mimeType = detectMimeType(imgBuf);
+            if (mimeType) {
+                return { base64: imgBuf.toString('base64'), mimeType };
+            }
+        }
+    } catch (error) {
+        // Silently skip unreadable images
+    }
+    return null;
+}
+
+// Detect MIME type from magic bytes
+function detectMimeType(buf) {
+    if (buf[0] === 0xFF && buf[1] === 0xD8) return 'image/jpeg';
+    if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
+    if (buf[0] === 0x49 && buf[1] === 0x49) return 'image/tiff';
+    if (buf[0] === 0x4D && buf[1] === 0x4D) return 'image/tiff';
+    // Default to JPEG for Apple contact images
+    return 'image/jpeg';
+}
+
 // Normalize phone number for matching
 function normalizePhoneForLookup(phone) {
     if (!phone) return null;
@@ -853,7 +994,42 @@ ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
             throw new Error(error.error || `Sync failed: ${response.status}`);
         }
 
-        return await response.json();
+        const result = await response.json();
+
+        // After sync, upload Apple contact images for all handles in the background
+        try {
+            const handleIds = messages.map(m => m.handle_id).filter(Boolean);
+            if (handleIds.length > 0) {
+                const imageMap = getContactImagesFromAddressBook();
+                const imagesToUpload = {};
+                for (const handleId of handleIds) {
+                    const isEmail = handleId.includes('@');
+                    const lookupKey = isEmail ? handleId.toLowerCase() : normalizePhoneForLookup(handleId);
+                    if (lookupKey && imageMap.has(lookupKey)) {
+                        const img = imageMap.get(lookupKey);
+                        imagesToUpload[handleId] = `data:${img.mimeType};base64,${img.base64}`;
+                    }
+                }
+
+                const imageCount = Object.keys(imagesToUpload).length;
+                if (imageCount > 0) {
+                    console.log(`[Sync] Uploading ${imageCount} Apple contact images...`);
+                    const imgRes = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-handle-images`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ images: imagesToUpload })
+                    });
+                    if (imgRes.ok) {
+                        const imgResult = await imgRes.json();
+                        console.log(`[Sync] Uploaded ${imgResult.uploaded} handle images`);
+                    }
+                }
+            }
+        } catch (imgError) {
+            console.error('[Sync] Error uploading handle images (non-fatal):', imgError);
+        }
+
+        return result;
     } catch (error) {
         console.error('Error syncing to Hearth:', error);
         return { success: false, error: error.message };
@@ -880,6 +1056,92 @@ ipcMain.handle('backfill-contact-info', async () => {
     } catch (error) {
         console.error('Error backfilling contact info:', error);
         return { success: false, error: error.message };
+    }
+});
+
+// Upload Apple contact images for all known handles to the server (backfill)
+ipcMain.handle('upload-handle-images', async () => {
+    if (!authData.accessToken) {
+        return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+        // Get all handles from iMessage database
+        const db = openDatabase();
+        const result = db.exec('SELECT DISTINCT id FROM handle');
+        db.close();
+
+        if (!result.length || !result[0].values.length) {
+            return { success: true, uploaded: 0, message: 'No handles found' };
+        }
+
+        const allHandles = result[0].values.map(row => row[0]).filter(Boolean);
+        console.log(`[Upload Images] Found ${allHandles.length} handles in iMessage DB`);
+
+        const imageMap = getContactImagesFromAddressBook();
+        const imagesToUpload = {};
+
+        for (const handleId of allHandles) {
+            const isEmail = handleId.includes('@');
+            const lookupKey = isEmail ? handleId.toLowerCase() : normalizePhoneForLookup(handleId);
+            if (lookupKey && imageMap.has(lookupKey)) {
+                const img = imageMap.get(lookupKey);
+                imagesToUpload[handleId] = `data:${img.mimeType};base64,${img.base64}`;
+            }
+        }
+
+        const imageCount = Object.keys(imagesToUpload).length;
+        if (imageCount === 0) {
+            return { success: true, uploaded: 0, message: 'No Apple contact images found for any handles' };
+        }
+
+        console.log(`[Upload Images] Uploading ${imageCount} Apple contact images...`);
+        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-handle-images`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ images: imagesToUpload })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Upload failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`[Upload Images] Uploaded ${data.uploaded} handle images`);
+        return { success: true, uploaded: data.uploaded };
+    } catch (error) {
+        console.error('[Upload Images] Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Get contact images from macOS AddressBook for unmatched handles
+ipcMain.handle('get-contact-images', async (event, handleIds) => {
+    try {
+        const imageMap = getContactImagesFromAddressBook();
+        const result = {};
+
+        for (const handleId of handleIds) {
+            // Normalize the handle for lookup
+            const isEmail = handleId.includes('@');
+            let lookupKey;
+            if (isEmail) {
+                lookupKey = handleId.toLowerCase();
+            } else {
+                lookupKey = normalizePhoneForLookup(handleId);
+            }
+
+            if (lookupKey && imageMap.has(lookupKey)) {
+                const img = imageMap.get(lookupKey);
+                result[handleId] = `data:${img.mimeType};base64,${img.base64}`;
+            }
+        }
+
+        return { success: true, images: result };
+    } catch (error) {
+        console.error('Error getting contact images:', error);
+        return { success: false, error: error.message, images: {} };
     }
 });
 

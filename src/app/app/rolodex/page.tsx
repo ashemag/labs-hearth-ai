@@ -51,6 +51,7 @@ import {
     Linkedin,
     Phone,
     Mail,
+    Settings,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
@@ -4738,6 +4739,18 @@ export default function RolodexPage() {
                                             <Camera className="h-4 w-4" />
                                             {uploadingUserAvatar ? "Uploading..." : "Change avatar"}
                                         </button>
+                                    </div>
+
+                                    {/* Settings */}
+                                    <div className="px-2 py-1">
+                                        <Link
+                                            href="/app/settings"
+                                            onClick={() => setShowUserMenu(false)}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                        >
+                                            <Settings className="h-4 w-4" />
+                                            Settings
+                                        </Link>
                                     </div>
 
                                     {/* Sign Out */}
