@@ -130,10 +130,12 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
     // Deduplicate per contact per day (1 touchpoint per contact per day, regardless of notes + messages)
     const contributionMap = useMemo(() => {
         const byDate: Record<string, Set<number>> = {};
-        
+
         touchpoints.forEach((tp) => {
-            if (!tp.people_id) return; // Skip if no contact linked
-            
+            // people_id can be positive (linked contact) or negative (unlinked, hash-based)
+            // Skip only if people_id is null/undefined (shouldn't happen after API fix)
+            if (tp.people_id === null || tp.people_id === undefined) return;
+
             // Convert UTC timestamp to local date string
             const localDate = toLocalDateString(new Date(tp.timestamp));
             if (!byDate[localDate]) {
@@ -154,14 +156,14 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
     // Get breakdown for selected date
     const selectedDateBreakdown = useMemo(() => {
         if (!selectedDate) return null;
-        
+
         const breakdown = new Map<number, DayBreakdown>();
-        
+
         touchpoints.forEach((tp) => {
-            if (!tp.people_id) return;
+            if (tp.people_id === null || tp.people_id === undefined) return;
             const localDate = toLocalDateString(new Date(tp.timestamp));
             if (localDate !== selectedDate) return;
-            
+
             if (!breakdown.has(tp.people_id)) {
                 breakdown.set(tp.people_id, {
                     contact_name: tp.contact_name,
@@ -171,8 +173,8 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                 breakdown.get(tp.people_id)!.types.add(tp.type);
             }
         });
-        
-        return Array.from(breakdown.values()).sort((a, b) => 
+
+        return Array.from(breakdown.values()).sort((a, b) =>
             a.contact_name.localeCompare(b.contact_name)
         );
     }, [selectedDate, touchpoints]);

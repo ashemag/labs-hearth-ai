@@ -32,14 +32,15 @@ export async function GET() {
             return NextResponse.json({ error: notesError.message }, { status: 500 });
         }
 
-        // Fetch iMessages with contact names (only those linked to contacts)
+        // Fetch iMessages - we only need people_id and message_date for contributions
+        // Group by date happens in frontend, so we don't need all fields
+        // Use a high limit to get all messages (Supabase default is 1000)
         const { data: messages, error: messagesError } = await supabase
             .from("people_imessages")
-            .select("people_id, message_date, people(name)")
+            .select("people_id, message_date, contact_name, handle_id, people(name)")
             .eq("user_id", user.id)
-            .not("people_id", "is", null)
             .gte("message_date", startDate.toISOString())
-            .order("message_date", { ascending: true });
+            .limit(50000);
 
         if (messagesError) {
             console.error("Error fetching iMessages:", messagesError);
@@ -47,6 +48,7 @@ export async function GET() {
         }
 
         // Combine and return - frontend will dedupe per contact per day
+        // Only include messages that are linked to a contact (have people_id)
         const touchpoints = [
             ...(notes?.map(n => ({
                 people_id: n.people_id,
@@ -54,9 +56,9 @@ export async function GET() {
                 timestamp: n.created_at,
                 type: 'note' as const,
             })) || []),
-            ...(messages?.map(m => ({
+            ...(messages?.filter(m => m.people_id !== null).map(m => ({
                 people_id: m.people_id,
-                contact_name: (m.people as { name: string } | null)?.name || 'Unknown',
+                contact_name: (m.people as { name: string } | null)?.name || m.contact_name || 'Unknown',
                 timestamp: m.message_date,
                 type: 'imessage' as const,
             })) || []),

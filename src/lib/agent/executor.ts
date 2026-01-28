@@ -169,6 +169,7 @@ async function getContact(ctx: ToolContext, input: Record<string, unknown>): Pro
     const { data: notes } = await ctx.supabase
         .from("people_notes")
         .select("note, source_type, created_at")
+        .eq("user_id", ctx.userId)
         .eq("people_id", contact.id)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -177,6 +178,7 @@ async function getContact(ctx: ToolContext, input: Record<string, unknown>): Pro
     const { data: listMemberships } = await ctx.supabase
         .from("rolodex_list_members")
         .select("list:rolodex_lists (name, emoji)")
+        .eq("user_id", ctx.userId)
         .eq("people_id", contact.id);
 
     return JSON.stringify({
@@ -291,6 +293,7 @@ async function getListMembers(ctx: ToolContext, input: Record<string, unknown>):
     const { data: members } = await ctx.supabase
         .from("rolodex_list_members")
         .select("people:people_id (id, name, custom_bio)")
+        .eq("user_id", ctx.userId)
         .eq("list_id", list.id);
 
     return JSON.stringify({
@@ -396,19 +399,23 @@ async function getContactStats(ctx: ToolContext, input: Record<string, unknown>)
         ctx.supabase
             .from("people_imessages")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", ctx.userId)
             .eq("people_id", contact.id),
         ctx.supabase
             .from("people_notes")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", ctx.userId)
             .eq("people_id", contact.id),
         ctx.supabase
             .from("rolodex_todos")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", ctx.userId)
             .eq("people_id", contact.id)
             .eq("completed", false),
         ctx.supabase
             .from("people_compliments")
             .select("id", { count: "exact", head: true })
+            .eq("user_id", ctx.userId)
             .eq("people_id", contact.id)
     ]);
 
@@ -416,6 +423,7 @@ async function getContactStats(ctx: ToolContext, input: Record<string, unknown>)
     const { data: lastMessage } = await ctx.supabase
         .from("people_imessages")
         .select("message_date")
+        .eq("user_id", ctx.userId)
         .eq("people_id", contact.id)
         .order("message_date", { ascending: false })
         .limit(1);
