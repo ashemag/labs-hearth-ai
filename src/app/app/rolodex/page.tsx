@@ -56,6 +56,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
+import ChatWidget from "@/components/ChatWidget";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -5589,6 +5590,9 @@ export default function RolodexPage() {
                     e.target.value = "";
                 }}
             />
+
+            {/* Chat Agent Widget */}
+            <ChatWidget sidePanelOpen={selectedContactId !== null} />
         </div>
     );
 }

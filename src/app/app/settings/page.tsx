@@ -15,8 +15,15 @@ import {
     Mail,
     ChevronDown,
     UserPlus,
+    Bot,
+    Eye,
+    EyeOff,
+    Trash2,
+    Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+
+type SettingsTab = "ai" | "imessage";
 
 
 interface UnmatchedHandle {
@@ -53,6 +60,19 @@ export default function SettingsPage() {
     const [newContactName, setNewContactName] = useState("");
     const [createLoading, setCreateLoading] = useState(false);
 
+    // AI Provider settings state
+    const [aiProvider, setAiProvider] = useState<string>("anthropic");
+    const [aiApiKey, setAiApiKey] = useState("");
+    const [aiMaskedKey, setAiMaskedKey] = useState<string | null>(null);
+    const [aiHasKey, setAiHasKey] = useState(false);
+    const [aiShowKey, setAiShowKey] = useState(false);
+    const [aiSaving, setAiSaving] = useState(false);
+    const [aiSaved, setAiSaved] = useState(false);
+    const [aiLoadingSettings, setAiLoadingSettings] = useState(true);
+
+    // Active settings tab
+    const [activeTab, setActiveTab] = useState<SettingsTab>("ai");
+
     const dropdownRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const createInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +100,62 @@ export default function SettingsPage() {
         }
     }, []);
 
+    const fetchAiSettings = useCallback(async () => {
+        try {
+            const res = await fetch("/api/user/ai-settings", { credentials: "include" });
+            const data = await res.json();
+            if (data.provider) setAiProvider(data.provider);
+            if (data.hasApiKey) setAiHasKey(true);
+            if (data.maskedKey) setAiMaskedKey(data.maskedKey);
+        } catch (err) {
+            console.error("Failed to fetch AI settings:", err);
+        } finally {
+            setAiLoadingSettings(false);
+        }
+    }, []);
+
+    const handleSaveAiSettings = async () => {
+        setAiSaving(true);
+        setAiSaved(false);
+        try {
+            const body: Record<string, string> = { provider: aiProvider };
+            if (aiApiKey.trim()) body.apiKey = aiApiKey.trim();
+            const res = await fetch("/api/user/ai-settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+            });
+            if (res.ok) {
+                setAiSaved(true);
+                setAiHasKey(true);
+                if (aiApiKey.trim()) {
+                    setAiMaskedKey("••••••••" + aiApiKey.trim().slice(-4));
+                    setAiApiKey("");
+                }
+                setTimeout(() => setAiSaved(false), 2000);
+            }
+        } catch (err) {
+            console.error("Failed to save AI settings:", err);
+        } finally {
+            setAiSaving(false);
+        }
+    };
+
+    const handleDeleteAiSettings = async () => {
+        try {
+            const res = await fetch("/api/user/ai-settings", { method: "DELETE", credentials: "include" });
+            if (res.ok) {
+                setAiProvider("anthropic");
+                setAiApiKey("");
+                setAiMaskedKey(null);
+                setAiHasKey(false);
+            }
+        } catch (err) {
+            console.error("Failed to delete AI settings:", err);
+        }
+    };
+
     useEffect(() => {
         const supabase = createClient();
         supabase.auth.getUser().then(({ data }) => {
@@ -91,7 +167,8 @@ export default function SettingsPage() {
             }
         });
         fetchData();
-    }, [fetchData]);
+        fetchAiSettings();
+    }, [fetchData, fetchAiSettings]);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -221,48 +298,160 @@ export default function SettingsPage() {
                 </div>
             </header>
 
-            <div className="max-w-2xl mx-auto px-4 sm:px-8 py-10">
-                <div className="mb-10">
-                    <h1 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
-                        Settings
-                    </h1>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Manage your account and iMessage connections.
-                    </p>
-                </div>
+            <div className="flex min-h-[calc(100vh-57px)]">
+                {/* Left Sidebar - Full height, fixed to left */}
+                <nav className="w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 px-4 py-6 space-y-1">
+                    <button
+                        onClick={() => setActiveTab("ai")}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeTab === "ai"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <Sparkles className="h-4 w-4" />
+                        AI Agent
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("imessage")}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeTab === "imessage"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <MessageSquare className="h-4 w-4" />
+                        iMessage
+                    </button>
+                </nav>
 
-                {/* iMessage Matching Section */}
-                <section>
-                    <div className="flex items-center gap-2.5 mb-6">
-                        <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                            <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-                        </div>
-                        <div>
-                            <h2 className="text-base font-medium text-gray-900 dark:text-white">
-                                iMessage Matching
-                            </h2>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
-                                Link unmatched iMessage contacts to people in your Rolodex
-                            </p>
-                        </div>
-                    </div>
+                {/* Content Area */}
+                <div className="flex-1 min-w-0 px-8 py-6">
+                        {/* AI Provider Settings */}
+                        {activeTab === "ai" && (
+                            <section>
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                                        AI Agent
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Configure your model provider and API key for the chat agent.
+                                    </p>
+                                </div>
 
-                    {loading ? (
-                        <div className="flex items-center justify-center py-16">
-                            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                        </div>
-                    ) : unmatched.length === 0 ? (
-                        <div className="text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                            <Check className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                All iMessage contacts are matched
-                            </p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                New unmatched contacts will appear here after syncing.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-1">
+                                {aiLoadingSettings ? (
+                                    <div className="flex items-center justify-center py-10">
+                                        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-5">
+                                        {/* Provider Select */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                Model Provider
+                                            </label>
+                                            <select
+                                                value={aiProvider}
+                                                onChange={(e) => setAiProvider(e.target.value)}
+                                                className="w-full max-w-sm px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            >
+                                                <option value="anthropic">Anthropic (Claude)</option>
+                                                <option value="openai">OpenAI (GPT)</option>
+                                                <option value="google">Google (Gemini)</option>
+                                                <option value="mistral">Mistral</option>
+                                                <option value="groq">Groq</option>
+                                                <option value="openrouter">OpenRouter</option>
+                                            </select>
+                                        </div>
+
+                                        {/* API Key */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                API Key
+                                            </label>
+                                            {aiHasKey && !aiApiKey && (
+                                                <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+                                                    Current key: <span className="font-mono">{aiMaskedKey}</span>
+                                                </p>
+                                            )}
+                                            <div className="relative max-w-sm">
+                                                <input
+                                                    type={aiShowKey ? "text" : "password"}
+                                                    value={aiApiKey}
+                                                    onChange={(e) => setAiApiKey(e.target.value)}
+                                                    placeholder={aiHasKey ? "Enter new key to replace" : "sk-..."}
+                                                    className="w-full px-3 py-2 pr-10 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 font-mono"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAiShowKey(!aiShowKey)}
+                                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                >
+                                                    {aiShowKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5">
+                                                Your key is encrypted before storage. It is only used server-side for agent chat.
+                                            </p>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-3 pt-2">
+                                            <button
+                                                onClick={handleSaveAiSettings}
+                                                disabled={aiSaving || (!aiApiKey.trim() && !aiHasKey)}
+                                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-700 hover:bg-gray-800 disabled:bg-gray-300 dark:disabled:bg-gray-700 rounded-lg transition-colors"
+                                            >
+                                                {aiSaving ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : aiSaved ? (
+                                                    <Check className="h-3.5 w-3.5" />
+                                                ) : null}
+                                                {aiSaved ? "Saved" : "Save"}
+                                            </button>
+                                            {aiHasKey && (
+                                                <button
+                                                    onClick={handleDeleteAiSettings}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                        )}
+
+                        {/* iMessage Matching Section */}
+                        {activeTab === "imessage" && (
+                            <section>
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                                        iMessage Matching
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Link unmatched iMessage contacts to people in your Rolodex.
+                                    </p>
+                                </div>
+
+                                {loading ? (
+                                    <div className="flex items-center justify-center py-16">
+                                        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                    </div>
+                                ) : unmatched.length === 0 ? (
+                                    <div className="text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                                        <Check className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                            All iMessage contacts are matched
+                                        </p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                            New unmatched contacts will appear here after syncing.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
                             {unmatched.map((item) => {
                                 const isLinked = recentlyLinked.has(item.handle_id);
                                 const isLoading = matchLoading === item.handle_id;
@@ -453,14 +642,16 @@ export default function SettingsPage() {
                                                     </button>
                                                 </>
                                             )}
-                                        </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                     </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </section>
+                                )}
+                            </section>
+                        )}
+                    </div>
+                </div>
             </div>
-        </div>
-    );
-}
+        );
+    }

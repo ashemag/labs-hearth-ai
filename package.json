@@ -10,6 +10,7 @@
     "types:contentful": "export $(cat .env | awk '!/^\\s*#/' | awk '!/^\\s*$/'); cf-content-types-generator --spaceId $CONTENTFUL_SPACE_ID --token $CONTENTFUL_MANAGEMENT_TOKEN -o contentful/ -X"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@contentful/rich-text-react-renderer": "^15.22.11",
     "@contentful/rich-text-types": "^16.8.5",
     "@emoji-mart/data": "^1.2.1",

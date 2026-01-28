@@ -297,6 +297,9 @@ function PaymentHeader() {
                 <p className="mt-1 text-sm text-gray-400">
                     Once, forever
                 </p>
+                <p className="mt-3 text-xs text-gray-400 max-w-[280px] mx-auto">
+                    As the product grows, you&apos;re grandfathered in because of your early bet on us. Welcome to the team.
+                </p>
             </div>
 
             {/* Tagline */}
