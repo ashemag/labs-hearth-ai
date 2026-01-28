@@ -273,6 +273,9 @@ function clearAuthData() {
     }
 }
 
+// Lock to prevent concurrent token refresh attempts (Supabase rotates refresh tokens)
+let refreshPromise = null;
+
 // Refresh the access token using the refresh token
 async function refreshAccessToken() {
     if (!authData.refreshToken) {
@@ -280,35 +283,48 @@ async function refreshAccessToken() {
         return false;
     }
 
-    try {
-        console.log('Refreshing access token...');
-        const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': SUPABASE_ANON_KEY
-            },
-            body: JSON.stringify({
-                refresh_token: authData.refreshToken
-            })
-        });
-
-        if (!response.ok) {
-            console.log('Token refresh failed:', response.status);
-            return false;
-        }
-
-        const data = await response.json();
-        authData.accessToken = data.access_token;
-        authData.refreshToken = data.refresh_token;
-        authData.user = data.user || authData.user;
-        saveAuthData(authData);
-        console.log('Token refreshed successfully for:', authData.user?.email);
-        return true;
-    } catch (error) {
-        console.error('Error refreshing token:', error);
-        return false;
+    // If a refresh is already in progress, wait for it instead of starting another
+    if (refreshPromise) {
+        console.log('Token refresh already in progress, waiting...');
+        return refreshPromise;
     }
+
+    refreshPromise = (async () => {
+        try {
+            console.log('Refreshing access token...');
+            const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY
+                },
+                body: JSON.stringify({
+                    refresh_token: authData.refreshToken
+                })
+            });
+
+            if (!response.ok) {
+                const body = await response.text().catch(() => '');
+                console.log(`Token refresh failed: ${response.status} - ${body}`);
+                return false;
+            }
+
+            const data = await response.json();
+            authData.accessToken = data.access_token;
+            authData.refreshToken = data.refresh_token;
+            authData.user = data.user || authData.user;
+            saveAuthData(authData);
+            console.log('Token refreshed successfully for:', authData.user?.email);
+            return true;
+        } catch (error) {
+            console.error('Error refreshing token:', error);
+            return false;
+        } finally {
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
 }
 
 // Ensure we have a valid token, refreshing if needed
@@ -326,12 +342,42 @@ async function ensureValidToken() {
         if (response.ok) return true;
 
         // Token expired, try refresh
-        console.log('Token expired, attempting refresh...');
+        console.log('Token validation returned', response.status, '- attempting refresh...');
         return await refreshAccessToken();
     } catch (error) {
         console.error('Error validating token:', error);
         return await refreshAccessToken();
     }
+}
+
+// Make an authenticated API call with automatic retry on 401
+async function authenticatedFetch(url, options = {}) {
+    const valid = await ensureValidToken();
+    if (!valid) {
+        throw new Error('Session expired. Please sign in again.');
+    }
+
+    const makeRequest = () => fetch(url, {
+        ...options,
+        headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${authData.accessToken}`,
+        }
+    });
+
+    let response = await makeRequest();
+
+    // If 401, refresh token and retry once
+    if (response.status === 401) {
+        console.log('Got 401 from API, refreshing token and retrying...');
+        const refreshed = await refreshAccessToken();
+        if (!refreshed) {
+            throw new Error('Session expired. Please sign in again.');
+        }
+        response = await makeRequest();
+    }
+
+    return response;
 }
 
 // Token storage (loaded from disk on startup)
@@ -479,13 +525,27 @@ app.whenReady().then(async () => {
     if (authData.accessToken) {
         const valid = await ensureValidToken();
         if (!valid) {
-            console.log('Could not validate or refresh token, clearing auth...');
-            authData = { accessToken: null, refreshToken: null, user: null };
-            clearAuthData();
+            // Don't clear auth immediately - the refresh token may still be valid
+            // for a future attempt. Only clear if we have no refresh token at all.
+            if (!authData.refreshToken) {
+                console.log('No refresh token available, clearing auth...');
+                authData = { accessToken: null, refreshToken: null, user: null };
+                clearAuthData();
+            } else {
+                console.log('Token validation failed but refresh token exists - keeping auth data for later retry');
+            }
         } else {
             console.log('Auth valid for:', authData.user?.email);
         }
     }
+
+    // Proactively refresh the token every 45 minutes (Supabase access tokens expire in 1 hour)
+    setInterval(async () => {
+        if (authData.refreshToken) {
+            console.log('Proactive token refresh...');
+            await refreshAccessToken();
+        }
+    }, 45 * 60 * 1000);
 
     await initSqlJs();
     createWindow();
@@ -757,18 +817,9 @@ ipcMain.handle('get-last-sync', async () => {
         return { success: false, error: 'Not authenticated' };
     }
 
-    // Ensure token is valid before making the call
-    const valid = await ensureValidToken();
-    if (!valid) {
-        return { success: false, error: 'Session expired. Please sign in again.' };
-    }
-
     try {
-        const response = await fetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
+        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${authData.accessToken}`
-            }
         });
 
         if (!response.ok) {
@@ -790,19 +841,10 @@ ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
         return { success: false, error: 'Not authenticated' };
     }
 
-    // Ensure token is valid before making the call
-    const valid = await ensureValidToken();
-    if (!valid) {
-        return { success: false, error: 'Session expired. Please sign in again.' };
-    }
-
     try {
-        const response = await fetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
+        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authData.accessToken}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messages })
         });
 
@@ -814,6 +856,29 @@ ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
         return await response.json();
     } catch (error) {
         console.error('Error syncing to Hearth:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Backfill contact info from already-synced iMessages
+ipcMain.handle('backfill-contact-info', async () => {
+    if (!authData.accessToken) {
+        return { success: false, error: 'Not authenticated' };
+    }
+
+    try {
+        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
+            method: 'PATCH',
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Backfill failed: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error backfilling contact info:', error);
         return { success: false, error: error.message };
     }
 });

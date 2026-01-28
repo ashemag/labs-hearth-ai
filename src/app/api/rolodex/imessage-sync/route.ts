@@ -252,6 +252,32 @@ export async function POST(req: NextRequest) {
                 if (bestMatch) {
                     contactId = bestMatch.id;
                     console.log(`[iMessage Sync] ✓ Matched "${contact_name}" → "${bestMatch.name}" (score: ${bestMatch.score.toFixed(2)})`);
+
+                    // Auto-save the handle's phone/email to contact_info so it's visible and reusable
+                    const alreadyHas = type === 'phone'
+                        ? phoneToContact.has(value)
+                        : emailToContact.has(value);
+                    if (!alreadyHas) {
+                        const { error: infoError } = await supabase
+                            .from("people_contact_info")
+                            .insert({
+                                user_id: user.id,
+                                people_id: bestMatch.id,
+                                type,
+                                value: type === 'phone' ? handle_id.replace(/[^+\d]/g, '') : value,
+                            });
+                        if (!infoError) {
+                            // Update lookup maps so we don't insert again
+                            if (type === 'phone') {
+                                phoneToContact.set(value, bestMatch.id);
+                            } else {
+                                emailToContact.set(value, bestMatch.id);
+                            }
+                            console.log(`[iMessage Sync] Auto-saved ${type} "${value}" for "${bestMatch.name}"`);
+                        } else if (infoError.code !== '23505') {
+                            console.error(`[iMessage Sync] Failed to auto-save contact info:`, infoError);
+                        }
+                    }
                 } else {
                     console.log(`[iMessage Sync] ✗ No match found for "${contact_name}"`);
                 }
@@ -361,6 +387,100 @@ export async function POST(req: NextRequest) {
 
     } catch (error) {
         console.error("[iMessage Sync] Error:", error);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+}
+
+// PATCH - Backfill people_contact_info from already-synced iMessages
+// Re-runs matching for contacts that have iMessages but no contact_info entry
+export async function PATCH(req: NextRequest) {
+    const authHeader = req.headers.get('Authorization');
+    let user;
+    let supabase;
+
+    if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        supabase = createSupabaseClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { global: { headers: { Authorization: `Bearer ${token}` } } }
+        );
+        const { data, error } = await supabase.auth.getUser(token);
+        if (error || !data.user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        user = data.user;
+    } else {
+        supabase = await createClient();
+        const { data: { user: cookieUser }, error: authError } = await supabase.auth.getUser();
+        if (authError || !cookieUser) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        user = cookieUser;
+    }
+
+    try {
+        // Get all distinct handle_ids that are matched to a contact (people_id not null)
+        const { data: matchedHandles, error: handlesError } = await supabase
+            .from("people_imessages")
+            .select("handle_id, people_id")
+            .eq("user_id", user.id)
+            .not("people_id", "is", null)
+            .not("handle_id", "is", null);
+
+        if (handlesError) {
+            return NextResponse.json({ error: handlesError.message }, { status: 500 });
+        }
+
+        // Deduplicate by handle_id
+        const handleMap = new Map<string, number>();
+        for (const row of matchedHandles || []) {
+            if (row.handle_id && row.people_id) {
+                handleMap.set(row.handle_id, row.people_id);
+            }
+        }
+
+        // Get existing contact_info entries
+        const { data: existingInfo } = await supabase
+            .from("people_contact_info")
+            .select("people_id, type, value")
+            .eq("user_id", user.id);
+
+        const existingSet = new Set(
+            (existingInfo || []).map(i => `${i.people_id}:${i.type}:${i.value}`)
+        );
+
+        let backfilled = 0;
+
+        for (const [handleId, peopleId] of handleMap) {
+            const { type, value } = parseHandle(handleId);
+            const storedValue = type === 'phone' ? handleId.replace(/[^+\d]/g, '') : value;
+            const key = `${peopleId}:${type}:${storedValue}`;
+
+            if (!existingSet.has(key)) {
+                const { error: insertError } = await supabase
+                    .from("people_contact_info")
+                    .insert({
+                        user_id: user.id,
+                        people_id: peopleId,
+                        type,
+                        value: storedValue,
+                    });
+
+                if (!insertError) {
+                    backfilled++;
+                    existingSet.add(key);
+                    console.log(`[iMessage Sync] Backfilled ${type} "${storedValue}" for contact ${peopleId}`);
+                } else if (insertError.code !== '23505') {
+                    console.error(`[iMessage Sync] Backfill insert error:`, insertError);
+                }
+            }
+        }
+
+        console.log(`[iMessage Sync] Backfill complete: ${backfilled} contact info entries added`);
+        return NextResponse.json({ success: true, backfilled });
+    } catch (error) {
+        console.error("[iMessage Sync] Backfill error:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
