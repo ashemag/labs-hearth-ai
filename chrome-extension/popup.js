@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Open Rolodex
     openRolodexLink.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: `${API_URL}/app/rolodex` });
+        chrome.tabs.create({ url: 'https://labs.hearth.ai/app/rolodex' });
     });
 
     async function checkCurrentPage() {
