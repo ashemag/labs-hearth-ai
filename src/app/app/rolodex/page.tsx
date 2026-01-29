@@ -272,6 +272,7 @@ export default function RolodexPage() {
     const [addError, setAddError] = useState<string | null>(null);
     const [newNote, setNewNote] = useState("");
     const [addingNoteFor, setAddingNoteFor] = useState<number | null>(null);
+    const [savingNote, setSavingNote] = useState(false);
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
     const [merging, setMerging] = useState(false);
@@ -663,13 +664,40 @@ export default function RolodexPage() {
         }
     }, [showAddModal]);
 
-    // Focus note input when contact panel opens
+    // Focus note input and generate conversation summary when contact panel opens
     useEffect(() => {
         if (selectedContactId) {
             // Delay to ensure the sheet animation completes and content is rendered
             const timer = setTimeout(() => {
                 noteInputRef.current?.focus();
             }, 350); // Sheet animation is 300ms
+
+            // Generate conversation summary in the background (non-blocking)
+            fetch(`/api/rolodex/contacts/${selectedContactId}/generate-summary`, {
+                method: "POST",
+                credentials: "include"
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.generated && data.note) {
+                        // Add the new note to the contact's notes
+                        setContacts(prev => prev.map(c => {
+                            if (c.id === selectedContactId) {
+                                // Check if note already exists (avoid duplicates)
+                                const noteExists = c.notes.some(n => n.id === data.note.id);
+                                if (!noteExists) {
+                                    return {
+                                        ...c,
+                                        notes: [data.note, ...c.notes.filter(n => n.source_type !== "auto_summary")]
+                                    };
+                                }
+                            }
+                            return c;
+                        }));
+                    }
+                })
+                .catch(err => console.error("Failed to generate summary:", err));
+
             return () => clearTimeout(timer);
         }
     }, [selectedContactId]);
@@ -897,8 +925,10 @@ export default function RolodexPage() {
 
     const handleAddNote = async (contactId: number) => {
         if (!newNote.trim()) return;
+        // Prevent double submission
+        if (savingNote) return;
 
-        setAddingNoteFor(contactId);
+        setSavingNote(true);
 
         // Convert @Name to @[Name](id) format using pending mentions
         let noteToSave = newNote.trim();
@@ -934,6 +964,7 @@ export default function RolodexPage() {
             );
             setNewNote("");
             setPendingMentions(new Map());
+            setAddingNoteFor(null);
             // Reset textarea height
             if (noteInputRef.current) {
                 noteInputRef.current.style.height = 'auto';
@@ -943,7 +974,7 @@ export default function RolodexPage() {
         } catch (error) {
             console.error("Error adding note:", error);
         } finally {
-            setAddingNoteFor(null);
+            setSavingNote(false);
         }
     };
 
@@ -4100,9 +4131,10 @@ export default function RolodexPage() {
                                                         </button>
                                                         <button
                                                             onClick={() => handleAddNote(contact.id)}
-                                                            className="px-3 py-1 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium rounded-lg transition-colors"
+                                                            disabled={savingNote}
+                                                            className="px-3 py-1 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
                                                         >
-                                                            Save
+                                                            {savingNote ? "Saving..." : "Save"}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -4184,7 +4216,7 @@ export default function RolodexPage() {
                                                                 const msg = item.data;
                                                                 return (
                                                                     <div key={`msg-${msg.id}`} className="flex gap-3 py-2 pl-0 group/item">
-                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5">
+                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
                                                                             <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${msg.is_from_me ? "bg-blue-400" : "bg-gray-300 dark:bg-gray-600"}`} />
                                                                         </div>
                                                                         <div className="min-w-0 flex-1 py-0.5">
@@ -4201,7 +4233,7 @@ export default function RolodexPage() {
                                                             if (item.type === "touchpoint") {
                                                                 return (
                                                                     <div key={`tp-${item.data.id}`} className="flex gap-3 py-2 pl-0 group/item">
-                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5">
+                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
                                                                             <div className="w-[7px] h-[7px] rounded-full bg-gray-300 dark:bg-gray-600 ring-[3px] ring-white dark:ring-gray-900" />
                                                                         </div>
                                                                         <div className="flex-1 flex items-center gap-2 py-0.5">
@@ -4212,10 +4244,10 @@ export default function RolodexPage() {
                                                                 );
                                                             }
                                                             const note = item.data;
-                                                            const isAutoNote = note.source_type === "website_analysis";
+                                                            const isAutoNote = note.source_type === "website_analysis" || note.source_type === "auto_summary";
                                                             return (
                                                                 <div key={`note-${note.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
-                                                                    <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2">
+                                                                    <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2 relative z-10">
                                                                         <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${isAutoNote ? "bg-violet-400 dark:bg-violet-500" : "bg-gray-300 dark:bg-gray-600"}`} />
                                                                     </div>
                                                                     <div className={`flex-1 min-w-0 relative rounded-lg py-1.5 ${editingNote?.noteId === note.id ? "" : "group"}`}>
@@ -4325,7 +4357,9 @@ export default function RolodexPage() {
                                                                                         </PopoverContent>
                                                                                     </Popover>
                                                                                     {isAutoNote && (
-                                                                                        <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full">auto</span>
+                                                                                        <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full">
+                                                                                            {note.source_type === "auto_summary" ? "ai summary" : "auto"}
+                                                                                        </span>
                                                                                     )}
                                                                                 </div>
                                                                                 {/* Edit/Delete buttons */}
