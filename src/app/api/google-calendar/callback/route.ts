@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encrypt } from "@/lib/crypto";
+import { v4 as uuidv4 } from "uuid";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || "https://labs.hearth.ai/api/google-calendar/callback";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 interface GoogleTokenResponse {
     access_token: string;
@@ -116,6 +118,63 @@ export async function GET(req: NextRequest) {
         if (upsertError) {
             console.error("Failed to save OAuth tokens:", upsertError);
             return NextResponse.redirect(`${settingsUrl}&error=save_failed`);
+        }
+
+        // Get the OAuth record ID for setting up the watch
+        const { data: oauthRecord } = await supabase
+            .from("user_google_oauth")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("google_email", userInfo.email)
+            .single();
+
+        // Set up webhook for real-time updates
+        if (oauthRecord) {
+            try {
+                const channelId = uuidv4();
+                const webhookUrl = `${APP_URL}/api/google-calendar/webhook`;
+
+                const watchResponse = await fetch(
+                    "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch",
+                    {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${tokens.access_token}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            id: channelId,
+                            type: "web_hook",
+                            address: webhookUrl,
+                        }),
+                    }
+                );
+
+                if (watchResponse.ok) {
+                    const watchData = await watchResponse.json();
+
+                    // Store the watch subscription
+                    await supabase
+                        .from("google_calendar_watches")
+                        .insert({
+                            google_oauth_id: oauthRecord.id,
+                            user_id: user.id,
+                            channel_id: channelId,
+                            resource_id: watchData.resourceId,
+                            calendar_id: "primary",
+                            expiration: new Date(parseInt(watchData.expiration)).toISOString(),
+                        });
+
+                    console.log(`✓ Calendar webhook set up, expires: ${watchData.expiration}`);
+                } else {
+                    // Webhook setup failed - this is OK, we can still sync manually
+                    // Common reason: domain not verified in Google Cloud Console
+                    const errorData = await watchResponse.json();
+                    console.warn("Webhook setup failed (will use manual sync):", errorData);
+                }
+            } catch (watchErr) {
+                console.warn("Webhook setup error (will use manual sync):", watchErr);
+            }
         }
 
         console.log(`✓ Google Calendar connected for ${userInfo.email}`);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -23,10 +24,12 @@ import {
     Calendar,
     RefreshCw,
     Plus,
+    Camera,
+    User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type SettingsTab = "ai" | "imessage" | "calendar";
+type SettingsTab = "profile" | "ai" | "imessage" | "calendar";
 
 
 interface UnmatchedHandle {
@@ -51,6 +54,12 @@ interface GoogleAccount {
     created_at: string;
 }
 
+interface CalendarWatch {
+    id: number;
+    google_oauth_id: number;
+    expiration: string;
+}
+
 interface UnmatchedCalendarAttendee {
     attendee_email: string;
     attendee_name: string | null;
@@ -62,7 +71,11 @@ export default function SettingsPage() {
     const [unmatched, setUnmatched] = useState<UnmatchedHandle[]>([]);
     const [contacts, setContacts] = useState<RolodexContact[]>([]);
     const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState<{ email?: string; fullName?: string } | null>(null);
+    const [user, setUser] = useState<{ email?: string; fullName?: string; avatarUrl?: string | null; customAvatarUrl?: string | null } | null>(null);
+
+    // Profile/Avatar state
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
 
     // Apple contact images: handle_id -> data URI
     const [appleImages, setAppleImages] = useState<Record<string, string>>({});
@@ -89,7 +102,14 @@ export default function SettingsPage() {
     const [aiLoadingSettings, setAiLoadingSettings] = useState(true);
 
     // Active settings tab
-    const [activeTab, setActiveTab] = useState<SettingsTab>("ai");
+    const searchParams = useSearchParams();
+    const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+        const tab = searchParams.get("tab");
+        if (tab === "profile" || tab === "calendar" || tab === "imessage" || tab === "ai") {
+            return tab;
+        }
+        return "profile";
+    });
 
     // Google Calendar state
     const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
@@ -104,6 +124,7 @@ export default function SettingsPage() {
     const [calendarCreatingFor, setCalendarCreatingFor] = useState<string | null>(null);
     const [calendarNewContactName, setCalendarNewContactName] = useState("");
     const [calendarCreateLoading, setCalendarCreateLoading] = useState(false);
+    const [calendarWatches, setCalendarWatches] = useState<CalendarWatch[]>([]);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const calendarDropdownRef = useRef<HTMLDivElement>(null);
@@ -149,14 +170,17 @@ export default function SettingsPage() {
 
     const fetchCalendarData = useCallback(async () => {
         try {
-            const [accountsRes, unmatchedRes] = await Promise.all([
+            const [accountsRes, unmatchedRes, watchesRes] = await Promise.all([
                 fetch("/api/google-calendar/accounts", { credentials: "include" }),
                 fetch("/api/google-calendar/unmatched", { credentials: "include" }),
+                fetch("/api/google-calendar/watch", { credentials: "include" }),
             ]);
             const accountsData = await accountsRes.json();
             const unmatchedData = await unmatchedRes.json();
+            const watchesData = await watchesRes.json();
             if (accountsData.accounts) setGoogleAccounts(accountsData.accounts);
             if (unmatchedData.unmatched) setUnmatchedCalendar(unmatchedData.unmatched);
+            if (watchesData.watches) setCalendarWatches(watchesData.watches);
         } catch (err) {
             console.error("Failed to fetch calendar data:", err);
         } finally {
@@ -171,6 +195,9 @@ export default function SettingsPage() {
             const data = await res.json();
             if (data.authUrl) {
                 window.location.href = data.authUrl;
+            } else {
+                console.error("No auth URL returned:", data);
+                setCalendarConnecting(false);
             }
         } catch (err) {
             console.error("Failed to initiate Google auth:", err);
@@ -320,13 +347,58 @@ export default function SettingsPage() {
         }
     };
 
+    const handleAvatarUpload = async (file: File) => {
+        setUploadingAvatar(true);
+
+        try {
+            const formData = new FormData();
+            formData.append("avatar", file);
+
+            const res = await fetch("/api/user/profile", {
+                method: "POST",
+                credentials: "include",
+                body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error("Error uploading avatar:", data.error);
+                alert(`Failed to upload avatar: ${data.error}`);
+                return;
+            }
+
+            // Update local state with the new avatar URL
+            setUser((prev) => prev ? { ...prev, customAvatarUrl: data.avatarUrl } : null);
+        } catch (error) {
+            console.error("Error uploading avatar:", error);
+            alert("Failed to upload avatar. Please try again.");
+        } finally {
+            setUploadingAvatar(false);
+        }
+    };
+
     useEffect(() => {
         const supabase = createClient();
-        supabase.auth.getUser().then(({ data }) => {
+        supabase.auth.getUser().then(async ({ data }) => {
             if (data.user) {
+                // Fetch custom profile avatar
+                let customAvatarUrl: string | null = null;
+                try {
+                    const profileRes = await fetch("/api/user/profile", { credentials: "include" });
+                    if (profileRes.ok) {
+                        const { profile } = await profileRes.json();
+                        customAvatarUrl = profile?.avatar_url || null;
+                    }
+                } catch (e) {
+                    console.error("Error fetching user profile:", e);
+                }
+
                 setUser({
                     email: data.user.email,
                     fullName: data.user.user_metadata?.full_name,
+                    avatarUrl: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || null,
+                    customAvatarUrl,
                 });
             }
         });
@@ -467,6 +539,17 @@ export default function SettingsPage() {
                 {/* Left Sidebar - Full height, fixed to left */}
                 <nav className="w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 px-4 py-6 space-y-1">
                     <button
+                        onClick={() => setActiveTab("profile")}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeTab === "profile"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <User className="h-4 w-4" />
+                        Profile
+                    </button>
+                    <button
                         onClick={() => setActiveTab("ai")}
                         className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeTab === "ai"
@@ -503,6 +586,102 @@ export default function SettingsPage() {
 
                 {/* Content Area */}
                 <div className="flex-1 min-w-0 px-8 py-6">
+                        {/* Profile Settings */}
+                        {activeTab === "profile" && (
+                            <section>
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                                        Profile
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Manage your account profile and avatar.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {/* Avatar Upload */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                            Profile Photo
+                                        </label>
+                                        <div className="flex items-center gap-6">
+                                            {/* Avatar Preview */}
+                                            <div className="relative group">
+                                                <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                    {(user?.customAvatarUrl || user?.avatarUrl) ? (
+                                                        <Image
+                                                            src={user.customAvatarUrl || user.avatarUrl || ""}
+                                                            alt={user?.fullName || "Profile"}
+                                                            width={96}
+                                                            height={96}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-2xl font-medium text-gray-400 dark:text-gray-500">
+                                                            {user?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "?"}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {uploadingAvatar && (
+                                                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                                                        <Loader2 className="h-6 w-6 animate-spin text-white" />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Upload Button */}
+                                            <div>
+                                                <input
+                                                    ref={avatarInputRef}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            handleAvatarUpload(file);
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    onClick={() => avatarInputRef.current?.click()}
+                                                    disabled={uploadingAvatar}
+                                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                                                >
+                                                    <Camera className="h-4 w-4" />
+                                                    {uploadingAvatar ? "Uploading..." : "Change photo"}
+                                                </button>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                                                    JPG, PNG or GIF. Max 5MB.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Account Info (read-only) */}
+                                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                            Account
+                                        </label>
+                                        <div className="space-y-3">
+                                            {user?.fullName && (
+                                                <div>
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500">Name</p>
+                                                    <p className="text-sm text-gray-900 dark:text-white">{user.fullName}</p>
+                                                </div>
+                                            )}
+                                            {user?.email && (
+                                                <div>
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500">Email</p>
+                                                    <p className="text-sm text-gray-900 dark:text-white">{user.email}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+
                         {/* AI Provider Settings */}
                         {activeTab === "ai" && (
                             <section>
@@ -871,7 +1050,11 @@ export default function SettingsPage() {
                                                 </div>
                                             ) : (
                                                 <div className="space-y-2">
-                                                    {googleAccounts.map((account) => (
+                                                    {googleAccounts.map((account) => {
+                                                        const hasActiveWatch = calendarWatches.some(
+                                                            w => w.google_oauth_id === account.id && new Date(w.expiration) > new Date()
+                                                        );
+                                                        return (
                                                         <div
                                                             key={account.id}
                                                             className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl"
@@ -881,9 +1064,17 @@ export default function SettingsPage() {
                                                                     <Mail className="h-4 w-4 text-gray-500" />
                                                                 </div>
                                                                 <div>
-                                                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                                                        {account.google_email}
-                                                                    </p>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                            {account.google_email}
+                                                                        </p>
+                                                                        {hasActiveWatch && (
+                                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
+                                                                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                                                                Live
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                     <p className="text-xs text-gray-400 dark:text-gray-500">
                                                                         {account.last_sync_at
                                                                             ? `Last synced ${new Date(account.last_sync_at).toLocaleDateString()}`
@@ -913,7 +1104,8 @@ export default function SettingsPage() {
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                     <button
                                                         onClick={handleConnectGoogle}
                                                         disabled={calendarConnecting}
