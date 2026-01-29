@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // GET - Fetch raw touchpoint timestamps for contributions
-// Includes notes and iMessages
+// Includes notes, iMessages, and calendar events
 // The frontend will handle timezone-aware grouping and deduplication per contact per day
 export async function GET() {
     const supabase = await createClient();
@@ -47,6 +47,21 @@ export async function GET() {
             return NextResponse.json({ error: messagesError.message }, { status: 500 });
         }
 
+        // Fetch calendar events (only past events, linked to contacts)
+        const { data: calendarEvents, error: calendarError } = await supabase
+            .from("people_calendar_events")
+            .select("people_id, event_start, attendee_name, people(name)")
+            .eq("user_id", user.id)
+            .not("people_id", "is", null)
+            .gte("event_start", startDate.toISOString())
+            .lte("event_start", new Date().toISOString())  // Only past events
+            .limit(50000);
+
+        if (calendarError) {
+            console.error("Error fetching calendar events:", calendarError);
+            // Don't fail the whole request if calendar fails
+        }
+
         // Combine and return - frontend will dedupe per contact per day
         // Only include messages that are linked to a contact (have people_id)
         const touchpoints = [
@@ -61,6 +76,12 @@ export async function GET() {
                 contact_name: (m.people as { name: string } | null)?.name || m.contact_name || 'Unknown',
                 timestamp: m.message_date,
                 type: 'imessage' as const,
+            })) || []),
+            ...(calendarEvents?.map(e => ({
+                people_id: e.people_id,
+                contact_name: (e.people as { name: string } | null)?.name || e.attendee_name || 'Unknown',
+                timestamp: e.event_start,
+                type: 'calendar' as const,
             })) || []),
         ];
 

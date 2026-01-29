@@ -20,10 +20,13 @@ import {
     EyeOff,
     Trash2,
     Sparkles,
+    Calendar,
+    RefreshCw,
+    Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type SettingsTab = "ai" | "imessage";
+type SettingsTab = "ai" | "imessage" | "calendar";
 
 
 interface UnmatchedHandle {
@@ -38,6 +41,21 @@ interface RolodexContact {
     custom_profile_image_url: string | null;
     x_profile: { profile_image_url: string | null; username: string } | null;
     linkedin_profile: { profile_image_url: string | null } | null;
+}
+
+interface GoogleAccount {
+    id: number;
+    google_email: string;
+    google_name: string | null;
+    last_sync_at: string | null;
+    created_at: string;
+}
+
+interface UnmatchedCalendarAttendee {
+    attendee_email: string;
+    attendee_name: string | null;
+    event_count: number;
+    latest_event: string;
 }
 
 export default function SettingsPage() {
@@ -73,7 +91,22 @@ export default function SettingsPage() {
     // Active settings tab
     const [activeTab, setActiveTab] = useState<SettingsTab>("ai");
 
+    // Google Calendar state
+    const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
+    const [calendarLoading, setCalendarLoading] = useState(true);
+    const [calendarSyncing, setCalendarSyncing] = useState<number | null>(null);
+    const [calendarConnecting, setCalendarConnecting] = useState(false);
+    const [unmatchedCalendar, setUnmatchedCalendar] = useState<UnmatchedCalendarAttendee[]>([]);
+    const [activeCalendarMatch, setActiveCalendarMatch] = useState<string | null>(null);
+    const [calendarMatchSearch, setCalendarMatchSearch] = useState("");
+    const [calendarMatchLoading, setCalendarMatchLoading] = useState<string | null>(null);
+    const [calendarRecentlyLinked, setCalendarRecentlyLinked] = useState<Set<string>>(new Set());
+    const [calendarCreatingFor, setCalendarCreatingFor] = useState<string | null>(null);
+    const [calendarNewContactName, setCalendarNewContactName] = useState("");
+    const [calendarCreateLoading, setCalendarCreateLoading] = useState(false);
+
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const calendarDropdownRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const createInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,6 +146,137 @@ export default function SettingsPage() {
             setAiLoadingSettings(false);
         }
     }, []);
+
+    const fetchCalendarData = useCallback(async () => {
+        try {
+            const [accountsRes, unmatchedRes] = await Promise.all([
+                fetch("/api/google-calendar/accounts", { credentials: "include" }),
+                fetch("/api/google-calendar/unmatched", { credentials: "include" }),
+            ]);
+            const accountsData = await accountsRes.json();
+            const unmatchedData = await unmatchedRes.json();
+            if (accountsData.accounts) setGoogleAccounts(accountsData.accounts);
+            if (unmatchedData.unmatched) setUnmatchedCalendar(unmatchedData.unmatched);
+        } catch (err) {
+            console.error("Failed to fetch calendar data:", err);
+        } finally {
+            setCalendarLoading(false);
+        }
+    }, []);
+
+    const handleConnectGoogle = async () => {
+        setCalendarConnecting(true);
+        try {
+            const res = await fetch("/api/google-calendar/auth", { credentials: "include" });
+            const data = await res.json();
+            if (data.authUrl) {
+                window.location.href = data.authUrl;
+            }
+        } catch (err) {
+            console.error("Failed to initiate Google auth:", err);
+            setCalendarConnecting(false);
+        }
+    };
+
+    const handleDisconnectGoogle = async (accountId: number) => {
+        try {
+            const res = await fetch(`/api/google-calendar/accounts?id=${accountId}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+            if (res.ok) {
+                setGoogleAccounts(prev => prev.filter(a => a.id !== accountId));
+                fetchCalendarData();  // Refresh unmatched
+            }
+        } catch (err) {
+            console.error("Failed to disconnect Google:", err);
+        }
+    };
+
+    const handleSyncCalendar = async (accountId: number) => {
+        setCalendarSyncing(accountId);
+        try {
+            const res = await fetch("/api/google-calendar/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ accountId }),
+            });
+            const data = await res.json();
+            if (data.retry) {
+                // Sync token expired, retry
+                await handleSyncCalendar(accountId);
+                return;
+            }
+            if (res.ok) {
+                // Refresh accounts to update last_sync_at
+                fetchCalendarData();
+            }
+        } catch (err) {
+            console.error("Failed to sync calendar:", err);
+        } finally {
+            setCalendarSyncing(null);
+        }
+    };
+
+    const handleCalendarLink = async (attendeeEmail: string, peopleId: number) => {
+        setCalendarMatchLoading(attendeeEmail);
+        try {
+            const res = await fetch("/api/google-calendar/unmatched", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ attendee_email: attendeeEmail, people_id: peopleId }),
+            });
+            if (res.ok) {
+                setCalendarRecentlyLinked(prev => new Set(prev).add(attendeeEmail));
+                setTimeout(() => {
+                    setUnmatchedCalendar(prev => prev.filter(u => u.attendee_email !== attendeeEmail));
+                    setCalendarRecentlyLinked(prev => {
+                        const next = new Set(prev);
+                        next.delete(attendeeEmail);
+                        return next;
+                    });
+                }, 600);
+            }
+        } catch (err) {
+            console.error("Failed to link calendar attendee:", err);
+        } finally {
+            setCalendarMatchLoading(null);
+            setActiveCalendarMatch(null);
+            setCalendarMatchSearch("");
+        }
+    };
+
+    const handleCalendarCreateAndLink = async (attendeeEmail: string) => {
+        if (!calendarNewContactName.trim()) return;
+        setCalendarCreateLoading(true);
+        try {
+            const res = await fetch("/api/google-calendar/unmatched", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ attendee_email: attendeeEmail, name: calendarNewContactName.trim() }),
+            });
+            if (res.ok) {
+                setCalendarRecentlyLinked(prev => new Set(prev).add(attendeeEmail));
+                setTimeout(() => {
+                    setUnmatchedCalendar(prev => prev.filter(u => u.attendee_email !== attendeeEmail));
+                    setCalendarRecentlyLinked(prev => {
+                        const next = new Set(prev);
+                        next.delete(attendeeEmail);
+                        return next;
+                    });
+                }, 600);
+            }
+        } catch (err) {
+            console.error("Failed to create and link:", err);
+        } finally {
+            setCalendarCreateLoading(false);
+            setCalendarCreatingFor(null);
+            setCalendarNewContactName("");
+        }
+    };
 
     const handleSaveAiSettings = async () => {
         setAiSaving(true);
@@ -168,7 +332,8 @@ export default function SettingsPage() {
         });
         fetchData();
         fetchAiSettings();
-    }, [fetchData, fetchAiSettings]);
+        fetchCalendarData();
+    }, [fetchData, fetchAiSettings, fetchCalendarData]);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -322,6 +487,17 @@ export default function SettingsPage() {
                     >
                         <MessageSquare className="h-4 w-4" />
                         iMessage
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("calendar")}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeTab === "calendar"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <Calendar className="h-4 w-4" />
+                        Calendar
                     </button>
                 </nav>
 
@@ -646,6 +822,294 @@ export default function SettingsPage() {
                                             </div>
                                         );
                                     })}
+                                    </div>
+                                )}
+                            </section>
+                        )}
+
+                        {/* Google Calendar Settings */}
+                        {activeTab === "calendar" && (
+                            <section>
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                                        Google Calendar
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Connect your Google Calendar to track meetings with contacts.
+                                    </p>
+                                </div>
+
+                                {calendarLoading ? (
+                                    <div className="flex items-center justify-center py-16">
+                                        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-8">
+                                        {/* Connected Accounts */}
+                                        <div>
+                                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                                Connected Accounts
+                                            </h3>
+                                            {googleAccounts.length === 0 ? (
+                                                <div className="border border-dashed border-gray-200 dark:border-gray-800 rounded-xl p-6 text-center">
+                                                    <Calendar className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                                        No Google accounts connected
+                                                    </p>
+                                                    <button
+                                                        onClick={handleConnectGoogle}
+                                                        disabled={calendarConnecting}
+                                                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        {calendarConnecting ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Plus className="h-4 w-4" />
+                                                        )}
+                                                        Connect Google Account
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {googleAccounts.map((account) => (
+                                                        <div
+                                                            key={account.id}
+                                                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-9 h-9 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                                                                    <Mail className="h-4 w-4 text-gray-500" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                        {account.google_email}
+                                                                    </p>
+                                                                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                                                                        {account.last_sync_at
+                                                                            ? `Last synced ${new Date(account.last_sync_at).toLocaleDateString()}`
+                                                                            : "Never synced"}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() => handleSyncCalendar(account.id)}
+                                                                    disabled={calendarSyncing === account.id}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                                                                >
+                                                                    {calendarSyncing === account.id ? (
+                                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                                    ) : (
+                                                                        <RefreshCw className="h-3 w-3" />
+                                                                    )}
+                                                                    Sync
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDisconnectGoogle(account.id)}
+                                                                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                                                                    title="Disconnect"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    <button
+                                                        onClick={handleConnectGoogle}
+                                                        disabled={calendarConnecting}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                        Add another account
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Unmatched Attendees */}
+                                        {unmatchedCalendar.length > 0 && (
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                                    Unmatched Calendar Attendees
+                                                </h3>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+                                                    Link these people to contacts in your Rolodex.
+                                                </p>
+                                                <div className="space-y-1">
+                                                    {unmatchedCalendar.map((item) => {
+                                                        const isLinked = calendarRecentlyLinked.has(item.attendee_email);
+                                                        const isLoading = calendarMatchLoading === item.attendee_email;
+                                                        const isActive = activeCalendarMatch === item.attendee_email;
+                                                        const isCreating = calendarCreatingFor === item.attendee_email;
+
+                                                        const filteredCalendarContacts = calendarMatchSearch
+                                                            ? contacts.filter(c => c.name.toLowerCase().includes(calendarMatchSearch.toLowerCase()))
+                                                            : contacts;
+
+                                                        return (
+                                                            <div
+                                                                key={item.attendee_email}
+                                                                className={`group relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg transition-all duration-300 ${
+                                                                    isLinked
+                                                                        ? "bg-green-50 dark:bg-green-900/20 opacity-0 scale-95"
+                                                                        : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                                        <Mail className="h-3.5 w-3.5 text-gray-400" />
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        {item.attendee_name ? (
+                                                                            <>
+                                                                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                                    {item.attendee_name}
+                                                                                </p>
+                                                                                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                                                                                    {item.attendee_email}
+                                                                                </p>
+                                                                            </>
+                                                                        ) : (
+                                                                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                                {item.attendee_email}
+                                                                            </p>
+                                                                        )}
+                                                                        <p className="text-[11px] text-gray-300 dark:text-gray-600">
+                                                                            {item.event_count} event{item.event_count !== 1 ? "s" : ""}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-1.5 flex-shrink-0" ref={isActive ? calendarDropdownRef : undefined}>
+                                                                    {isLinked ? (
+                                                                        <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                                                                            <Check className="h-4 w-4" />
+                                                                            <span className="text-xs font-medium">Linked</span>
+                                                                        </div>
+                                                                    ) : isCreating ? (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <input
+                                                                                type="text"
+                                                                                value={calendarNewContactName}
+                                                                                onChange={(e) => setCalendarNewContactName(e.target.value)}
+                                                                                onKeyDown={(e) => {
+                                                                                    if (e.key === "Enter" && calendarNewContactName.trim()) handleCalendarCreateAndLink(item.attendee_email);
+                                                                                    else if (e.key === "Escape") { setCalendarCreatingFor(null); setCalendarNewContactName(""); }
+                                                                                }}
+                                                                                placeholder={item.attendee_name || "Contact name"}
+                                                                                autoFocus
+                                                                                className="px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 w-40"
+                                                                            />
+                                                                            <button
+                                                                                onClick={() => handleCalendarCreateAndLink(item.attendee_email)}
+                                                                                disabled={!calendarNewContactName.trim() || calendarCreateLoading}
+                                                                                className="p-1.5 text-gray-700 hover:text-gray-900 disabled:text-gray-300 transition-colors"
+                                                                            >
+                                                                                {calendarCreateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => { setCalendarCreatingFor(null); setCalendarNewContactName(""); }}
+                                                                                className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                                                                            >
+                                                                                <X className="h-3.5 w-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                    ) : isActive ? (
+                                                                        <div className="relative">
+                                                                            <div className="w-64 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl shadow-gray-200/50 dark:shadow-black/50 overflow-hidden">
+                                                                                <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                                                                                    <div className="flex items-center gap-2 px-2">
+                                                                                        <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                                                                        <input
+                                                                                            type="text"
+                                                                                            value={calendarMatchSearch}
+                                                                                            onChange={(e) => setCalendarMatchSearch(e.target.value)}
+                                                                                            placeholder="Search contacts..."
+                                                                                            autoFocus
+                                                                                            className="w-full text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                                                                                        />
+                                                                                        <button
+                                                                                            onClick={() => { setActiveCalendarMatch(null); setCalendarMatchSearch(""); }}
+                                                                                            className="p-0.5 text-gray-400 hover:text-gray-600"
+                                                                                        >
+                                                                                            <X className="h-3.5 w-3.5" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+
+                                                                                <div className="max-h-48 overflow-y-auto py-1">
+                                                                                    {filteredCalendarContacts.length === 0 && calendarMatchSearch ? (
+                                                                                        <p className="text-xs text-gray-400 text-center py-4">No contacts found</p>
+                                                                                    ) : (
+                                                                                        filteredCalendarContacts.slice(0, 20).map((c) => {
+                                                                                            const img = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
+                                                                                            return (
+                                                                                                <button
+                                                                                                    key={c.id}
+                                                                                                    onClick={() => handleCalendarLink(item.attendee_email, c.id)}
+                                                                                                    disabled={isLoading}
+                                                                                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                                                                >
+                                                                                                    {img ? (
+                                                                                                        <Image
+                                                                                                            src={img}
+                                                                                                            alt={c.name}
+                                                                                                            width={24}
+                                                                                                            height={24}
+                                                                                                            className="rounded-full flex-shrink-0"
+                                                                                                        />
+                                                                                                    ) : (
+                                                                                                        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                                                                                            <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                                                                                                                {c.name.charAt(0).toUpperCase()}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                    <span className="text-sm text-gray-900 dark:text-white truncate">
+                                                                                                        {c.name}
+                                                                                                    </span>
+                                                                                                    {isLoading && (
+                                                                                                        <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-auto" />
+                                                                                                    )}
+                                                                                                </button>
+                                                                                            );
+                                                                                        })
+                                                                                    )}
+                                                                                </div>
+
+                                                                                <div className="border-t border-gray-100 dark:border-gray-800 py-1">
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setActiveCalendarMatch(null);
+                                                                                            setCalendarMatchSearch("");
+                                                                                            setCalendarCreatingFor(item.attendee_email);
+                                                                                            setCalendarNewContactName(item.attendee_name || "");
+                                                                                        }}
+                                                                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
+                                                                                    >
+                                                                                        <UserPlus className="h-4 w-4 flex-shrink-0" />
+                                                                                        <span className="text-sm">Create new contact</span>
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => setActiveCalendarMatch(item.attendee_email)}
+                                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                                                        >
+                                                                            <Link2 className="h-3 w-3" />
+                                                                            Match
+                                                                            <ChevronDown className="h-3 w-3" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </section>

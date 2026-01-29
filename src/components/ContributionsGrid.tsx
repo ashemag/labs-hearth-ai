@@ -8,12 +8,12 @@ interface TouchpointData {
     people_id: number;
     contact_name: string;
     timestamp: string;
-    type: 'note' | 'imessage';
+    type: 'note' | 'imessage' | 'calendar';
 }
 
 interface DayBreakdown {
     contact_name: string;
-    types: Set<'note' | 'imessage'>;
+    types: Set<'note' | 'imessage' | 'calendar'>;
 }
 
 interface ApiResponse {
@@ -292,8 +292,8 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                                 <div key={idx} className="flex items-center gap-1.5">
                                     <span className="truncate max-w-[100px]">{item.contact_name}</span>
                                     <span className="text-gray-400 dark:text-gray-500">
-                                        {Array.from(item.types).map(t => 
-                                            t === 'note' ? '📝' : '💬'
+                                        {Array.from(item.types).map(t =>
+                                            t === 'note' ? '📝' : t === 'imessage' ? '💬' : '📅'
                                         ).join('')}
                                     </span>
                                 </div>
