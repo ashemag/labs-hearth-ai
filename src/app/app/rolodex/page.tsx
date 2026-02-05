@@ -13,245 +13,39 @@ import Link from "next/link";
 import Image from "next/image";
 import {
     Loader2,
-    ArrowLeft,
     Plus,
     X,
-    ChevronDown,
-    ChevronRight,
     Trash2,
     Users,
     Merge,
     Pencil,
     Check,
     Search,
-    Calendar,
     CheckCircle2,
-    Compass,
-    AtSign,
-    ExternalLink,
     ClipboardList,
     PanelRightClose,
-    MapPin,
-    Camera,
     Pin,
     PinOff,
-    MoreHorizontal,
     Eye,
     EyeOff,
     Sparkles,
     Command,
     LogOut,
-    Maximize2,
-    Minimize2,
     Palette,
-    Briefcase,
-    GraduationCap,
-    FileText,
-    User,
-    Linkedin,
-    Phone,
-    Mail,
     Settings,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
 import ChatWidget from "@/components/ChatWidget";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarPicker } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import data from "@emoji-mart/data";
-import Picker from "@emoji-mart/react";
-
-interface Note {
-    id: number;
-    note: string;
-    created_at: string;
-    source_type: string | null;
-}
-
-interface Compliment {
-    id: number;
-    compliment: string;
-    context: string | null;
-    received_at: string | null;
-    created_at: string;
-}
-
-interface XProfile {
-    username: string;
-    display_name: string | null;
-    bio: string | null;
-    profile_image_url: string | null;
-    followers_count: number | null;
-    following_count: number | null;
-    verified: boolean;
-    website_url: string | null;
-    location: string | null;
-}
-
-interface LinkedInProfile {
-    linkedin_url: string;
-    profile_image_url: string | null;
-    headline: string | null;
-    location: string | null;
-}
-
-interface Touchpoint {
-    id: number;
-    created_at: string;
-}
-
-interface ContactInfo {
-    id: number;
-    type: 'phone' | 'email';
-    value: string;
-    created_at: string;
-}
-
-interface Website {
-    id: number;
-    url: string;
-    created_at: string;
-}
-
-interface Contact {
-    id: number;
-    name: string;
-    created_at: string;
-    custom_profile_image_url: string | null;
-    custom_bio: string | null;
-    custom_location: string | null;
-    website_url: string | null;
-    hidden: boolean;
-    last_touchpoint: string | null;
-    x_profile: XProfile | null;
-    linkedin_profile: LinkedInProfile | null;
-    notes: Note[];
-    touchpoints: Touchpoint[];
-    websites: Website[];
-    compliments: Compliment[];
-    contact_info: ContactInfo[];
-}
-
-interface ContextMenuState {
-    x: number;
-    y: number;
-    contactId: number;
-}
-
-interface RolodexList {
-    id: number;
-    name: string;
-    color: string;
-    emoji: string | null;
-    pinned: boolean;
-    member_count: number;
-    member_ids: number[];
-}
-
-interface Todo {
-    id: number;
-    contactId: number;
-    contactName: string;
-    task: string;
-    dueDate: string;
-    completed: boolean;
-    createdAt: string;
-}
-
-interface DiscoveryInteraction {
-    username: string;
-    name?: string;
-    profileUrl: string;
-    count: number;
-    types: {
-        mentions: number;
-        replies: number;
-        quotes: number;
-        retweets: number;
-    };
-}
-
-interface DiscoveryResult {
-    username: string;
-    tweetCount: number;
-    timeRange: { start: string; end: string };
-    topInteractions: DiscoveryInteraction[];
-}
-
-interface UserProfile {
-    id: string;
-    email: string;
-    avatarUrl: string | null;
-    fullName: string | null;
-    customAvatarUrl: string | null;
-}
-
-interface ParsedLinkedInProfile {
-    headline: string | null;
-    location: string | null;
-    about: string | null;
-    experience: { title: string; company: string; dates: string }[];
-    education: { school: string; degree: string }[];
-    linkedinUrl: string | null;
-}
-
-function parseLinkedInNote(noteText: string): ParsedLinkedInProfile | null {
-    if (!noteText.includes("LinkedIn Profile Import")) return null;
-    const lines = noteText.split("\n").map(l => l.trim()).filter(Boolean);
-    const result: ParsedLinkedInProfile = { headline: null, location: null, about: null, experience: [], education: [], linkedinUrl: null };
-
-    let section: "top" | "about" | "experience" | "education" = "top";
-    const aboutLines: string[] = [];
-
-    for (const line of lines) {
-        if (line === "📋 LinkedIn Profile Import" || line === "—") continue;
-        if (line === "About:") { section = "about"; continue; }
-        if (line === "Experience:") { section = "experience"; continue; }
-        if (line === "Education:") { section = "education"; continue; }
-        if (line.startsWith("http") && line.includes("linkedin.com")) { result.linkedinUrl = line; continue; }
-
-        if (section === "top") {
-            if (line.startsWith("📍")) { result.location = line.replace("📍 ", ""); }
-            else if (!result.headline) { result.headline = line; }
-        } else if (section === "about") {
-            aboutLines.push(line);
-        } else if (section === "experience" && line.startsWith("•")) {
-            const text = line.slice(2);
-            const atMatch = text.match(/^(.+?) at (.+?)(?:\s*\((.+?)\))?$/);
-            if (atMatch) {
-                result.experience.push({ title: atMatch[1], company: atMatch[2], dates: atMatch[3] || "" });
-            } else {
-                const dateMatch = text.match(/^(.+?)(?:\s*\((.+?)\))?$/);
-                result.experience.push({ title: dateMatch ? dateMatch[1] : text, company: "", dates: dateMatch?.[2] || "" });
-            }
-        } else if (section === "education" && line.startsWith("•")) {
-            const text = line.slice(2);
-            const parts = text.split(" - ");
-            result.education.push({ school: parts[0] || text, degree: parts[1] || "" });
-        }
-    }
-    if (aboutLines.length > 0) result.about = aboutLines.join("\n");
-    return result;
-}
-
-function formatTimeAgo(dateString: string): string {
-    const now = new Date();
-    const date = new Date(dateString);
-
-    // Compare by calendar day in local timezone, not by milliseconds
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const diffDays = Math.floor((todayStart.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays}d ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-    return `${Math.floor(diffDays / 365)}y ago`;
-}
+import type { Contact, RolodexList, Todo, ContextMenuState, DiscoveryResult, UserProfile } from "./types";
+import CommandSearchModal from "./CommandSearchModal";
+import AddContactModal from "./AddContactModal";
+import DiscoveryPanel from "./DiscoveryPanel";
+import TodoSheet from "./TodoSheet";
+import ProfilePanel from "./ProfilePanel";
+import ListsSidebar from "./ListsSidebar";
+import ContactsTable from "./ContactsTable";
 
 export default function RolodexPage() {
     const [authLoading, setAuthLoading] = useState(true);
@@ -372,7 +166,6 @@ export default function RolodexPage() {
     const [showCommandSearch, setShowCommandSearch] = useState(false);
     const [commandSearchQuery, setCommandSearchQuery] = useState("");
     const [commandSearchIndex, setCommandSearchIndex] = useState(0);
-    const commandSearchInputRef = useRef<HTMLInputElement>(null);
     // Semantic search state (for q: prefix queries)
     const [semanticSearchResults, setSemanticSearchResults] = useState<Array<{
         id: number;
@@ -397,7 +190,6 @@ export default function RolodexPage() {
     }>>>({});
     const [loadingMessagesFor, setLoadingMessagesFor] = useState<number | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
-    const addInputRef = useRef<HTMLInputElement>(null);
     const noteInputRef = useRef<HTMLTextAreaElement>(null);
     const editNoteInputRef = useRef<HTMLInputElement>(null);
 
@@ -655,13 +447,6 @@ export default function RolodexPage() {
         };
     }, [authenticated, user?.id, fetchContacts, fetchLists, fetchTodos, fetchLocations]);
 
-    // Focus input when modal opens
-    useEffect(() => {
-        if (showAddModal && addInputRef.current) {
-            addInputRef.current.focus();
-        }
-    }, [showAddModal]);
-
     // Focus note input and generate conversation summary when contact panel opens
     useEffect(() => {
         if (selectedContactId) {
@@ -791,13 +576,6 @@ export default function RolodexPage() {
         document.addEventListener("keydown", handleKeyDown);
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, []);
-
-    // Focus command search input when modal opens
-    useEffect(() => {
-        if (showCommandSearch && commandSearchInputRef.current) {
-            commandSearchInputRef.current.focus();
-        }
-    }, [showCommandSearch]);
 
     // Semantic search when query starts with "q:"
     useEffect(() => {
@@ -2494,245 +2272,22 @@ export default function RolodexPage() {
         <div className="min-h-full bg-white dark:bg-black safe-area-inset">
             {/* Command+K Search Modal */}
             {showCommandSearch && (
-                <div
-                    className="fixed inset-0 z-[100] bg-black/50 flex items-start justify-center pt-[15vh]"
-                    onClick={() => {
+                <CommandSearchModal
+                    commandSearchQuery={commandSearchQuery}
+                    setCommandSearchQuery={setCommandSearchQuery}
+                    commandSearchIndex={commandSearchIndex}
+                    setCommandSearchIndex={setCommandSearchIndex}
+                    commandSearchResults={commandSearchResults}
+                    semanticSearchResults={semanticSearchResults}
+                    semanticSearchLoading={semanticSearchLoading}
+                    contacts={contacts}
+                    onSelect={handleCommandSearchSelect}
+                    onClose={() => {
                         setShowCommandSearch(false);
                         setCommandSearchQuery("");
                         setCommandSearchIndex(0);
                     }}
-                >
-                    <div
-                        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Search Input */}
-                        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                            <Search className="h-5 w-5 text-gray-400 flex-shrink-0" />
-                            <input
-                                ref={commandSearchInputRef}
-                                type="text"
-                                value={commandSearchQuery}
-                                onChange={(e) => {
-                                    setCommandSearchQuery(e.target.value);
-                                    setCommandSearchIndex(0);
-                                }}
-                                onKeyDown={(e) => {
-                                    const isSemanticMode = commandSearchQuery.toLowerCase().startsWith("q:");
-                                    const resultsLength = isSemanticMode ? semanticSearchResults.length : commandSearchResults.length;
-
-                                    if (e.key === "Escape") {
-                                        setShowCommandSearch(false);
-                                        setCommandSearchQuery("");
-                                        setCommandSearchIndex(0);
-                                    } else if (e.key === "ArrowDown") {
-                                        e.preventDefault();
-                                        setCommandSearchIndex((prev) =>
-                                            prev < resultsLength - 1 ? prev + 1 : prev
-                                        );
-                                    } else if (e.key === "ArrowUp") {
-                                        e.preventDefault();
-                                        setCommandSearchIndex((prev) => (prev > 0 ? prev - 1 : 0));
-                                    } else if (e.key === "Enter" && resultsLength > 0) {
-                                        e.preventDefault();
-                                        if (isSemanticMode) {
-                                            handleCommandSearchSelect(semanticSearchResults[commandSearchIndex].people_id);
-                                        } else {
-                                            handleCommandSearchSelect(commandSearchResults[commandSearchIndex].id);
-                                        }
-                                    }
-                                }}
-                                placeholder="Search contacts... (q: for notes)"
-                                className="flex-1 bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none text-base"
-                            />
-                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 font-mono">
-                                    esc
-                                </kbd>
-                            </div>
-                        </div>
-
-                        {/* Results */}
-                        <div className="max-h-80 overflow-y-auto">
-                            {(() => {
-                                const isSemanticMode = commandSearchQuery.toLowerCase().startsWith("q:");
-                                const semanticQuery = commandSearchQuery.slice(2).trim();
-
-                                // Semantic search mode
-                                if (isSemanticMode) {
-                                    if (semanticSearchLoading) {
-                                        return (
-                                            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                                                Searching notes...
-                                            </div>
-                                        );
-                                    }
-
-                                    if (!semanticQuery) {
-                                        return (
-                                            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                Type a question to search your notes
-                                            </div>
-                                        );
-                                    }
-
-                                    if (semanticSearchResults.length === 0 && !semanticSearchLoading) {
-                                        return (
-                                            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                                Type a question to search your notes
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div className="py-2">
-                                            {semanticSearchResults.map((result, index) => {
-                                                const isSelected = index === commandSearchIndex;
-                                                const contact = contacts.find(c => c.id === result.people_id);
-                                                const xp = contact?.x_profile;
-                                                const li = contact?.linkedin_profile;
-                                                const profileImageUrl = contact?.custom_profile_image_url || xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url;
-
-                                                return (
-                                                    <button
-                                                        key={result.id}
-                                                        onClick={() => handleCommandSearchSelect(result.people_id)}
-                                                        onMouseEnter={() => setCommandSearchIndex(index)}
-                                                        className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${isSelected
-                                                            ? "bg-gray-50 dark:bg-gray-800/20"
-                                                            : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                                            }`}
-                                                    >
-                                                        {profileImageUrl ? (
-                                                            <Image
-                                                                src={profileImageUrl}
-                                                                alt={result.person?.name || ""}
-                                                                width={36}
-                                                                height={36}
-                                                                className="rounded-full flex-shrink-0 mt-0.5"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                                    {(result.person?.name || "?").charAt(0).toUpperCase()}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-medium text-gray-900 dark:text-white truncate">
-                                                                {result.person?.name || "Unknown"}
-                                                            </p>
-                                                            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mt-0.5">
-                                                                {result.note}
-                                                            </p>
-                                                        </div>
-                                                        {isSelected && (
-                                                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                                                                <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 font-mono">
-                                                                    ↵
-                                                                </kbd>
-                                                            </div>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    );
-                                }
-
-                                // Regular contact search mode
-                                if (commandSearchResults.length === 0) {
-                                    return (
-                                        <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                                            {commandSearchQuery.trim() ? "No contacts found" : "No contacts yet"}
-                                        </div>
-                                    );
-                                }
-
-                                return (
-                                    <div className="py-2">
-                                        {commandSearchResults.map((contact, index) => {
-                                            const xp = contact.x_profile;
-                                            const li = contact.linkedin_profile;
-                                            const profileImageUrl = contact.custom_profile_image_url || xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url;
-                                            const isSelected = index === commandSearchIndex;
-
-                                            return (
-                                                <button
-                                                    key={contact.id}
-                                                    onClick={() => handleCommandSearchSelect(contact.id)}
-                                                    onMouseEnter={() => setCommandSearchIndex(index)}
-                                                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected
-                                                        ? "bg-gray-50 dark:bg-gray-800/20"
-                                                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                                        }`}
-                                                >
-                                                    {profileImageUrl ? (
-                                                        <Image
-                                                            src={profileImageUrl}
-                                                            alt={contact.name}
-                                                            width={36}
-                                                            height={36}
-                                                            className="rounded-full flex-shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                                {contact.name.charAt(0).toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-medium text-gray-900 dark:text-white truncate">
-                                                            {contact.name}
-                                                        </p>
-                                                        {xp?.username && (
-                                                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                                                @{xp.username}
-                                                            </p>
-                                                        )}
-                                                        {!xp?.username && li?.headline && (
-                                                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                                                                {li.headline}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    {isSelected && (
-                                                        <div className="flex items-center gap-1 text-xs text-gray-400">
-                                                            <kbd className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 font-mono">
-                                                                ↵
-                                                            </kbd>
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            })()}
-                        </div>
-
-                        {/* Footer hint */}
-                        <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                            <div className="flex items-center gap-3">
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↑</kbd>
-                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↓</kbd>
-                                    <span className="ml-1">navigate</span>
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">↵</kbd>
-                                    <span className="ml-1">select</span>
-                                </span>
-                            </div>
-                            <span className="flex items-center gap-1">
-                                <Command className="h-3 w-3" />
-                                <span>K to search</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                />
             )}
 
             {/* Context Menu */}
@@ -2977,508 +2532,60 @@ export default function RolodexPage() {
 
             {/* Add Contact Modal */}
             {showAddModal && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
-                    onClick={() => setShowAddModal(false)}
-                >
-                    <div
-                        className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md p-6 shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                Add Contact
-                            </h2>
-                            <button
-                                onClick={() => setShowAddModal(false)}
-                                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        {/* Mode Toggle */}
-                        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg mb-4">
-                            <button
-                                type="button"
-                                onClick={() => { setAddMode("social"); setAddError(null); }}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${addMode === "social"
-                                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                                    }`}
-                            >
-                                Import from Social
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { setAddMode("name"); setAddError(null); }}
-                                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${addMode === "name"
-                                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                                    }`}
-                            >
-                                Add by Name
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleAddContact}>
-                            {addMode === "social" ? (
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        X Handle, X URL, or LinkedIn URL
-                                    </label>
-                                    <input
-                                        ref={addInputRef}
-                                        type="text"
-                                        value={addHandle}
-                                        onChange={(e) => setAddHandle(e.target.value)}
-                                        placeholder="@username, x.com/..., or linkedin.com/in/..."
-                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:border-transparent"
-                                    />
-                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                        Imports profile photo and bio automatically
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                        Contact Name
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={addName}
-                                        onChange={(e) => setAddName(e.target.value)}
-                                        placeholder="John Doe"
-                                        autoFocus
-                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:border-transparent"
-                                    />
-                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                        Add a contact without a social profile. You can link one later.
-                                    </p>
-                                </div>
-                            )}
-
-                            {addError && (
-                                <p className="text-sm text-red-500 mb-4">{addError}</p>
-                            )}
-
-                            <button
-                                type="submit"
-                                disabled={addLoading || (addMode === "social" ? !addHandle.trim() : !addName.trim())}
-                                className="w-full py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-                            >
-                                {addLoading ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        {addMode === "social" ? "Loading profile..." : "Creating..."}
-                                    </>
-                                ) : (
-                                    <>
-                                        <Plus className="h-4 w-4" />
-                                        Add Contact
-                                    </>
-                                )}
-                            </button>
-                        </form>
-                    </div>
-                </div>
+                <AddContactModal
+                    addMode={addMode}
+                    setAddMode={setAddMode}
+                    addHandle={addHandle}
+                    setAddHandle={setAddHandle}
+                    addName={addName}
+                    setAddName={setAddName}
+                    addLoading={addLoading}
+                    addError={addError}
+                    setAddError={setAddError}
+                    onSubmit={handleAddContact}
+                    onClose={() => setShowAddModal(false)}
+                />
             )}
 
             {/* Todo Sheet */}
-            <Sheet open={showTodoSheet && !loading} onOpenChange={setShowTodoSheet} defaultOpen>
-                <SheetHeader>
-                    <SheetTitle className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowTodoSheet(false)}
-                            className="p-1 -ml-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            aria-label="Collapse panel"
-                        >
-                            <PanelRightClose className="h-5 w-5" />
-                        </button>
-                        To Do
-                    </SheetTitle>
-                    <SheetDescription>
-                        {todos.filter(t => !t.completed).length} active · {todos.filter(t => t.completed).length} completed
-                    </SheetDescription>
-                </SheetHeader>
-                <SheetContent className="p-4">
-                    {/* Filters */}
-                    {todos.length > 0 && (
-                        <div className="space-y-3 mb-4">
-                            {/* Name search with autocomplete */}
-                            <div className="relative" ref={todoNameSearchRef}>
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <input
-                                    type="text"
-                                    value={todoNameSearch}
-                                    onChange={(e) => {
-                                        setTodoNameSearch(e.target.value);
-                                        setShowTodoNameDropdown(true);
-                                    }}
-                                    onFocus={() => setShowTodoNameDropdown(true)}
-                                    placeholder="Filter by contact..."
-                                    className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600/50 focus:border-transparent"
-                                />
-                                {showTodoNameDropdown && todoNameSearch && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-h-48 overflow-y-auto z-20">
-                                        {(() => {
-                                            // Get unique contacts from todos that match the search
-                                            const todoContactIds = new Set(todos.map(t => t.contactId));
-                                            const matchingContacts = contacts
-                                                .filter(c => todoContactIds.has(c.id))
-                                                .filter(c => c.name.toLowerCase().includes(todoNameSearch.toLowerCase()))
-                                                .slice(0, 8);
-
-                                            if (matchingContacts.length === 0) {
-                                                return (
-                                                    <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                                        No matching contacts
-                                                    </div>
-                                                );
-                                            }
-
-                                            return matchingContacts.map((contact) => (
-                                                <button
-                                                    key={contact.id}
-                                                    onClick={() => {
-                                                        setTodoNameFilter({
-                                                            id: contact.id,
-                                                            name: contact.name,
-                                                            profileImage: contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url || null,
-                                                        });
-                                                        setTodoNameSearch("");
-                                                        setShowTodoNameDropdown(false);
-                                                    }}
-                                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-left"
-                                                >
-                                                    {(contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url) ? (
-                                                        <Image
-                                                            src={contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url || ""}
-                                                            alt={contact.name}
-                                                            width={24}
-                                                            height={24}
-                                                            className="rounded-full flex-shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                                                {contact.name.charAt(0).toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    <span className="text-sm text-gray-900 dark:text-white truncate">
-                                                        {contact.name}
-                                                    </span>
-                                                    <span className="ml-auto text-xs text-gray-400">
-                                                        {todos.filter(t => t.contactId === contact.id).length} todos
-                                                    </span>
-                                                </button>
-                                            ));
-                                        })()}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Selected contact pill */}
-                            {todoNameFilter && (
-                                <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Contact:</span>
-                                    <div className="inline-flex items-center gap-1.5 pl-1 pr-2 py-1 bg-gray-100 dark:bg-gray-800/40 text-gray-700 dark:text-gray-300 rounded-full text-xs font-medium">
-                                        {todoNameFilter.profileImage ? (
-                                            <Image
-                                                src={todoNameFilter.profileImage}
-                                                alt={todoNameFilter.name}
-                                                width={18}
-                                                height={18}
-                                                className="rounded-full flex-shrink-0"
-                                            />
-                                        ) : (
-                                            <div className="w-[18px] h-[18px] rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                <span className="text-[9px] font-semibold text-gray-700 dark:text-gray-300">
-                                                    {todoNameFilter.name.charAt(0).toUpperCase()}
-                                                </span>
-                                            </div>
-                                        )}
-                                        <span className="truncate max-w-[120px]">{todoNameFilter.name}</span>
-                                        <button
-                                            onClick={() => setTodoNameFilter(null)}
-                                            className="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Due date filter pills */}
-                            <div className="flex flex-wrap gap-1.5">
-                                {[
-                                    { value: "all", label: "All" },
-                                    { value: "overdue", label: "Overdue" },
-                                    { value: "today", label: "Today" },
-                                    { value: "week", label: "Week" },
-                                    { value: "two-weeks", label: "2 weeks" },
-                                    { value: "month", label: "Month" },
-                                    { value: "no-date", label: "No date" },
-                                ].map((filter) => (
-                                    <button
-                                        key={filter.value}
-                                        onClick={() => setTodoDueDateFilter(filter.value as typeof todoDueDateFilter)}
-                                        className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${todoDueDateFilter === filter.value
-                                            ? filter.value === "overdue"
-                                                ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300"
-                                                : "bg-gray-100 dark:bg-gray-800/40 text-gray-700 dark:text-gray-300"
-                                            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                                            }`}
-                                    >
-                                        {filter.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Active filter count */}
-                            {(todoNameFilter || todoDueDateFilter !== "all") && (
-                                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                                    <span>
-                                        Showing {filteredTodos.length} of {todos.length} todos
-                                    </span>
-                                    <button
-                                        onClick={() => {
-                                            setTodoNameFilter(null);
-                                            setTodoNameSearch("");
-                                            setTodoDueDateFilter("all");
-                                        }}
-                                        className="text-gray-700 dark:text-gray-400 hover:underline"
-                                    >
-                                        Clear filters
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {todos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <CheckCircle2 className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-                            <p className="text-sm text-gray-500 dark:text-gray-400">No todos yet</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                                Add a todo from a contact&apos;s dropdown menu
-                            </p>
-                        </div>
-                    ) : filteredTodos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center">
-                            <Search className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-                            <p className="text-sm text-gray-500 dark:text-gray-400">No matching todos</p>
-                            <button
-                                onClick={() => {
-                                    setTodoNameFilter(null);
-                                    setTodoNameSearch("");
-                                    setTodoDueDateFilter("all");
-                                }}
-                                className="text-xs text-gray-700 dark:text-gray-400 hover:underline mt-1"
-                            >
-                                Clear filters
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {/* Active Todos */}
-                            {activeTodos.map((todo) => (
-                                <div
-                                    key={todo.id}
-                                    className="group flex items-start gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800/20 border border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700/50 transition-colors"
-                                >
-                                    <button
-                                        onClick={() => toggleTodoComplete(todo.id)}
-                                        className="flex-shrink-0 mt-0.5 text-gray-700 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-500 transition-colors"
-                                    >
-                                        <div className="h-5 w-5 rounded-full border-2 border-current" />
-                                    </button>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm text-gray-900 dark:text-gray-100">
-                                            {todo.task}
-                                        </p>
-                                        <div className="flex items-center gap-2 mt-1.5">
-                                            <button
-                                                onClick={() => {
-                                                    setShowTodoSheet(false);
-                                                    setTimeout(() => {
-                                                        setSelectedContactId(todo.contactId);
-                                                        const element = document.querySelector(`[data-contact-id="${todo.contactId}"]`);
-                                                        element?.scrollIntoView({ behavior: "smooth", block: "center" });
-                                                    }, 300);
-                                                }}
-                                                className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-400 hover:underline truncate font-medium"
-                                            >
-                                                {(() => {
-                                                    const contact = contacts.find(c => c.id === todo.contactId);
-                                                    const profileImg = contact?.custom_profile_image_url || contact?.x_profile?.profile_image_url || contact?.linkedin_profile?.profile_image_url;
-                                                    return profileImg ? (
-                                                        <Image
-                                                            src={profileImg}
-                                                            alt={todo.contactName}
-                                                            width={16}
-                                                            height={16}
-                                                            className="rounded-full flex-shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                            <span className="text-[8px] font-medium text-gray-500 dark:text-gray-400">
-                                                                {todo.contactName.charAt(0).toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })()}
-                                                {todo.contactName}
-                                            </button>
-                                            {editingTodoId === todo.id ? (
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <input
-                                                        type="date"
-                                                        value={editingTodoDueDate}
-                                                        onChange={(e) => setEditingTodoDueDate(e.target.value)}
-                                                        className="text-xs px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-600/50"
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={() => updateTodoDueDate(todo.id, editingTodoDueDate)}
-                                                        className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                                    >
-                                                        <Check className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingTodoId(null);
-                                                            setEditingTodoDueDate("");
-                                                        }}
-                                                        className="p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                                                    >
-                                                        <X className="h-3.5 w-3.5" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingTodoId(todo.id);
-                                                        setEditingTodoDueDate(todo.dueDate || "");
-                                                    }}
-                                                    className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded-full transition-colors ${todo.dueDate
-                                                        ? isDueOverdue(todo.dueDate)
-                                                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium hover:bg-red-200 dark:hover:bg-red-900/50"
-                                                            : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                                        : "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
-                                                        }`}
-                                                >
-                                                    <Calendar className="h-3 w-3" />
-                                                    {todo.dueDate ? formatDueDate(todo.dueDate) : "Add date"}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => deleteTodo(todo.id)}
-                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            ))}
-
-                            {/* Empty state when no active todos but there are completed ones */}
-                            {activeTodos.length === 0 && completedTodos.length > 0 && (
-                                <div className="flex flex-col items-center justify-center py-8 text-center">
-                                    <CheckCircle2 className="h-10 w-10 text-green-400 dark:text-green-600 mb-2" />
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">All caught up!</p>
-                                </div>
-                            )}
-
-                            {/* Completed Todos Section */}
-                            {completedTodos.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                                    <button
-                                        onClick={() => setCompletedTodosExpanded(!completedTodosExpanded)}
-                                        className="flex items-center gap-2 w-full text-left text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors mb-2"
-                                    >
-                                        <ChevronRight className={`h-4 w-4 transition-transform ${completedTodosExpanded ? "rotate-90" : ""}`} />
-                                        <span>Completed</span>
-                                        <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
-                                            ({completedTodos.length})
-                                        </span>
-                                    </button>
-
-                                    {completedTodosExpanded && (
-                                        <div className="space-y-2">
-                                            {completedTodos.map((todo) => (
-                                                <div
-                                                    key={todo.id}
-                                                    className="group flex items-start gap-3 p-3 rounded-xl bg-gray-50/50 dark:bg-gray-800/30 hover:bg-gray-100 dark:hover:bg-gray-800/50 border border-gray-100 dark:border-gray-800/50 transition-colors opacity-60"
-                                                >
-                                                    <button
-                                                        onClick={() => toggleTodoComplete(todo.id)}
-                                                        className="flex-shrink-0 mt-0.5 text-green-600 dark:text-green-500 hover:text-gray-700 dark:hover:text-gray-400 transition-colors"
-                                                    >
-                                                        <CheckCircle2 className="h-5 w-5" />
-                                                    </button>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm text-gray-500 dark:text-gray-400 line-through">
-                                                            {todo.task}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-1.5">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setShowTodoSheet(false);
-                                                                    setTimeout(() => {
-                                                                        setSelectedContactId(todo.contactId);
-                                                                        const element = document.querySelector(`[data-contact-id="${todo.contactId}"]`);
-                                                                        element?.scrollIntoView({ behavior: "smooth", block: "center" });
-                                                                    }, 300);
-                                                                }}
-                                                                className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-400 hover:underline truncate"
-                                                            >
-                                                                {(() => {
-                                                                    const contact = contacts.find(c => c.id === todo.contactId);
-                                                                    const profileImg = contact?.custom_profile_image_url || contact?.x_profile?.profile_image_url || contact?.linkedin_profile?.profile_image_url;
-                                                                    return profileImg ? (
-                                                                        <Image
-                                                                            src={profileImg}
-                                                                            alt={todo.contactName}
-                                                                            width={16}
-                                                                            height={16}
-                                                                            className="rounded-full flex-shrink-0 grayscale"
-                                                                        />
-                                                                    ) : (
-                                                                        <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                                            <span className="text-[8px] font-medium text-gray-400 dark:text-gray-500">
-                                                                                {todo.contactName.charAt(0).toUpperCase()}
-                                                                            </span>
-                                                                        </div>
-                                                                    );
-                                                                })()}
-                                                                {todo.contactName}
-                                                            </button>
-                                                            {todo.dueDate && (
-                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500">
-                                                                    {formatDueDate(todo.dueDate)}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => deleteTodo(todo.id)}
-                                                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </SheetContent>
-            </Sheet>
+            <TodoSheet
+                showTodoSheet={showTodoSheet}
+                setShowTodoSheet={setShowTodoSheet}
+                loading={loading}
+                todos={todos}
+                contacts={contacts}
+                todoNameSearch={todoNameSearch}
+                setTodoNameSearch={setTodoNameSearch}
+                showTodoNameDropdown={showTodoNameDropdown}
+                setShowTodoNameDropdown={setShowTodoNameDropdown}
+                todoNameFilter={todoNameFilter}
+                setTodoNameFilter={setTodoNameFilter}
+                todoDueDateFilter={todoDueDateFilter}
+                setTodoDueDateFilter={setTodoDueDateFilter}
+                editingTodoId={editingTodoId}
+                setEditingTodoId={setEditingTodoId}
+                editingTodoDueDate={editingTodoDueDate}
+                setEditingTodoDueDate={setEditingTodoDueDate}
+                completedTodosExpanded={completedTodosExpanded}
+                setCompletedTodosExpanded={setCompletedTodosExpanded}
+                todoNameSearchRef={todoNameSearchRef}
+                onToggleTodoComplete={toggleTodoComplete}
+                onDeleteTodo={deleteTodo}
+                onUpdateTodoDueDate={updateTodoDueDate}
+                onNavigateToContact={(contactId) => {
+                    setShowTodoSheet(false);
+                    setTimeout(() => {
+                        setSelectedContactId(contactId);
+                        const element = document.querySelector(`[data-contact-id="${contactId}"]`);
+                        element?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 300);
+                }}
+                filteredTodos={filteredTodos}
+                activeTodos={activeTodos}
+                completedTodos={completedTodos}
+                formatDueDate={formatDueDate}
+                isDueOverdue={isDueOverdue}
+            />
 
             {/* Boost (Compliments) Sheet */}
             <Sheet open={showBoostSheet && !loading} onOpenChange={setShowBoostSheet}>
@@ -3589,1014 +2696,137 @@ export default function RolodexPage() {
             </Sheet>
 
             {/* Contact Profile Sheet */}
-            <Sheet
-                open={selectedContactId !== null}
-                onOpenChange={(open) => { if (!open) { setSelectedContactId(null); setShowListDropdownFor(null); setProfilePanelExpanded(false); setEditingNoteDate(null); setProfilePanelTab("overview"); setProfileMenuOpen(false); } }}
-                expanded={profilePanelExpanded}
-                closeOnClickOutside={editingNoteDate === null}
-            >
-                {(() => {
-                    const contact = contacts.find(c => c.id === selectedContactId);
-                    if (!contact) return null;
-                    const xp = contact.x_profile;
-                    const li = contact.linkedin_profile;
-                    const profileImageUrl = contact.custom_profile_image_url || xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url;
-
-                    return (
-                        <>
-                            <SheetHeader>
-                                <SheetTitle className="sr-only">{contact.name}</SheetTitle>
-                                <SheetDescription className="sr-only">Contact profile for {contact.name}</SheetDescription>
-
-                                {/* Panel controls - minimal floating */}
-                                <div className="absolute top-5 left-5 flex items-center gap-0.5 z-10">
-                                    <button
-                                        onClick={() => setSelectedContactId(null)}
-                                        className="p-2 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
-                                        aria-label="Close panel"
-                                    >
-                                        <PanelRightClose className="h-4 w-4" />
-                                    </button>
-                                </div>
-
-                                {/* More menu - top right */}
-                                <div className="absolute top-5 right-5 z-10">
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                                            className="p-2 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all"
-                                            aria-label="More options"
-                                        >
-                                            <MoreHorizontal className="h-4 w-4" />
-                                        </button>
-                                        {profileMenuOpen && (
-                                            <>
-                                                <div className="fixed inset-0 z-10" onClick={() => setProfileMenuOpen(false)} />
-                                                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[160px]">
-                                                    <button
-                                                        onClick={async () => {
-                                                            setProfileMenuOpen(false);
-                                                            const res = await fetch("/api/rolodex/update", {
-                                                                method: "PATCH",
-                                                                headers: { "Content-Type": "application/json" },
-                                                                credentials: "include",
-                                                                body: JSON.stringify({ people_id: contact.id, hidden: !contact.hidden }),
-                                                            });
-                                                            if (res.ok) {
-                                                                setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, hidden: !contact.hidden } : c));
-                                                            }
-                                                        }}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                                    >
-                                                        {contact.hidden ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                                                        {contact.hidden ? "Show contact" : "Hide contact"}
-                                                    </button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Profile Hero Section - Compact */}
-                                <div className="flex flex-col items-center pt-10 pb-3 px-6">
-                                    {/* Profile Image */}
-                                    <div
-                                        className="relative group cursor-pointer mb-3"
-                                        onMouseEnter={() => setHoveringAvatarFor(contact.id)}
-                                        onMouseLeave={() => setHoveringAvatarFor(null)}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            imageInputRef.current?.click();
-                                            if (imageInputRef.current) {
-                                                imageInputRef.current.dataset.contactId = contact.id.toString();
-                                            }
-                                        }}
-                                    >
-                                        {profileImageUrl ? (
-                                            <Image
-                                                src={profileImageUrl.replace("_bigger", "_400x400").replace("_normal", "_400x400")}
-                                                alt={contact.name}
-                                                width={128}
-                                                height={128}
-                                                className="rounded-full object-cover ring-1 ring-gray-100 dark:ring-gray-800"
-                                            />
-                                        ) : (
-                                            <div className="w-32 h-32 rounded-full bg-gray-50 dark:bg-gray-800 ring-1 ring-gray-100 dark:ring-gray-700 flex items-center justify-center">
-                                                <span className="text-4xl font-medium text-gray-300 dark:text-gray-600">
-                                                    {contact.name.charAt(0).toUpperCase()}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {(hoveringAvatarFor === contact.id || uploadingImageFor === contact.id) && (
-                                            <div className="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center transition-opacity">
-                                                {uploadingImageFor === contact.id ? (
-                                                    <Loader2 className="h-6 w-6 text-white animate-spin" />
-                                                ) : (
-                                                    <Camera className="h-6 w-6 text-white" />
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="text-center w-full">
-                                        {editingNameFor === contact.id ? (
-                                            <div className="flex items-center gap-2 justify-center">
-                                                <input
-                                                    type="text"
-                                                    value={editName}
-                                                    onChange={(e) => setEditName(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === "Enter" && editName.trim()) {
-                                                            handleUpdateName(contact.id);
-                                                        } else if (e.key === "Escape") {
-                                                            setEditingNameFor(null);
-                                                            setEditName("");
-                                                        }
-                                                    }}
-                                                    autoFocus
-                                                    className="px-3 py-1.5 text-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-center focus:outline-none focus:ring-1 focus:ring-gray-300"
-                                                />
-                                                <button
-                                                    onClick={() => handleUpdateName(contact.id)}
-                                                    disabled={!editName.trim() || editNameLoading}
-                                                    className="p-1.5 text-gray-500 hover:text-gray-700 disabled:text-gray-300"
-                                                >
-                                                    {editNameLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                                                </button>
-                                                <button onClick={() => { setEditingNameFor(null); setEditName(""); }} className="p-1.5 text-gray-300 hover:text-gray-500">
-                                                    <X className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => { setEditingNameFor(contact.id); setEditName(contact.name); }}
-                                                className="group inline-flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white tracking-tight hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                                            >
-                                                {contact.name}
-                                                <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                                            </button>
-                                        )}
-
-                                        {xp && (
-                                            <a
-                                                href={`https://x.com/${xp.username}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-block mt-0.5 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                                            >
-                                                @{xp.username}
-                                            </a>
-                                        )}
-
-                                        {contact.last_touchpoint && (
-                                            <p className="mt-1.5 text-xs text-gray-300 dark:text-gray-600">
-                                                Last connected {formatTimeAgo(contact.last_touchpoint)}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            </SheetHeader>
-                            <SheetContent className="py-0">
-                                {/* Tab Navigation */}
-                                <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6">
-                                    <div className="flex gap-0">
-                                        {(["overview", "contact", "professional"] as const).map(tab => (
-                                            <button
-                                                key={tab}
-                                                onClick={() => setProfilePanelTab(tab)}
-                                                className={`relative px-4 py-3 text-sm font-medium transition-colors ${
-                                                    profilePanelTab === tab
-                                                        ? "text-gray-900 dark:text-white"
-                                                        : "text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
-                                                }`}
-                                            >
-                                                {tab === "overview" ? "Overview" : tab === "contact" ? "Contact" : "Professional"}
-                                                {profilePanelTab === tab && (
-                                                    <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-gray-900 dark:bg-white rounded-full" />
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {profilePanelTab === "overview" ? (
-                                <div className="px-6 py-2 space-y-5">
-                                {/* Bio & Location - inline */}
-                                <div className="space-y-2">
-                                    {/* Bio */}
-                                    {editingBioFor === contact.id ? (
-                                        <div className="space-y-2">
-                                            <textarea
-                                                value={editBio}
-                                                onChange={(e) => setEditBio(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleUpdateBio(contact.id); }
-                                                    else if (e.key === "Escape") { setEditingBioFor(null); setEditBio(""); }
-                                                }}
-                                                placeholder="Add a bio..."
-                                                autoFocus
-                                                rows={3}
-                                                className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600 resize-none"
-                                            />
-                                            <div className="flex gap-2">
-                                                <button onClick={() => handleUpdateBio(contact.id)} disabled={editBioLoading} className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
-                                                    {editBioLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
-                                                </button>
-                                                <button onClick={() => { setEditingBioFor(null); setEditBio(""); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <button onClick={() => { setEditBio(contact.custom_bio || xp?.bio || li?.headline || ""); setEditingBioFor(contact.id); }} className="group text-left">
-                                            {(contact.custom_bio || xp?.bio || li?.headline) ? (
-                                                <span className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                                    {contact.custom_bio || xp?.bio || li?.headline}
-                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity inline-block ml-1.5 -mt-0.5" />
-                                                </span>
-                                            ) : (
-                                                <p className="text-sm text-gray-400 dark:text-gray-500">Add bio</p>
-                                            )}
-                                        </button>
-                                    )}
-                                    {/* Location - inline beneath bio */}
-                                    {editingLocationFor === contact.id ? (
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2 relative">
-                                                <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                                                <div className="flex-1 relative">
-                                                    <input
-                                                        type="text"
-                                                        value={editLocation}
-                                                        onChange={(e) => { setEditLocation(e.target.value); setLocationSuggestionIndex(0); }}
-                                                        onKeyDown={(e) => {
-                                                            const suggestions = allLocations.filter(loc =>
-                                                                loc.toLowerCase().includes(editLocation.toLowerCase()) &&
-                                                                loc.toLowerCase() !== editLocation.toLowerCase()
-                                                            ).slice(0, 6);
-
-                                                            if (e.key === "ArrowDown" && suggestions.length > 0) {
-                                                                e.preventDefault();
-                                                                setLocationSuggestionIndex(prev =>
-                                                                    prev < suggestions.length - 1 ? prev + 1 : 0
-                                                                );
-                                                            } else if (e.key === "ArrowUp" && suggestions.length > 0) {
-                                                                e.preventDefault();
-                                                                setLocationSuggestionIndex(prev =>
-                                                                    prev > 0 ? prev - 1 : suggestions.length - 1
-                                                                );
-                                                            } else if (e.key === "Tab" && suggestions.length > 0 && editLocation.trim()) {
-                                                                e.preventDefault();
-                                                                setEditLocation(suggestions[locationSuggestionIndex]);
-                                                            } else if (e.key === "Enter") {
-                                                                e.preventDefault();
-                                                                if (suggestions.length > 0 && editLocation.trim() && suggestions[locationSuggestionIndex]) {
-                                                                    setEditLocation(suggestions[locationSuggestionIndex]);
-                                                                } else {
-                                                                    handleUpdateLocation(contact.id);
-                                                                }
-                                                            } else if (e.key === "Escape") {
-                                                                setEditingLocationFor(null);
-                                                                setEditLocation("");
-                                                                setLocationSuggestionIndex(0);
-                                                            }
-                                                        }}
-                                                        placeholder="City, Country"
-                                                        autoFocus
-                                                        className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600"
-                                                    />
-                                                    {/* Location suggestions dropdown */}
-                                                    {editLocation.trim() && (() => {
-                                                        const suggestions = allLocations.filter(loc =>
-                                                            loc.toLowerCase().includes(editLocation.toLowerCase()) &&
-                                                            loc.toLowerCase() !== editLocation.toLowerCase()
-                                                        ).slice(0, 6);
-
-                                                        if (suggestions.length === 0) return null;
-
-                                                        return (
-                                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden">
-                                                                {suggestions.map((loc, idx) => (
-                                                                    <button
-                                                                        key={loc}
-                                                                        onClick={() => {
-                                                                            setEditLocation(loc);
-                                                                            setLocationSuggestionIndex(0);
-                                                                        }}
-                                                                        className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${idx === locationSuggestionIndex
-                                                                            ? "bg-gray-50 dark:bg-gray-800/30 text-gray-700 dark:text-gray-300"
-                                                                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                                                                            }`}
-                                                                    >
-                                                                        <MapPin className="h-3 w-3 text-gray-400" />
-                                                                        {loc}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => handleUpdateLocation(contact.id)} disabled={editLocationLoading} className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg flex items-center gap-1">
-                                                    {editLocationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Save
-                                                </button>
-                                                <button onClick={() => { setEditingLocationFor(null); setEditLocation(""); setLocationSuggestionIndex(0); }} className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm">Cancel</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={() => { setEditLocation(contact.custom_location || xp?.location || li?.location || ""); setEditingLocationFor(contact.id); }}
-                                            className="group flex items-center gap-2 text-sm hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                                        >
-                                            <MapPin className="h-4 w-4 text-gray-400" />
-                                            {(contact.custom_location || xp?.location || li?.location) ? (
-                                                <>
-                                                    <span className="text-gray-700 dark:text-gray-300">{contact.custom_location || xp?.location || li?.location}</span>
-                                                    <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-400 dark:text-gray-500">Add location</span>
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Links Section */}
-                                <div>
-                                    <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">Links</h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {xp && (
-                                            <a href={`https://x.com/${xp.username}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                                                <AtSign className="h-3 w-3" />{xp.username}
-                                            </a>
-                                        )}
-                                        {li && (
-                                            <a href={li.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                                                <Linkedin className="h-3 w-3" />LinkedIn
-                                            </a>
-                                        )}
-                                        {contact.websites.map(website => (
-                                            <div key={website.id} className="inline-flex items-center gap-0.5 group/website">
-                                                <a href={website.url.startsWith("http") ? website.url : `https://${website.url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-l-full hover:bg-green-100">
-                                                    <ExternalLink className="h-3 w-3" />{website.url.replace(/^https?:\/\//, "").substring(0, 20)}
-                                                </a>
-                                                <button
-                                                    onClick={async () => {
-                                                        const res = await fetch(`/api/rolodex/websites?id=${website.id}`, { method: "DELETE", credentials: "include" });
-                                                        if (res.ok) {
-                                                            setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, websites: c.websites.filter(w => w.id !== website.id) } : c));
-                                                        }
-                                                    }}
-                                                    className="px-1.5 py-1.5 text-xs bg-green-50 dark:bg-green-900/30 text-green-500 dark:text-green-400 rounded-r-full hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 transition-colors opacity-0 group-hover/website:opacity-100"
-                                                    title="Remove website"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {addingLinkFor === contact.id ? (
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={linkInput}
-                                                    onChange={(e) => setLinkInput(e.target.value)}
-                                                    onKeyDown={(e) => { if (e.key === "Enter" && linkInput.trim()) handleAddLink(contact.id); else if (e.key === "Escape") { setAddingLinkFor(null); setLinkInput(""); } }}
-                                                    placeholder="x.com/handle or URL"
-                                                    autoFocus
-                                                    className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600"
-                                                />
-                                                <button onClick={() => handleAddLink(contact.id)} disabled={!linkInput.trim() || linkLoading} className="p-1 text-gray-700 hover:text-gray-700 disabled:text-gray-400">
-                                                    {linkLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                                                </button>
-                                                <button onClick={() => { setAddingLinkFor(null); setLinkInput(""); }} className="p-1 text-gray-400 hover:text-gray-600"><X className="h-3 w-3" /></button>
-                                            </div>
-                                        ) : (
-                                            <button onClick={() => setAddingLinkFor(contact.id)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400">
-                                                <Plus className="h-3 w-3" />Add link
-                                            </button>
-                                        )}
-                                    </div>
-                                    {linkError && <p className="text-xs text-red-500 mt-1">{linkError}</p>}
-                                </div>
-
-                                {/* Lists Section */}
-                                <div>
-                                    <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">Lists</h3>
-                                    <div className="flex flex-wrap gap-2">
-                                        {/* Show lists the contact is in (with remove button) */}
-                                        {lists.filter(l => l.member_ids.includes(contact.id)).map(list => (
-                                            <div key={list.id} className="inline-flex items-center group/list">
-                                                <span
-                                                    className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-l-full"
-                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
-                                                >
-                                                    {list.emoji ? `${list.emoji} ` : ""}{list.name}
-                                                </span>
-                                                <button
-                                                    onClick={() => handleRemoveFromList(list.id, contact.id)}
-                                                    className="px-1.5 py-1 text-xs rounded-r-full transition-colors opacity-0 group-hover/list:opacity-100"
-                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
-                                                    title={`Remove from ${list.name}`}
-                                                >
-                                                    <X className="h-3 w-3 hover:text-red-500" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {/* Dropdown to add to a list */}
-                                        {lists.filter(l => !l.member_ids.includes(contact.id)).length > 0 && (
-                                            <div className="relative">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setShowListDropdownFor(showListDropdownFor === contact.id ? null : contact.id);
-                                                    }}
-                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-700 rounded-full hover:border-gray-400 transition-colors"
-                                                >
-                                                    <Plus className="h-3 w-3" />
-                                                    Add to list
-                                                </button>
-                                                {showListDropdownFor === contact.id && (
-                                                    <div data-list-dropdown="true" className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
-                                                        {lists.filter(l => !l.member_ids.includes(contact.id)).map(list => (
-                                                            <button
-                                                                key={list.id}
-                                                                onClick={() => {
-                                                                    handleAddToList(list.id, contact.id);
-                                                                    setShowListDropdownFor(null);
-                                                                }}
-                                                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                                            >
-                                                                {list.emoji ? (
-                                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
-                                                                ) : (
-                                                                    <div
-                                                                        className="w-3 h-3 rounded-full flex-shrink-0"
-                                                                        style={{ backgroundColor: list.color }}
-                                                                    />
-                                                                )}
-                                                                <span className="truncate">{list.name}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {lists.length === 0 && (
-                                            <span className="text-sm text-gray-400 italic">No lists created yet</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Touchpoints Section (Notes + Touchpoints + optional Messages) */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest">Touchpoints</h3>
-                                        <button
-                                            onClick={() => toggleMessagesForContact(contact.id)}
-                                            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
-                                                showMessagesFor.has(contact.id)
-                                                    ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
-                                                    : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                            }`}
-                                            title={showMessagesFor.has(contact.id) ? "Hide iMessages" : "Show iMessages"}
-                                        >
-                                            {loadingMessagesFor === contact.id ? "..." : showMessagesFor.has(contact.id) ? "iMessages on" : "iMessages"}
-                                        </button>
-                                    </div>
-                                    {/* Add note input - minimal composer */}
-                                    <div className="mb-4 relative group/composer">
-                                        <div className={`rounded-xl border transition-all duration-200 ${
-                                            addingNoteFor === contact.id && newNote.trim()
-                                                ? "border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-800"
-                                                : "border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"
-                                        }`}>
-                                            <textarea
-                                                ref={noteInputRef}
-                                                value={addingNoteFor === contact.id ? newNote : ""}
-                                                onChange={(e) => {
-                                                    handleNoteInputChange(e);
-                                                    setAddingNoteFor(contact.id);
-                                                }}
-                                                onKeyDown={(e) => handleNoteKeyDown(e, contact.id)}
-                                                onFocus={() => setAddingNoteFor(contact.id)}
-                                                onBlur={() => {
-                                                    setTimeout(() => {
-                                                        setMentionQuery(null);
-                                                        setMentionPosition(null);
-                                                    }, 150);
-                                                }}
-                                                placeholder="Write a note..."
-                                                rows={1}
-                                                className="w-full px-3.5 py-2.5 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none resize-none"
-                                                style={{ minHeight: "38px" }}
-                                                onInput={(e) => {
-                                                    const target = e.target as HTMLTextAreaElement;
-                                                    target.style.height = "38px";
-                                                    target.style.height = Math.min(target.scrollHeight, 120) + "px";
-                                                }}
-                                            />
-                                            {addingNoteFor === contact.id && newNote.trim() && (
-                                                <div className="flex items-center justify-between px-3 pb-2">
-                                                    <span className="text-[10px] text-gray-400">@ to mention</span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button onClick={() => { setNewNote(""); setAddingNoteFor(null); setPendingMentions(new Map()); const ta = noteInputRef.current; if (ta) { ta.style.height = "38px"; } }} className="px-2.5 py-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md transition-colors">
-                                                            Cancel
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleAddNote(contact.id)}
-                                                            disabled={savingNote}
-                                                            className="px-3 py-1 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
-                                                        >
-                                                            {savingNote ? "Saving..." : "Save"}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                        {/* Mention Dropdown */}
-                                        {mentionQuery !== null && mentionSuggestions.length > 0 && addingNoteFor === contact.id && mentionPosition && (
-                                            <div
-                                                className="fixed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-[9999] max-h-48 overflow-y-auto min-w-[220px] py-1"
-                                                style={{ top: mentionPosition.top, left: mentionPosition.left }}
-                                            >
-                                                {mentionSuggestions.map((c, idx) => {
-                                                    const profileImg = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
-                                                    return (
-                                                        <button
-                                                            key={c.id}
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                insertMention(c);
-                                                            }}
-                                                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${idx === mentionIndex ? "bg-gray-100 dark:bg-gray-700" : "hover:bg-gray-50 dark:hover:bg-gray-750"}`}
-                                                        >
-                                                            {profileImg ? (
-                                                                <Image src={profileImg} alt={c.name} width={22} height={22} className="rounded-full" />
-                                                            ) : (
-                                                                <div className="w-[22px] h-[22px] rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                                                    <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{c.name.charAt(0).toUpperCase()}</span>
-                                                                </div>
-                                                            )}
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.name}</p>
-                                                                {c.x_profile?.username && (
-                                                                    <p className="text-[11px] text-gray-400">@{c.x_profile.username}</p>
-                                                                )}
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {/* Timeline list with vertical thread line */}
-                                    <div className="relative max-h-80 overflow-y-auto pr-1">
-                                        {(() => {
-                                            type TimelineItem =
-                                                | { type: "note"; data: Note; date: string }
-                                                | { type: "touchpoint"; data: Touchpoint; date: string }
-                                                | { type: "message"; data: { id: number; message_text: string; is_from_me: boolean; message_date: string }; date: string }
-                                                | { type: "compliment"; data: Compliment; date: string };
-
-                                            const timeline: TimelineItem[] = [
-                                                ...contact.notes.filter(n => !n.note.includes("LinkedIn Profile Import")).map(n => ({ type: "note" as const, data: n, date: n.created_at })),
-                                                ...contact.touchpoints.map(t => ({ type: "touchpoint" as const, data: t, date: t.created_at })),
-                                                ...(contact.compliments || []).map(c => ({ type: "compliment" as const, data: c, date: c.created_at })),
-                                            ];
-
-                                            if (showMessagesFor.has(contact.id) && contactMessages[contact.id]) {
-                                                timeline.push(...contactMessages[contact.id].map(m => ({
-                                                    type: "message" as const,
-                                                    data: m,
-                                                    date: m.message_date,
-                                                })));
-                                            }
-
-                                            timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-                                            if (timeline.length === 0) {
-                                                return <p className="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">No activity yet</p>;
-                                            }
-
-                                            return (
-                                                <div className="relative">
-                                                    {/* Vertical thread line */}
-                                                    {timeline.length > 1 && (
-                                                        <div className="absolute left-[7px] top-3 bottom-3 w-px bg-gray-200 dark:bg-gray-700/50" />
-                                                    )}
-                                                    <div className="space-y-0.5">
-                                                        {timeline.map((item, idx) => {
-                                                            if (item.type === "message") {
-                                                                const msg = item.data;
-                                                                return (
-                                                                    <div key={`msg-${msg.id}`} className="flex gap-3 py-2 pl-0 group/item">
-                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
-                                                                            <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${msg.is_from_me ? "bg-blue-400" : "bg-gray-300 dark:bg-gray-600"}`} />
-                                                                        </div>
-                                                                        <div className="min-w-0 flex-1 py-0.5">
-                                                                            <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300 break-words">{msg.message_text.length > 150 ? msg.message_text.slice(0, 150) + "..." : msg.message_text}</p>
-                                                                            <div className="flex items-center gap-1.5 mt-1">
-                                                                                <span className="text-[10px] text-gray-400 dark:text-gray-500">{msg.is_from_me ? "You" : "Them"}</span>
-                                                                                <span className="text-[10px] text-gray-300 dark:text-gray-600">&middot;</span>
-                                                                                <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatTimeAgo(msg.message_date)}</span>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            if (item.type === "touchpoint") {
-                                                                return (
-                                                                    <div key={`tp-${item.data.id}`} className="flex gap-3 py-2 pl-0 group/item">
-                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
-                                                                            <div className="w-[7px] h-[7px] rounded-full bg-gray-300 dark:bg-gray-600 ring-[3px] ring-white dark:ring-gray-900" />
-                                                                        </div>
-                                                                        <div className="flex-1 flex items-center gap-2 py-0.5">
-                                                                            <span className="text-[13px] text-gray-500 dark:text-gray-400">Logged touchpoint</span>
-                                                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto">{formatTimeAgo(item.data.created_at)}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            if (item.type === "compliment") {
-                                                                const compliment = item.data;
-                                                                return (
-                                                                    <div key={`comp-${compliment.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
-                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2 relative z-10">
-                                                                            <div className="w-[7px] h-[7px] rounded-full bg-pink-400 dark:bg-pink-500 ring-[3px] ring-white dark:ring-gray-900" />
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0 py-1.5">
-                                                                            <p className="text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
-                                                                                <span className="text-pink-500 dark:text-pink-400 mr-1">✨</span>
-                                                                                &ldquo;{compliment.compliment}&rdquo;
-                                                                            </p>
-                                                                            <div className="flex items-center gap-1.5 mt-1">
-                                                                                <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatTimeAgo(compliment.created_at)}</span>
-                                                                                {compliment.context && (
-                                                                                    <>
-                                                                                        <span className="text-[10px] text-gray-300 dark:text-gray-600">&middot;</span>
-                                                                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{compliment.context}</span>
-                                                                                    </>
-                                                                                )}
-                                                                                <span className="text-[10px] font-medium text-pink-500 dark:text-pink-400 bg-pink-50 dark:bg-pink-900/30 px-1.5 py-0.5 rounded-full ml-1">
-                                                                                    compliment
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            const note = item.data as Note;
-                                                            const isAutoNote = note.source_type === "website_analysis" || note.source_type === "auto_summary";
-                                                            return (
-                                                                <div key={`note-${note.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
-                                                                    <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2 relative z-10">
-                                                                        <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${isAutoNote ? "bg-violet-400 dark:bg-violet-500" : "bg-gray-300 dark:bg-gray-600"}`} />
-                                                                    </div>
-                                                                    <div className={`flex-1 min-w-0 relative rounded-lg py-1.5 ${editingNote?.noteId === note.id ? "" : "group"}`}>
-                                                                        {editingNote?.noteId === note.id ? (
-                                                                            <div className="relative flex items-center gap-2">
-                                                                                <input
-                                                                                    ref={editNoteInputRef}
-                                                                                    type="text"
-                                                                                    value={editNoteText}
-                                                                                    onChange={handleEditNoteInputChange}
-                                                                                    onKeyDown={(e) => handleEditNoteKeyDown(e, note.id, contact.id)}
-                                                                                    onBlur={() => {
-                                                                                        setTimeout(() => {
-                                                                                            setEditMentionQuery(null);
-                                                                                            setEditMentionPosition(null);
-                                                                                        }, 150);
-                                                                                    }}
-                                                                                    autoFocus
-                                                                                    className="flex-1 px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500"
-                                                                                />
-                                                                                <button
-                                                                                    onClick={() => handleEditNote(note.id, contact.id)}
-                                                                                    disabled={!editNoteText.trim() || editNoteLoading}
-                                                                                    className="p-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white disabled:text-gray-300 dark:disabled:text-gray-600 transition-colors"
-                                                                                >
-                                                                                    {editNoteLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                                                                                </button>
-                                                                                <button onClick={() => { setEditingNote(null); setEditNoteText(""); setEditPendingMentions(new Map()); }} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-                                                                                    <X className="h-3.5 w-3.5" />
-                                                                                </button>
-                                                                                {editMentionQuery !== null && editMentionSuggestions.length > 0 && editMentionPosition && (
-                                                                                    <div
-                                                                                        className="fixed z-[9999] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[220px]"
-                                                                                        style={{ top: editMentionPosition.top, left: editMentionPosition.left }}
-                                                                                    >
-                                                                                        {editMentionSuggestions.map((c, idx) => {
-                                                                                            const profileImg = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
-                                                                                            return (
-                                                                                                <button
-                                                                                                    key={c.id}
-                                                                                                    onClick={() => insertEditMention(c)}
-                                                                                                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${idx === editMentionIndex ? "bg-gray-100 dark:bg-gray-700" : "hover:bg-gray-50 dark:hover:bg-gray-750"}`}
-                                                                                                >
-                                                                                                    {profileImg ? (
-                                                                                                        <Image src={profileImg} alt="" width={22} height={22} className="rounded-full object-cover" />
-                                                                                                    ) : (
-                                                                                                        <div className="w-[22px] h-[22px] rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-[10px] font-medium text-gray-500">{c.name.charAt(0)}</div>
-                                                                                                    )}
-                                                                                                    <span className="text-gray-900 dark:text-white">{c.name}</span>
-                                                                                                </button>
-                                                                                            );
-                                                                                        })}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        ) : (
-                                                                            <>
-                                                                                <p className="text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 pr-14">{renderNoteWithMentions(note.note)}</p>
-                                                                                <div className="flex items-center gap-1.5 mt-1">
-                                                                                    <Popover
-                                                                                        open={editingNoteDate?.noteId === note.id && editingNoteDate?.contactId === contact.id}
-                                                                                        modal={false}
-                                                                                    >
-                                                                                        <PopoverTrigger asChild>
-                                                                                            <button
-                                                                                                className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors flex items-center gap-1"
-                                                                                                title="Click to change date"
-                                                                                                onClick={() => setEditingNoteDate({ noteId: note.id, contactId: contact.id, currentDate: new Date(note.created_at) })}
-                                                                                            >
-                                                                                                <Calendar className="h-2.5 w-2.5" />
-                                                                                                {formatTimeAgo(note.created_at)}
-                                                                                            </button>
-                                                                                        </PopoverTrigger>
-                                                                                        <PopoverContent
-                                                                                            className="w-auto p-0"
-                                                                                            align="start"
-                                                                                            onInteractOutside={(e) => e.preventDefault()}
-                                                                                            onPointerDownOutside={(e) => e.preventDefault()}
-                                                                                            onFocusOutside={(e) => e.preventDefault()}
-                                                                                            onEscapeKeyDown={(e) => e.preventDefault()}
-                                                                                        >
-                                                                                            <div className="flex items-center justify-between px-3 pt-2">
-                                                                                                <span className="text-xs font-medium text-gray-500">Change date</span>
-                                                                                                <button
-                                                                                                    onClick={() => setEditingNoteDate(null)}
-                                                                                                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                                                                                                >
-                                                                                                    <X className="h-3 w-3" />
-                                                                                                </button>
-                                                                                            </div>
-                                                                                            <CalendarPicker
-                                                                                                mode="single"
-                                                                                                selected={editingNoteDate?.currentDate}
-                                                                                                onSelect={(date) => {
-                                                                                                    if (date) {
-                                                                                                        const originalDate = new Date(note.created_at);
-                                                                                                        date.setHours(originalDate.getHours(), originalDate.getMinutes(), originalDate.getSeconds());
-                                                                                                        handleUpdateNoteDate(note.id, contact.id, date);
-                                                                                                    }
-                                                                                                }}
-                                                                                                disabled={(date: Date) => date > new Date()}
-                                                                                                initialFocus
-                                                                                            />
-                                                                                            <div className="p-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 text-center">
-                                                                                                {editNoteDateLoading ? "Saving..." : "Select a new date"}
-                                                                                            </div>
-                                                                                        </PopoverContent>
-                                                                                    </Popover>
-                                                                                    {isAutoNote && (
-                                                                                        <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full">
-                                                                                            {note.source_type === "auto_summary" ? "ai summary" : "auto"}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                {/* Edit/Delete buttons */}
-                                                                                <div className="absolute top-0.5 right-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                                    <button
-                                                                                        onClick={() => { setEditingNote({ noteId: note.id, contactId: contact.id }); setEditNoteText(note.note); initializeEditMentions(note.note); }}
-                                                                                        className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                                                                                        title="Edit note"
-                                                                                    >
-                                                                                        <Pencil className="h-3 w-3" />
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => handleDeleteNote(note.id, contact.id)}
-                                                                                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-md hover:bg-red-50 dark:hover:bg-red-900/20"
-                                                                                        title="Delete note"
-                                                                                    >
-                                                                                        <Trash2 className="h-3 w-3" />
-                                                                                    </button>
-                                                                                </div>
-                                                                            </>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                </div>
-
-                                </div>
-                                ) : profilePanelTab === "contact" ? (
-                                /* Contact Tab */
-                                <div className="px-6 py-4 space-y-5">
-                                    {/* Phone & Email */}
-                                    <div>
-                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3">Phone & Email</h3>
-                                        <div className="space-y-1.5">
-                                            {(contact.contact_info || []).map(info => (
-                                                <div key={info.id} className="flex items-center gap-2 group/info">
-                                                    {info.type === 'phone' ? <Phone className="h-3.5 w-3.5 text-gray-400" /> : <Mail className="h-3.5 w-3.5 text-gray-400" />}
-                                                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                                                        {info.type === 'phone'
-                                                            ? info.value.replace(/^\+?1?(\d{3})(\d{3})(\d{4})$/, '+1 ($1) $2-$3').replace(/^\+(\d{1,3})(\d{3})(\d{3})(\d{4})$/, '+$1 ($2) $3-$4')
-                                                            : info.value}
-                                                    </span>
-                                                    <button
-                                                        onClick={() => handleDeleteContactInfo(info.id, contact.id)}
-                                                        className="p-0.5 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover/info:opacity-100"
-                                                        title="Remove"
-                                                    >
-                                                        <X className="h-3 w-3" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            {addingContactInfoFor === contact.id ? (
-                                                <div className="flex items-center gap-2">
-                                                    <select
-                                                        value={contactInfoType}
-                                                        onChange={(e) => setContactInfoType(e.target.value as 'phone' | 'email')}
-                                                        className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-600"
-                                                    >
-                                                        <option value="phone">Phone</option>
-                                                        <option value="email">Email</option>
-                                                    </select>
-                                                    <input
-                                                        type={contactInfoType === 'email' ? 'email' : 'tel'}
-                                                        value={contactInfoValue}
-                                                        onChange={(e) => setContactInfoValue(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === "Enter" && contactInfoValue.trim()) handleAddContactInfo(contact.id);
-                                                            else if (e.key === "Escape") { setAddingContactInfoFor(null); setContactInfoValue(""); }
-                                                        }}
-                                                        placeholder={contactInfoType === 'phone' ? '555-123-4567' : 'email@example.com'}
-                                                        autoFocus
-                                                        className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600 w-36"
-                                                    />
-                                                    <button onClick={() => handleAddContactInfo(contact.id)} disabled={!contactInfoValue.trim() || contactInfoLoading} className="p-1 text-gray-700 hover:text-gray-700 disabled:text-gray-400">
-                                                        {contactInfoLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                                                    </button>
-                                                    <button onClick={() => { setAddingContactInfoFor(null); setContactInfoValue(""); }} className="p-1 text-gray-400 hover:text-gray-600">
-                                                        <X className="h-3 w-3" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={() => setAddingContactInfoFor(contact.id)}
-                                                    className="flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
-                                                >
-                                                    <Plus className="h-3 w-3" />
-                                                    Add phone or email
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                </div>
-                                ) : (
-                                /* Professional Tab */
-                                <div className="px-6 py-4">
-                                    {(() => {
-                                        // Find LinkedIn import note and parse it
-                                        const linkedInNote = contact.notes.find(n => n.note.includes("LinkedIn Profile Import"));
-                                        const parsed = linkedInNote ? parseLinkedInNote(linkedInNote.note) : null;
-                                        const li = contact.linkedin_profile;
-
-                                        if (!parsed && !li) {
-                                            return (
-                                                <div className="flex flex-col items-center justify-center py-16 text-center">
-                                                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-                                                        <Briefcase className="h-5 w-5 text-gray-400" />
-                                                    </div>
-                                                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">No professional data</p>
-                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 max-w-[220px]">Link a LinkedIn profile to see experience, education, and more</p>
-                                                </div>
-                                            );
-                                        }
-
-                                        return (
-                                            <div className="space-y-6">
-                                                {/* Headline & Location */}
-                                                {(parsed?.headline || li?.headline) && (
-                                                    <div>
-                                                        <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-relaxed">
-                                                            {parsed?.headline || li?.headline}
-                                                        </p>
-                                                        {(parsed?.location || li?.location) && (
-                                                            <div className="flex items-center gap-1.5 mt-1.5">
-                                                                <MapPin className="h-3 w-3 text-gray-400" />
-                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{parsed?.location || li?.location}</span>
-                                                            </div>
-                                                        )}
-                                                        {(parsed?.linkedinUrl || li?.linkedin_url) && (
-                                                            <a
-                                                                href={parsed?.linkedinUrl || li?.linkedin_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1 mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                                                            >
-                                                                <ExternalLink className="h-3 w-3" />
-                                                                View LinkedIn profile
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {/* About */}
-                                                {parsed?.about && (
-                                                    <div>
-                                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-                                                            <User className="h-3 w-3" />
-                                                            About
-                                                        </h3>
-                                                        <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
-                                                            {parsed.about}
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {/* Experience */}
-                                                {parsed && parsed.experience.length > 0 && (
-                                                    <div>
-                                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                                            <Briefcase className="h-3 w-3" />
-                                                            Experience
-                                                        </h3>
-                                                        <div className="relative pl-5">
-                                                            {parsed.experience.length > 1 && (
-                                                                <div className="absolute left-[3px] top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700/60" />
-                                                            )}
-                                                            {parsed.experience.map((exp, i) => (
-                                                                <div key={i} className="relative pb-4 last:pb-0">
-                                                                    <div className="absolute -left-5 top-[6px] w-[7px] h-[7px] rounded-full bg-gray-300 dark:bg-gray-600 ring-[3px] ring-white dark:ring-gray-900" />
-                                                                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-snug">{exp.title}</p>
-                                                                    {exp.company && (
-                                                                        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">{exp.company}</p>
-                                                                    )}
-                                                                    {exp.dates && (
-                                                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{exp.dates}</p>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Education */}
-                                                {parsed && parsed.education.length > 0 && (
-                                                    <div>
-                                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                                            <GraduationCap className="h-3 w-3" />
-                                                            Education
-                                                        </h3>
-                                                        <div className="relative pl-5">
-                                                            {parsed.education.length > 1 && (
-                                                                <div className="absolute left-[3px] top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700/60" />
-                                                            )}
-                                                            {parsed.education.map((edu, i) => (
-                                                                <div key={i} className="relative pb-4 last:pb-0">
-                                                                    <div className="absolute -left-5 top-[6px] w-[7px] h-[7px] rounded-full bg-gray-300 dark:bg-gray-600 ring-[3px] ring-white dark:ring-gray-900" />
-                                                                    <p className="text-[13px] font-medium text-gray-900 dark:text-white leading-snug">{edu.school}</p>
-                                                                    {edu.degree && (
-                                                                        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">{edu.degree}</p>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Raw LinkedIn note fallback if no parsed sections */}
-                                                {parsed && !parsed.about && parsed.experience.length === 0 && parsed.education.length === 0 && linkedInNote && (
-                                                    <div>
-                                                        <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-                                                            <FileText className="h-3 w-3" />
-                                                            LinkedIn Import
-                                                        </h3>
-                                                        <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300 whitespace-pre-line">
-                                                            {linkedInNote.note}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                                )}
-
-                            </SheetContent>
-                        </>
-                    );
-                })()}
-            </Sheet>
+            <ProfilePanel
+                selectedContactId={selectedContactId}
+                contacts={contacts}
+                lists={lists}
+                allLocations={allLocations}
+                contactMessages={contactMessages}
+                profilePanelExpanded={profilePanelExpanded}
+                setProfilePanelExpanded={setProfilePanelExpanded}
+                profilePanelTab={profilePanelTab}
+                setProfilePanelTab={setProfilePanelTab}
+                profileMenuOpen={profileMenuOpen}
+                setProfileMenuOpen={setProfileMenuOpen}
+                editingNameFor={editingNameFor}
+                setEditingNameFor={setEditingNameFor}
+                editName={editName}
+                setEditName={setEditName}
+                editNameLoading={editNameLoading}
+                editingBioFor={editingBioFor}
+                setEditingBioFor={setEditingBioFor}
+                editBio={editBio}
+                setEditBio={setEditBio}
+                editBioLoading={editBioLoading}
+                editingLocationFor={editingLocationFor}
+                setEditingLocationFor={setEditingLocationFor}
+                editLocation={editLocation}
+                setEditLocation={setEditLocation}
+                editLocationLoading={editLocationLoading}
+                locationSuggestionIndex={locationSuggestionIndex}
+                setLocationSuggestionIndex={setLocationSuggestionIndex}
+                newNote={newNote}
+                setNewNote={setNewNote}
+                addingNoteFor={addingNoteFor}
+                setAddingNoteFor={setAddingNoteFor}
+                savingNote={savingNote}
+                editingNote={editingNote}
+                setEditingNote={setEditingNote}
+                editNoteText={editNoteText}
+                setEditNoteText={setEditNoteText}
+                editNoteLoading={editNoteLoading}
+                editingNoteDate={editingNoteDate}
+                setEditingNoteDate={setEditingNoteDate}
+                editNoteDateLoading={editNoteDateLoading}
+                mentionQuery={mentionQuery}
+                mentionPosition={mentionPosition}
+                mentionIndex={mentionIndex}
+                setMentionIndex={setMentionIndex}
+                pendingMentions={pendingMentions}
+                editMentionQuery={editMentionQuery}
+                editMentionPosition={editMentionPosition}
+                editMentionIndex={editMentionIndex}
+                setEditMentionIndex={setEditMentionIndex}
+                editPendingMentions={editPendingMentions}
+                noteInputRef={noteInputRef}
+                editNoteInputRef={editNoteInputRef}
+                mentionSuggestions={mentionSuggestions}
+                editMentionSuggestions={editMentionSuggestions}
+                newCompliment={newCompliment}
+                setNewCompliment={setNewCompliment}
+                newComplimentContext={newComplimentContext}
+                setNewComplimentContext={setNewComplimentContext}
+                showComplimentInput={showComplimentInput}
+                setShowComplimentInput={setShowComplimentInput}
+                addingComplimentFor={addingComplimentFor}
+                editingCompliment={editingCompliment}
+                setEditingCompliment={setEditingCompliment}
+                editComplimentText={editComplimentText}
+                setEditComplimentText={setEditComplimentText}
+                editComplimentContext={editComplimentContext}
+                setEditComplimentContext={setEditComplimentContext}
+                editComplimentLoading={editComplimentLoading}
+                addingLinkFor={addingLinkFor}
+                setAddingLinkFor={setAddingLinkFor}
+                linkInput={linkInput}
+                setLinkInput={setLinkInput}
+                linkLoading={linkLoading}
+                linkError={linkError}
+                addingContactInfoFor={addingContactInfoFor}
+                setAddingContactInfoFor={setAddingContactInfoFor}
+                contactInfoType={contactInfoType}
+                setContactInfoType={setContactInfoType}
+                contactInfoValue={contactInfoValue}
+                setContactInfoValue={setContactInfoValue}
+                contactInfoLoading={contactInfoLoading}
+                uploadingImageFor={uploadingImageFor}
+                hoveringAvatarFor={hoveringAvatarFor}
+                setHoveringAvatarFor={setHoveringAvatarFor}
+                imageInputRef={imageInputRef}
+                showListDropdownFor={showListDropdownFor}
+                setShowListDropdownFor={setShowListDropdownFor}
+                loadingMessagesFor={loadingMessagesFor}
+                showMessagesFor={showMessagesFor}
+                onClose={() => {
+                    setSelectedContactId(null);
+                    setShowListDropdownFor(null);
+                    setProfilePanelExpanded(false);
+                    setEditingNoteDate(null);
+                    setProfilePanelTab("overview");
+                    setProfileMenuOpen(false);
+                }}
+                handleUpdateName={handleUpdateName}
+                handleUpdateBio={handleUpdateBio}
+                handleUpdateLocation={handleUpdateLocation}
+                handleAddNote={handleAddNote}
+                handleEditNote={handleEditNote}
+                handleDeleteNote={handleDeleteNote}
+                handleUpdateNoteDate={handleUpdateNoteDate}
+                handleAddCompliment={handleAddCompliment}
+                handleEditCompliment={handleEditCompliment}
+                handleDeleteCompliment={handleDeleteCompliment}
+                handleAddLink={handleAddLink}
+                handleAddContactInfo={handleAddContactInfo}
+                handleDeleteContactInfo={handleDeleteContactInfo}
+                handleAddToList={handleAddToList}
+                handleRemoveFromList={handleRemoveFromList}
+                handleNoteInputChange={handleNoteInputChange}
+                handleEditNoteInputChange={handleEditNoteInputChange}
+                handleNoteKeyDown={handleNoteKeyDown}
+                handleEditNoteKeyDown={handleEditNoteKeyDown}
+                insertMention={insertMention}
+                insertEditMention={insertEditMention}
+                toggleMessagesForContact={toggleMessagesForContact}
+                renderNoteWithMentions={renderNoteWithMentions}
+                initializeEditMentions={initializeEditMentions}
+                setContacts={setContacts}
+                setMentionQuery={setMentionQuery}
+                setMentionPosition={setMentionPosition}
+                setPendingMentions={setPendingMentions}
+                setEditMentionQuery={setEditMentionQuery}
+                setEditMentionPosition={setEditMentionPosition}
+                setEditPendingMentions={setEditPendingMentions}
+            />
 
             {/* Add Todo Modal */}
             {showAddTodoModal && addTodoForContact && (
@@ -4791,339 +3021,39 @@ export default function RolodexPage() {
                     {!loading && contacts.length > 0 && (
                         <div className="flex gap-6">
                             {/* Left Sidebar - Lists Navigation */}
-                            <div className="w-44 flex-shrink-0 space-y-1">
-                                {/* Main filters */}
-                                <button
-                                    onClick={() => setActiveList("curated")}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "curated"
-                                        ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                        }`}
-                                >
-                                    <Sparkles className="h-4 w-4" />
-                                    <span className="flex-1 text-left">Curated</span>
-                                    <span className="text-xs opacity-60">{contacts.filter(c => c.notes.some(n => n.source_type !== "website_analysis")).length}</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveList("all")}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "all"
-                                        ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                        }`}
-                                >
-                                    <Users className="h-4 w-4" />
-                                    <span className="flex-1 text-left">All</span>
-                                    <span className="text-xs opacity-60">{contacts.length}</span>
-                                </button>
-
-                                {/* Divider */}
-                                {lists.filter(l => l.pinned).length > 0 && (
-                                    <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
-                                )}
-
-                                {/* Pinned lists */}
-                                {lists.filter(l => l.pinned).map((list) => (
-                                    <div key={list.id} className="relative">
-                                        <button
-                                            onClick={() => setActiveList(activeList === list.id ? "curated" : list.id)}
-                                            onContextMenu={(e) => {
-                                                e.preventDefault();
-                                                setListContextMenu({ x: e.clientX, y: e.clientY, listId: list.id });
-                                            }}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === list.id
-                                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
-                                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                                }`}
-                                        >
-                                            {list.emoji ? (
-                                                <span className="text-sm leading-none flex-shrink-0">{list.emoji}</span>
-                                            ) : (
-                                                <div
-                                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                                    style={{ backgroundColor: list.color }}
-                                                />
-                                            )}
-                                            {renamingListId === list.id ? (
-                                                <input
-                                                    autoFocus
-                                                    value={renameListValue}
-                                                    onChange={(e) => setRenameListValue(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === "Enter") handleRenameList(list.id, renameListValue);
-                                                        if (e.key === "Escape") setRenamingListId(null);
-                                                    }}
-                                                    onBlur={() => handleRenameList(list.id, renameListValue)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="flex-1 text-left text-sm bg-transparent border-b border-gray-300 dark:border-gray-600 outline-none"
-                                                />
-                                            ) : (
-                                                <span className="flex-1 text-left truncate">{list.name}</span>
-                                            )}
-                                            <span className="text-xs opacity-60">{list.member_count}</span>
-                                        </button>
-
-                                        {/* Emoji picker popover */}
-                                        {listPickerOpen === list.id && (
-                                            <>
-                                                <div className="fixed inset-0 z-40" onClick={() => setListPickerOpen(null)} />
-                                                <div className="absolute left-0 top-full mt-1 z-50">
-                                                    <Picker
-                                                        data={data}
-                                                        onEmojiSelect={(emoji: { native: string }) => {
-                                                            handleUpdateListAppearance(list.id, { emoji: emoji.native });
-                                                            setListPickerOpen(null);
-                                                        }}
-                                                        theme="light"
-                                                        previewPosition="none"
-                                                        skinTonePosition="none"
-                                                        perLine={8}
-                                                    />
-                                                    {list.emoji && (
-                                                        <div className="bg-white dark:bg-gray-800 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-xl px-3 py-2">
-                                                            <button
-                                                                onClick={() => {
-                                                                    handleUpdateListAppearance(list.id, { emoji: "" });
-                                                                    setListPickerOpen(null);
-                                                                }}
-                                                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                                            >
-                                                                Remove emoji
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
-
-                                {/* Divider before actions */}
-                                <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
-
-                                {/* New List */}
-                                {showNewListInput ? (
-                                    <div className="px-1 space-y-1">
-                                        <input
-                                            type="text"
-                                            value={newListName}
-                                            onChange={(e) => setNewListName(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter" && newListName.trim()) {
-                                                    handleCreateList();
-                                                } else if (e.key === "Escape") {
-                                                    setShowNewListInput(false);
-                                                    setNewListName("");
-                                                }
-                                            }}
-                                            placeholder="List name..."
-                                            autoFocus
-                                            className="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-600"
-                                        />
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={handleCreateList}
-                                                disabled={!newListName.trim() || creatingList}
-                                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 rounded transition-colors"
-                                            >
-                                                {creatingList ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                ) : (
-                                                    <Check className="h-3 w-3" />
-                                                )}
-                                                Save
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setShowNewListInput(false);
-                                                    setNewListName("");
-                                                }}
-                                                className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setShowNewListInput(true)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                        <span>New List</span>
-                                    </button>
-                                )}
-
-                                {/* New Contact */}
-                                <button
-                                    onClick={() => setShowAddModal(true)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    <span>New Contact</span>
-                                </button>
-
-                                {/* Discover */}
-                                <button
-                                    onClick={async () => {
-                                        const opening = !showDiscovery;
-                                        setShowDiscovery(opening);
-                                        if (opening && !discoveryUsername) {
-                                            // Fetch the last replied-to username
-                                            setDiscoveryPrefillLoading(true);
-                                            try {
-                                                const res = await fetch("/api/rolodex/last-reply", {
-                                                    credentials: "include",
-                                                });
-                                                const data = await res.json();
-                                                if (data.username) {
-                                                    setDiscoveryUsername(data.username);
-                                                }
-                                            } catch (e) {
-                                                // Silently fail - not critical
-                                            } finally {
-                                                setDiscoveryPrefillLoading(false);
-                                            }
-                                        }
-                                    }}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${showDiscovery
-                                        ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                        }`}
-                                >
-                                    <Compass className="h-4 w-4" />
-                                    <span>Discover</span>
-                                </button>
-
-                                {/* More lists dropdown */}
-                                {lists.length > 0 && (
-                                    <div className="relative" ref={listsDropdownRef}>
-                                        <button
-                                            onClick={() => setShowListsDropdown(!showListsDropdown)}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${showListsDropdown
-                                                ? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                                : hiddenListIds.size > 0
-                                                    ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
-                                                    : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                                }`}
-                                            title={hiddenListIds.size > 0 ? `${hiddenListIds.size} list${hiddenListIds.size !== 1 ? 's' : ''} hidden` : "Manage lists"}
-                                        >
-                                            <MoreHorizontal className="h-4 w-4" />
-                                            <span className="flex-1 text-left">Manage Lists</span>
-                                            {hiddenListIds.size > 0 && (
-                                                <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center">
-                                                    {hiddenListIds.size}
-                                                </span>
-                                            )}
-                                        </button>
-
-                                        {showListsDropdown && (
-                                            <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1 max-h-80 overflow-y-auto">
-                                                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                                                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                                        Manage Lists
-                                                    </p>
-                                                    {hiddenListIds.size > 0 && (
-                                                        <button
-                                                            onClick={() => setHiddenListIds(new Set())}
-                                                            className="text-xs text-gray-700 dark:text-gray-400 hover:underline"
-                                                        >
-                                                            Show all
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {lists.map((list) => {
-                                                    const isHidden = hiddenListIds.has(list.id);
-                                                    return (
-                                                        <div
-                                                            key={list.id}
-                                                            className={`flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isHidden ? "opacity-50" : ""}`}
-                                                        >
-                                                            <button
-                                                                onClick={() => {
-                                                                    setActiveList(activeList === list.id ? "curated" : list.id);
-                                                                    setShowListsDropdown(false);
-                                                                }}
-                                                                className="flex items-center gap-2 flex-1 min-w-0"
-                                                            >
-                                                                {list.emoji ? (
-                                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
-                                                                ) : (
-                                                                    <div
-                                                                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                                                        style={{ backgroundColor: list.color }}
-                                                                    />
-                                                                )}
-                                                                <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
-                                                                    {list.name}
-                                                                </span>
-                                                                <span className="text-xs text-gray-400">
-                                                                    {list.member_count}
-                                                                </span>
-                                                            </button>
-                                                            <div className="flex items-center gap-0.5">
-                                                                {/* Hide/Show toggle */}
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setHiddenListIds(prev => {
-                                                                            const next = new Set(prev);
-                                                                            if (next.has(list.id)) {
-                                                                                next.delete(list.id);
-                                                                            } else {
-                                                                                next.add(list.id);
-                                                                            }
-                                                                            return next;
-                                                                        });
-                                                                    }}
-                                                                    className={`p-1 rounded transition-colors ${isHidden
-                                                                        ? "text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                                                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                                        }`}
-                                                                    title={isHidden ? "Show in list" : "Hide from list"}
-                                                                >
-                                                                    {isHidden ? (
-                                                                        <EyeOff className="h-3.5 w-3.5" />
-                                                                    ) : (
-                                                                        <Eye className="h-3.5 w-3.5" />
-                                                                    )}
-                                                                </button>
-                                                            {/* Pin toggle */}
-                                                            <button
-                                                                onClick={() => handleToggleListPin(list.id, !list.pinned)}
-                                                                className={`p-1 rounded transition-colors ${list.pinned
-                                                                    ? "text-gray-600 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/20"
-                                                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                                                    }`}
-                                                                title={list.pinned ? "Unpin from bar" : "Pin to bar"}
-                                                            >
-                                                                {list.pinned ? (
-                                                                    <Pin className="h-3.5 w-3.5" />
-                                                                ) : (
-                                                                    <PinOff className="h-3.5 w-3.5" />
-                                                                )}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                            {(lists.filter(l => !l.pinned).length > 0 || hiddenListIds.size > 0) && (
-                                                <div className="px-3 py-1.5 border-t border-gray-100 dark:border-gray-700 mt-1 flex items-center gap-3">
-                                                    {lists.filter(l => !l.pinned).length > 0 && (
-                                                        <p className="text-xs text-gray-400">
-                                                            {lists.filter(l => !l.pinned).length} unpinned
-                                                        </p>
-                                                    )}
-                                                    {hiddenListIds.size > 0 && (
-                                                        <p className="text-xs text-red-400">
-                                                            {hiddenListIds.size} hidden
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            </div>
+                            <ListsSidebar
+                                contacts={contacts}
+                                lists={lists}
+                                activeList={activeList}
+                                setActiveList={setActiveList}
+                                showNewListInput={showNewListInput}
+                                setShowNewListInput={setShowNewListInput}
+                                newListName={newListName}
+                                setNewListName={setNewListName}
+                                creatingList={creatingList}
+                                handleCreateList={handleCreateList}
+                                renamingListId={renamingListId}
+                                setRenamingListId={setRenamingListId}
+                                renameListValue={renameListValue}
+                                setRenameListValue={setRenameListValue}
+                                handleRenameList={handleRenameList}
+                                listPickerOpen={listPickerOpen}
+                                setListPickerOpen={setListPickerOpen}
+                                handleUpdateListAppearance={handleUpdateListAppearance}
+                                setListContextMenu={setListContextMenu}
+                                setShowAddModal={setShowAddModal}
+                                showDiscovery={showDiscovery}
+                                setShowDiscovery={setShowDiscovery}
+                                discoveryUsername={discoveryUsername}
+                                setDiscoveryUsername={setDiscoveryUsername}
+                                setDiscoveryPrefillLoading={setDiscoveryPrefillLoading}
+                                showListsDropdown={showListsDropdown}
+                                setShowListsDropdown={setShowListsDropdown}
+                                listsDropdownRef={listsDropdownRef}
+                                hiddenListIds={hiddenListIds}
+                                setHiddenListIds={setHiddenListIds}
+                                handleToggleListPin={handleToggleListPin}
+                            />
 
                             {/* Main Content Area - Filter + Table */}
                             <div className="flex-1 min-w-0">
@@ -5180,371 +3110,41 @@ export default function RolodexPage() {
 
                     {/* Discovery Panel */}
                     {showDiscovery && (
-                        <div className="mb-6 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <Compass className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                                            Discover Connections
-                                        </h3>
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setShowDiscovery(false);
-                                            setDiscoveryResult(null);
-                                            setDiscoveryUsername("");
-                                            setDiscoveryError(null);
-                                        }}
-                                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                    See who someone interacted with most recently on X
-                                </p>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-1">
-                                        {discoveryPrefillLoading ? (
-                                            <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 animate-spin" />
-                                        ) : (
-                                            <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                        )}
-                                        <input
-                                            type="text"
-                                            value={discoveryUsername}
-                                            onChange={(e) => setDiscoveryUsername(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter" && discoveryUsername.trim()) {
-                                                    handleDiscoverySearch();
-                                                }
-                                            }}
-                                            placeholder={discoveryPrefillLoading ? "Loading suggestion..." : "Enter X username..."}
-                                            className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent text-sm"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={handleDiscoverySearch}
-                                        disabled={discoveryLoading || !discoveryUsername.trim()}
-                                        className="px-5 py-2.5 bg-gray-900 hover:bg-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors flex items-center gap-2 text-sm"
-                                    >
-                                        {discoveryLoading ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Search className="h-4 w-4" />
-                                        )}
-                                        Search
-                                    </button>
-                                </div>
-                                {discoveryError && (
-                                    <p className="mt-3 text-sm text-red-600 dark:text-red-400">{discoveryError}</p>
-                                )}
-                            </div>
-
-                            {/* Results */}
-                            {discoveryResult && (
-                                <div className="p-5">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                @{discoveryResult.username}
-                                            </span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                · {discoveryResult.tweetCount} tweets analyzed
-                                            </span>
-                                        </div>
-                                        <a
-                                            href={`https://x.com/${discoveryResult.username}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline flex items-center gap-1"
-                                        >
-                                            View profile
-                                            <ExternalLink className="h-3 w-3" />
-                                        </a>
-                                    </div>
-
-                                    {discoveryResult.topInteractions.filter(i => i.username.toLowerCase() !== "ashebytes").length === 0 ? (
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
-                                            No interactions found in the last 7 days
-                                        </p>
-                                    ) : (
-                                        <div className="flex flex-wrap gap-2">
-                                            {discoveryResult.topInteractions.filter(i => i.username.toLowerCase() !== "ashebytes").map((interaction) => {
-                                                const rolodexContact = contacts.find(
-                                                    (c) => c.x_profile?.username.toLowerCase() === interaction.username.toLowerCase()
-                                                );
-                                                const isInRolodex = !!rolodexContact;
-                                                const profileImageUrl = rolodexContact?.custom_profile_image_url || rolodexContact?.x_profile?.profile_image_url?.replace("_normal", "_bigger");
-
-                                                return (
-                                                    <div
-                                                        key={interaction.username}
-                                                        className={`group flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-colors ${isInRolodex
-                                                            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50"
-                                                            : "bg-white dark:bg-gray-900/60 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
-                                                            }`}
-                                                    >
-                                                        {/* Profile image */}
-                                                        {profileImageUrl ? (
-                                                            <Image
-                                                                src={profileImageUrl}
-                                                                alt={interaction.username}
-                                                                width={24}
-                                                                height={24}
-                                                                className="rounded-full"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                                                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400">
-                                                                    {interaction.username.charAt(0).toUpperCase()}
-                                                                </span>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Username */}
-                                                        <a
-                                                            href={interaction.profileUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-                                                        >
-                                                            @{interaction.username}
-                                                        </a>
-
-                                                        {/* Count */}
-                                                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                                                            {interaction.count}
-                                                        </span>
-
-                                                        {/* Add button */}
-                                                        {!isInRolodex && (
-                                                            <button
-                                                                onClick={() => handleAddFromDiscovery(interaction.username)}
-                                                                className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-all"
-                                                                title="Add to People"
-                                                            >
-                                                                <Plus className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        )}
-
-                                                        {/* Check for in rolodex */}
-                                                        {isInRolodex && (
-                                                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-
-
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                        <DiscoveryPanel
+                            discoveryUsername={discoveryUsername}
+                            setDiscoveryUsername={setDiscoveryUsername}
+                            discoveryLoading={discoveryLoading}
+                            discoveryPrefillLoading={discoveryPrefillLoading}
+                            discoveryResult={discoveryResult}
+                            discoveryError={discoveryError}
+                            contacts={contacts}
+                            onSearch={handleDiscoverySearch}
+                            onAddFromDiscovery={handleAddFromDiscovery}
+                            onClose={() => {
+                                setShowDiscovery(false);
+                                setDiscoveryResult(null);
+                                setDiscoveryUsername("");
+                                setDiscoveryError(null);
+                            }}
+                        />
+                    )}
 
                                     {/* Table */}
-                                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
-                                        {/* Table Header */}
-                                        <div className="hidden sm:grid sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                            <div>Contact</div>
-                                            <div>Bio</div>
-                                            <div>Location</div>
-                                            <div>Lists</div>
-                                            <div>Last Note</div>
-                                            <div></div>
-                                        </div>
-
-                                        {/* Table Body */}
-                                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {contacts
-                                    .filter((contact) => {
-                                        // Hidden contacts filter
-                                        if (contact.hidden && !showHiddenContacts) {
-                                            return false;
-                                        }
-                                        // Curated filter - contacts with any note
-                                        if (activeList === "curated") {
-                                            if (contact.notes.length === 0) return false;
-                                        }
-                                        // List filter
-                                        if (typeof activeList === "number") {
-                                            const list = lists.find((l) => l.id === activeList);
-                                            if (!list?.member_ids.includes(contact.id)) return false;
-                                        }
-                                        // Hidden lists filter - exclude contacts in hidden lists
-                                        if (hiddenListIds.size > 0) {
-                                            const contactListIds = lists
-                                                .filter(l => l.member_ids.includes(contact.id))
-                                                .map(l => l.id);
-                                            if (contactListIds.some(id => hiddenListIds.has(id))) {
-                                                return false;
-                                            }
-                                        }
-                                        // Search filter
-                                        if (searchQuery.trim()) {
-                                            const query = searchQuery.toLowerCase();
-                                            const xp = contact.x_profile;
-                                            const li = contact.linkedin_profile;
-                                            return (
-                                                contact.name.toLowerCase().includes(query) ||
-                                                xp?.username?.toLowerCase().includes(query) ||
-                                                xp?.bio?.toLowerCase().includes(query) ||
-                                                xp?.location?.toLowerCase().includes(query) ||
-                                                li?.headline?.toLowerCase().includes(query) ||
-                                                li?.location?.toLowerCase().includes(query) ||
-                                                li?.linkedin_url?.toLowerCase().includes(query) ||
-                                                contact.notes.some((n) => n.note.toLowerCase().includes(query))
-                                            );
-                                        }
-                                        return true;
-                                    })
-                                    .sort((a, b) => {
-                                        // Sort by most recent activity (touchpoint, note, or created_at)
-                                        const getLastActivity = (c: Contact) => {
-                                            const dates = [
-                                                c.last_touchpoint,
-                                                c.notes.find(n => !n.note.includes("LinkedIn Profile Import"))?.created_at,
-                                                c.created_at,
-                                            ].filter(Boolean) as string[];
-                                            return Math.max(...dates.map(d => new Date(d).getTime()));
-                                        };
-                                        return getLastActivity(b) - getLastActivity(a);
-                                    })
-                                    .map((contact) => {
-                                        const isSelected = selectedContacts.has(contact.id);
-                                        const xp = contact.x_profile;
-                                        const li = contact.linkedin_profile;
-                                        const lastNote = contact.notes.find(n => !n.note.includes("LinkedIn Profile Import"));
-                                        // Get profile image: prioritize custom, then X, then LinkedIn
-                                        const profileImageUrl = contact.custom_profile_image_url || xp?.profile_image_url || li?.profile_image_url;
-
-                                        return (
-                                            <div key={contact.id} data-contact-id={contact.id}>
-                                                {/* Row */}
-                                                <div
-                                                    className={`grid grid-cols-[1fr,auto] sm:grid-cols-[200px,1fr,120px,120px,1fr,40px] gap-4 items-center px-4 py-3 cursor-pointer transition-colors select-none ${isSelected
-                                                        ? "bg-gray-50 dark:bg-gray-800/20"
-                                                        : selectedContactId === contact.id
-                                                            ? "bg-gray-50/50 dark:bg-gray-800/10 border-l-2 border-gray-600"
-                                                            : contact.hidden
-                                                                ? "bg-gray-50/50 dark:bg-gray-900/20 opacity-60"
-                                                                : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
-                                                        }`}
-                                                    onClick={(e) => handleRowClick(contact.id, e)}
-                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                    onContextMenu={(e) => handleContextMenu(contact.id, e)}
-                                                >
-                                                    {/* Contact Cell */}
-                                                    <div className="flex items-center gap-3 min-w-0">
-                                                        {/* Avatar */}
-                                                        <div className="relative flex-shrink-0">
-                                                            {profileImageUrl ? (
-                                                                <Image
-                                                                    src={contact.custom_profile_image_url || (xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url || "")}
-                                                                    alt={contact.name}
-                                                                    width={40}
-                                                                    height={40}
-                                                                    className="rounded-full"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                                                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                                        {contact.name.charAt(0).toUpperCase()}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        {/* Name and handle */}
-                                                        <div className="min-w-0 overflow-hidden">
-                                                            <p
-                                                                className="font-medium text-gray-900 dark:text-white truncate text-sm"
-                                                                title={contact.name}
-                                                            >
-                                                                {contact.name}
-                                                            </p>
-                                                            {xp && (
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                                                    @{xp.username}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Bio/Headline Cell */}
-                                                    <div className="hidden sm:block min-w-0 pr-4">
-                                                        {(contact.custom_bio || xp?.bio || li?.headline) ? (
-                                                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                                                                {contact.custom_bio || xp?.bio || li?.headline}
-                                                            </p>
-                                                        ) : (
-                                                            <span className="text-sm text-gray-400">—</span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Location Cell */}
-                                                    <div className="hidden sm:block min-w-0 pr-4">
-                                                        {(contact.custom_location || xp?.location || li?.location) ? (
-                                                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                                                                {contact.custom_location || xp?.location || li?.location}
-                                                            </p>
-                                                        ) : (
-                                                            <span className="text-sm text-gray-400">—</span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Lists Cell */}
-                                                    <div className="hidden sm:flex items-center gap-1 min-w-0 pr-4 flex-wrap">
-                                                        {lists
-                                                            .filter((l) => l.member_ids.includes(contact.id))
-                                                            .slice(0, 2)
-                                                            .map((list) => (
-                                                                <span
-                                                                    key={list.id}
-                                                                    className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded"
-                                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}20`, color: list.color }}
-                                                                >
-                                                                    {list.emoji ? `${list.emoji} ` : ""}{list.name}
-                                                                </span>
-                                                            ))}
-                                                        {lists.filter((l) => l.member_ids.includes(contact.id)).length > 2 && (
-                                                            <span className="text-[10px] text-gray-400">
-                                                                +{lists.filter((l) => l.member_ids.includes(contact.id)).length - 2}
-                                                            </span>
-                                                        )}
-                                                        {lists.filter((l) => l.member_ids.includes(contact.id)).length === 0 && (
-                                                            <span className="text-sm text-gray-400">—</span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Last Note Cell */}
-                                                    <div className="hidden sm:block min-w-0 pr-2">
-                                                        {lastNote && (
-                                                            <div>
-                                                                <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                                                                    {renderNoteWithMentions(lastNote.note)}
-                                                                </div>
-                                                                <span className="text-xs text-gray-400">
-                                                                    {formatTimeAgo(lastNote.created_at)}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Open Panel Indicator */}
-                                                    <div className="flex items-center justify-end">
-                                                        {selectedContactId === contact.id && (
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                        </div>
-                                    </div>
+                                    <ContactsTable
+                                        contacts={contacts}
+                                        lists={lists}
+                                        selectedContacts={selectedContacts}
+                                        selectedContactId={selectedContactId}
+                                        activeList={activeList}
+                                        searchQuery={searchQuery}
+                                        showHiddenContacts={showHiddenContacts}
+                                        hiddenListIds={hiddenListIds}
+                                        setSelectedContactId={setSelectedContactId}
+                                        setContextMenu={setContextMenu}
+                                        handleRowClick={handleRowClick}
+                                        handleContextMenu={handleContextMenu}
+                                        renderNoteWithMentions={renderNoteWithMentions}
+                                    />
                                 </div>
                             </div>
                         )}
