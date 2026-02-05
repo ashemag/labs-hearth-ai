@@ -4,8 +4,7 @@ import { useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Image from "next/image";
-import { motion } from "framer-motion";
+import HearthLogo from "@/components/HearthLogo";
 import { LiquidMetal } from "@paper-design/shaders-react";
 import AuthHandler from "@/components/AuthHandler";
 
@@ -109,71 +108,20 @@ export default function SignInPage() {
       <div className="w-full max-w-sm mx-auto px-6 relative z-10">
         {/* Logo with pulsing dot */}
         <div className="flex justify-center mb-10">
-          <div className="relative">
-            <Image
-              src="/brand/logo_square_new.png"
-              alt="Hearth"
-              width={40}
-              height={40}
-              priority
-            />
-            {/* Circle to cover the original orange dot */}
-            <div
-              className="absolute w-[14px] h-[14px] rounded-full bg-white"
-              style={{
-                left: '13px',
-                top: '22px',
-              }}
-            />
-            {/* Pulsing orange dot */}
-            <motion.div
-              className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
-              style={{
-                left: '14.5px',
-                top: '23.5px',
-              }}
-              animate={{
-                scale: [1, 1.1, 1],
-                opacity: [0.7, 1, 0.7],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          </div>
+          <HearthLogo />
         </div>
 
         {view === "sent" && (
           // Magic link sent
           <div className="text-center">
             <div className="mb-6">
-              <h2
-                className="text-2xl font-medium tracking-tight"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <h2 className="text-2xl font-medium tracking-tight text-gray-500 text-embossed">
                 Check your email
               </h2>
-              <p
-                className="mt-3 text-sm"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-3 text-sm text-gray-500 text-embossed">
                 We sent a magic link to <span className="font-medium">{email}</span>
               </p>
-              <p
-                className="mt-1 text-sm"
-                style={{
-                  color: '#9ca3af',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-1 text-sm text-gray-400 text-embossed">
                 Click the link to sign in
               </p>
             </div>
@@ -191,31 +139,13 @@ export default function SignInPage() {
           // Not on allowlist
           <div className="text-center">
             <div className="mb-6">
-              <h2
-                className="text-2xl font-medium tracking-tight"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <h2 className="text-2xl font-medium tracking-tight text-gray-500 text-embossed">
                 Not on the list yet
               </h2>
-              <p
-                className="mt-3 text-sm"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-3 text-sm text-gray-500 text-embossed">
                 <span className="font-medium">{email}</span> isn&apos;t on our private beta list.
               </p>
-              <p
-                className="mt-1 text-sm"
-                style={{
-                  color: '#9ca3af',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-1 text-sm text-gray-400 text-embossed">
                 Want to join the waitlist?
               </p>
             </div>
@@ -251,13 +181,7 @@ export default function SignInPage() {
                 <div
                   className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md bg-white"
                 >
-                  <span
-                    className="relative flex items-center justify-center h-full font-medium"
-                    style={{
-                      color: '#6b7280',
-                      textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                    }}
-                  >
+                  <span className="relative flex items-center justify-center h-full font-medium text-gray-500 text-embossed">
                     {loading ? "Joining..." : "Join waitlist"}
                   </span>
                 </div>
@@ -282,31 +206,13 @@ export default function SignInPage() {
           // Successfully joined waitlist
           <div className="text-center">
             <div className="mb-6">
-              <h2
-                className="text-2xl font-medium tracking-tight"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <h2 className="text-2xl font-medium tracking-tight text-gray-500 text-embossed">
                 Chat soon
               </h2>
-              <p
-                className="mt-3 text-sm"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-3 text-sm text-gray-500 text-embossed">
                 We&apos;ll notify <span className="font-medium">{email}</span> when you get access.
               </p>
-              <p
-                className="mt-1 text-sm"
-                style={{
-                  color: '#9ca3af',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-1 text-sm text-gray-400 text-embossed">
                 Thanks for your interest in Hearth
               </p>
             </div>
@@ -324,22 +230,10 @@ export default function SignInPage() {
           // Initial form
           <>
             <div className="text-center mb-8">
-              <h2
-                className="text-2xl font-medium tracking-tight"
-                style={{
-                  color: '#6b7280',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <h2 className="text-2xl font-medium tracking-tight text-gray-500 text-embossed">
                 Sign in
               </h2>
-              <p
-                className="mt-2 text-sm"
-                style={{
-                  color: '#9ca3af',
-                  textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                }}
-              >
+              <p className="mt-2 text-sm text-gray-400 text-embossed">
                 Play with Fire
               </p>
             </div>
@@ -400,13 +294,7 @@ export default function SignInPage() {
                 <div
                   className="absolute inset-[3px] flex items-center justify-center opacity-100 group-hover:opacity-0 transition-opacity duration-200 overflow-hidden rounded-md bg-white"
                 >
-                  <span
-                    className="relative flex items-center justify-center h-full font-medium"
-                    style={{
-                      color: '#6b7280',
-                      textShadow: '0 1px 1px rgba(255, 255, 255, 0.9), 0 -1px 1px rgba(0, 0, 0, 0.1)',
-                    }}
-                  >
+                  <span className="relative flex items-center justify-center h-full font-medium text-gray-500 text-embossed">
                     {loading ? (
                       <span className="flex items-center gap-2">
                         <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">

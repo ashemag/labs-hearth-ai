@@ -95,7 +95,7 @@ async function normalizeTableLocations(
     const updates: LocationUpdate[] = [];
     
     for (const record of records) {
-        const original = record[columnName] as string;
+        const original = (record as unknown as Record<string, unknown>)[columnName] as string;
         const normalized = normalizeLocation(original);
         
         // Skip if no change needed

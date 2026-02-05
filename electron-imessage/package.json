@@ -1,25 +1,29 @@
 {
   "name": "hearth-imessage-sync",
-  "version": "1.0.0",
+  "version": "1.6.0",
   "description": "Sync iMessages to Hearth Rolodex",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac",
+    "build:publish": "electron-builder --mac --publish always"
   },
   "author": "Hearth",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "@electron/notarize": "^2.5.0",
+    "dotenv": "^16.4.7",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0"
   },
   "dependencies": {
-    "sql.js": "^1.10.0"
+    "electron-updater": "^6.3.9",
+    "sql.js": "^1.12.0"
   },
   "build": {
-    "appId": "ai.hearth.imessage-sync",
-    "productName": "Hearth iMessage Sync",
+    "appId": "ai.hearth.app",
+    "productName": "Hearth",
     "icon": "icon.icns",
     "protocols": {
       "name": "Hearth Sync Protocol",
@@ -27,16 +31,34 @@
     },
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dir",
+      "minimumSystemVersion": "12.0",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
+      ],
       "icon": "icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "notarize": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ashemag",
+      "repo": "hearth-imessage-sync",
+      "releaseType": "release"
     },
     "files": [
       "**/*",
-      "!node_modules/.cache"
+      "!node_modules/.cache",
+      "!scripts"
     ],
     "extraResources": [
       {

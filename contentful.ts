@@ -45,9 +45,9 @@ export const getPage = async (slug: string) => {
 
   const response = await contentful.getEntries<TypePageSkeleton>({
     content_type: "page",
-    "fields.slug": slug,
+    "fields.slug": slug as unknown,
     include: 10,
-  });
+  } as Parameters<typeof contentful.getEntries<TypePageSkeleton>>[0]);
 
   const [page] = response.items ?? [];
 
@@ -67,8 +67,8 @@ export const getBlogPostCount = async () => {
   const response = await contentful.getEntries<TypeBlogPostSkeleton>({
     content_type: "blogPost",
     include: 0,
-    select: ["fields.slug"],
-  });
+    select: ["fields.slug"] as unknown,
+  } as Parameters<typeof contentful.getEntries<TypeBlogPostSkeleton>>[0]);
 
   return response.total;
 };
@@ -93,10 +93,10 @@ export const getBlogPost = async (slug: string) => {
 
   const response = await contentful.getEntries<TypeBlogPostSkeleton>({
     content_type: "blogPost",
-    "fields.slug": slug,
+    "fields.slug": slug as unknown,
     limit: 1,
     include: 2,
-  });
+  } as Parameters<typeof contentful.getEntries<TypeBlogPostSkeleton>>[0]);
 
   const [post] = response.items ?? [];
 

@@ -7,6 +7,14 @@ import { waitUntil } from "@vercel/functions";
 import crypto from "crypto";
 import { getValidSlackToken, getUserIdForWorkspace, forceRefreshSlackToken } from "@/lib/slack/token-manager";
 import { processPeopleMessage } from "@/lib/people/processor";
+import { createClient } from "@supabase/supabase-js";
+
+// Supabase client for screenshot compliment processing
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 
@@ -101,8 +109,8 @@ function verifySlackRequest(
     .digest("hex")}`;
 
   return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
+    new Uint8Array(Buffer.from(signature)),
+    new Uint8Array(Buffer.from(expectedSignature))
   );
 }
 
@@ -229,6 +237,389 @@ async function getParentMessage(teamId: string, channel: string, threadTs: strin
   }
 }
 
+// ============================================================================
+// SCREENSHOT COMPLIMENT PROCESSING
+// ============================================================================
+
+// Supported image formats for OpenAI Vision API
+const OPENAI_SUPPORTED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+]);
+
+// Detect actual image format from magic bytes
+function detectImageFormat(buffer: ArrayBuffer): string | null {
+  const bytes = new Uint8Array(buffer);
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+    return "image/png";
+  }
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+    return "image/jpeg";
+  }
+
+  // GIF: 47 49 46 38 (GIF8)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return "image/gif";
+  }
+
+  // WebP: RIFF....WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+// Get a supported image URL from Slack file
+function getImageUrlAndMimeType(file: any): { url: string; mimeType: string; source: string } | null {
+  const originalMimeType = file.mimetype || "image/png";
+  const originalUrl = file.url_private_download || file.url_private;
+
+  if (!originalUrl) {
+    return null;
+  }
+
+  if (OPENAI_SUPPORTED_MIME_TYPES.has(originalMimeType)) {
+    return { url: originalUrl, mimeType: originalMimeType, source: "original" };
+  }
+
+  return { url: originalUrl, mimeType: originalMimeType, source: "unsupported" };
+}
+
+// Process compliment screenshot from Slack
+async function processComplimentScreenshotAsync(
+  teamId: string,
+  userId: string,
+  files: any[],
+  channel: string,
+  timestamp: string,
+  messageText: string = ""
+) {
+  try {
+    // Check if user wants verbatim/full text extraction
+    const lowerText = messageText.toLowerCase();
+    const wantsVerbatim =
+      lowerText.includes("verbatim") ||
+      lowerText.includes("exact") ||
+      lowerText.includes("full") ||
+      lowerText.includes("everything") ||
+      lowerText.includes("all of it") ||
+      lowerText.includes("word for word");
+
+    console.log("🖼️ [COMPLIMENT] Processing screenshot...", {
+      wantsVerbatim,
+      messageText,
+      userId
+    });
+
+    await addReaction(teamId, channel, timestamp, "eyes");
+
+    const slackToken = await getValidSlackToken(teamId);
+
+    // Find first image file
+    const imageFile = files.find((f: any) =>
+      f.mimetype?.startsWith("image/") ||
+      f.filetype === "png" ||
+      f.filetype === "jpg" ||
+      f.filetype === "jpeg" ||
+      f.filetype === "gif" ||
+      f.filetype === "webp"
+    );
+
+    if (!imageFile) {
+      await addReaction(teamId, channel, timestamp, "x");
+      await postMessage(teamId, channel, "❌ No image file found in the message.", timestamp);
+      return;
+    }
+
+    // Get image URL
+    const imageInfo = getImageUrlAndMimeType(imageFile);
+    if (!imageInfo) {
+      throw new Error("No download URL available for the file");
+    }
+
+    const { url: downloadUrl, mimeType, source } = imageInfo;
+
+    // Reject unsupported formats upfront
+    if (source === "unsupported") {
+      await addReaction(teamId, channel, timestamp, "x");
+      await postMessage(
+        teamId,
+        channel,
+        `❌ Unsupported image format: ${mimeType}. Please upload a PNG, JPEG, GIF, or WebP image.`,
+        timestamp
+      );
+      return;
+    }
+
+    // Download image from Slack
+    let currentUrl = downloadUrl;
+    let redirectCount = 0;
+    const maxRedirects = 5;
+
+    console.log("🖼️ [COMPLIMENT] Fetching image from Slack...");
+
+    let fileResponse = await fetch(currentUrl, {
+      headers: { Authorization: `Bearer ${slackToken}` },
+      redirect: 'manual',
+    });
+
+    // Handle redirects
+    while (fileResponse.status >= 300 && fileResponse.status < 400 && redirectCount < maxRedirects) {
+      const location = fileResponse.headers.get('location');
+      if (!location) {
+        throw new Error(`Redirect without location header: ${fileResponse.status}`);
+      }
+      currentUrl = location;
+      redirectCount++;
+      fileResponse = await fetch(currentUrl, { redirect: 'manual' });
+    }
+
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to download file: ${fileResponse.status}`);
+    }
+
+    const fileBuffer = await fileResponse.arrayBuffer();
+    const base64Image = Buffer.from(fileBuffer).toString("base64");
+    const detectedFormat = detectImageFormat(fileBuffer);
+    const actualMimeType = detectedFormat || mimeType;
+
+    if (!OPENAI_SUPPORTED_MIME_TYPES.has(actualMimeType)) {
+      await addReaction(teamId, channel, timestamp, "x");
+      await postMessage(
+        teamId,
+        channel,
+        `❌ Unsupported image format detected: ${actualMimeType}. Please convert to PNG, JPEG, GIF, or WebP.`,
+        timestamp
+      );
+      return;
+    }
+
+    // Extract compliment using OpenAI Vision
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
+      throw new Error("OpenAI API key not configured");
+    }
+
+    const systemPrompt = wantsVerbatim
+      ? `You are a text transcription assistant. Transcribe ALL visible text from screenshots exactly as written.
+Extract:
+1. The person's name or username who wrote the message
+2. The FULL, COMPLETE text of their message(s) - transcribe EVERYTHING word for word
+3. The context/platform (e.g., "Twitter DM", "Slack", "Text message", "iMessage")
+
+Return JSON: {"personName": "...", "compliments": ["compliment 1", "compliment 2", ...], "context": "..."}
+Only return valid JSON.`
+      : `You extract compliments from screenshots of messages, tweets, DMs, or conversations.
+Extract ALL compliments visible in the screenshot - there may be multiple!
+
+Extract:
+1. The person's name or username who gave the compliments
+2. ALL compliment texts - each distinct compliment or kind statement should be a separate item
+3. The context (e.g., "Twitter DM", "Slack", "Text message")
+
+Return JSON: {"personName": "...", "compliments": ["compliment 1", "compliment 2", ...], "context": "..."}
+Return an array even if there's only one compliment.
+Only return valid JSON. If no clear compliment exists, return {"error": "No compliment found"}`;
+
+    const userPrompt = wantsVerbatim
+      ? "Transcribe ALL the text from this screenshot EXACTLY as written:"
+      : "Extract the compliment from this screenshot:";
+
+    console.log("🖼️ [COMPLIMENT] Calling OpenAI Vision API...");
+
+    const visionResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${actualMimeType};base64,${base64Image}`,
+                  detail: wantsVerbatim ? "high" : "auto"
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: wantsVerbatim ? 4000 : 500,
+        temperature: 0.1,
+      }),
+    });
+
+    if (!visionResponse.ok) {
+      const errorBody = await visionResponse.text();
+      console.error(`❌ [COMPLIMENT] OpenAI Vision API error: ${visionResponse.status}`, errorBody);
+      throw new Error(`OpenAI Vision API error: ${visionResponse.status}`);
+    }
+
+    const visionData = await visionResponse.json();
+    const content = visionData.choices?.[0]?.message?.content?.trim();
+
+    if (!content) {
+      throw new Error("No response from vision model");
+    }
+
+    // Parse the JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Could not parse response from vision model");
+    }
+
+    const extracted = JSON.parse(jsonMatch[0]);
+
+    if (extracted.error) {
+      await addReaction(teamId, channel, timestamp, "x");
+      await postMessage(teamId, channel, `❌ ${extracted.error}`, timestamp);
+      return;
+    }
+
+    // First, check if user specified the person's name in their message (e.g., "compliment from Barra")
+    const fromMatch = messageText.match(/(?:compliment\s+)?from\s+([A-Za-z][A-Za-z\s]+?)(?:\s*[:\-]|$)/i);
+    const userSpecifiedName = fromMatch ? fromMatch[1].trim() : null;
+
+    // Use user-specified name if provided, otherwise fall back to AI extraction
+    const extractedPersonName = userSpecifiedName || extracted.personName || extracted.name || extracted.person || extracted.author || extracted.from || extracted.sender;
+    const extractedContext = extracted.context || extracted.source || extracted.platform || null;
+
+    // Handle both array and single compliment formats
+    let extractedCompliments: string[] = [];
+    if (Array.isArray(extracted.compliments)) {
+      extractedCompliments = extracted.compliments;
+    } else if (extracted.compliments) {
+      extractedCompliments = [extracted.compliments];
+    } else if (extracted.compliment) {
+      extractedCompliments = [extracted.compliment];
+    } else if (extracted.text) {
+      extractedCompliments = [extracted.text];
+    } else if (extracted.message) {
+      extractedCompliments = [extracted.message];
+    }
+
+    console.log("🖼️ [COMPLIMENT] Extraction:", {
+      userSpecifiedName,
+      aiExtractedName: extracted.personName,
+      finalName: extractedPersonName,
+      complimentCount: extractedCompliments.length
+    });
+
+    if (!extractedPersonName || extractedCompliments.length === 0) {
+      await addReaction(teamId, channel, timestamp, "x");
+      const missingFields = [];
+      if (!extractedPersonName) missingFields.push("person name");
+      if (extractedCompliments.length === 0) missingFields.push("compliment text");
+      await postMessage(teamId, channel, `❌ Could not extract ${missingFields.join(" and ")} from the image. Try a clearer screenshot.`, timestamp);
+      return;
+    }
+
+    // Save to database
+    if (!supabase) {
+      throw new Error("Database not configured");
+    }
+
+    // Find or create person (user-scoped)
+    const { data: existingPeople } = await supabase
+      .from("people")
+      .select("id, name")
+      .eq("user_id", userId)
+      .ilike("name", extractedPersonName);
+
+    let personId: number;
+    let personName: string;
+    let isNewPerson = false;
+
+    if (existingPeople && existingPeople.length > 0) {
+      const exactMatch = existingPeople.find(p => p.name.toLowerCase() === extractedPersonName.toLowerCase());
+      const person = exactMatch || existingPeople[0];
+      personId = person.id;
+      personName = person.name;
+    } else {
+      const { data: newPerson, error: createError } = await supabase
+        .from("people")
+        .insert({ user_id: userId, name: extractedPersonName })
+        .select("id, name")
+        .single();
+
+      if (createError) {
+        throw new Error(`Failed to create person: ${createError.message}`);
+      }
+      personId = newPerson.id;
+      personName = newPerson.name;
+      isNewPerson = true;
+    }
+
+    // Create all compliments (user-scoped)
+    const complimentInserts = extractedCompliments.map(compliment => ({
+      user_id: userId,
+      people_id: personId,
+      compliment,
+      context: extractedContext,
+    }));
+
+    const { error: complimentError } = await supabase
+      .from("people_compliments")
+      .insert(complimentInserts);
+
+    if (complimentError) {
+      throw new Error(`Failed to save compliments: ${complimentError.message}`);
+    }
+
+    console.log(`✅ [COMPLIMENT] Saved ${extractedCompliments.length} compliment(s) from ${personName}`);
+
+    await removeReaction(teamId, channel, timestamp, "eyes");
+    await addReaction(teamId, channel, timestamp, "white_check_mark");
+    await addReaction(teamId, channel, timestamp, "sparkles");
+
+    const newPersonNote = isNewPerson ? " (new contact added)" : "";
+    const verbatimNote = wantsVerbatim ? " _(verbatim)_" : "";
+    const complimentCount = extractedCompliments.length > 1 ? `${extractedCompliments.length} compliments` : "Compliment";
+
+    // Format compliments for display
+    const complimentsDisplay = extractedCompliments.length > 1
+      ? extractedCompliments.map((c, i) => `${i + 1}. "${c}"`).join("\n")
+      : `"${extractedCompliments[0]}"`;
+
+    await postMessage(
+      teamId,
+      channel,
+      `✨ *${complimentCount} saved!*${verbatimNote}\n\n` +
+      `*From:* ${personName}${newPersonNote}\n` +
+      `*Said:*\n${complimentsDisplay}\n` +
+      (extractedContext ? `*Context:* ${extractedContext}` : ""),
+      timestamp
+    );
+
+  } catch (error) {
+    console.error("❌ [COMPLIMENT] Error processing screenshot:", error);
+    await removeReaction(teamId, channel, timestamp, "eyes");
+    await addReaction(teamId, channel, timestamp, "x");
+    await postMessage(
+      teamId,
+      channel,
+      `❌ Error processing screenshot: ${error instanceof Error ? error.message : "Unknown error"}`,
+      timestamp
+    );
+  }
+}
+
 // Process people channel message asynchronously
 async function processPeopleMessageAsync(
   teamId: string,
@@ -318,7 +709,7 @@ export async function POST(req: NextRequest) {
     const event = body.event;
     const teamId = body.team_id;
 
-    console.log(`📨 [SLACK EVENTS] Event: ${event?.type}, Channel: ${event?.channel}, Team: ${teamId}`);
+    console.log(`📨 [SLACK EVENTS] Event: ${event?.type}, Channel: ${event?.channel}, Team: ${teamId}, Subtype: ${event?.subtype || 'none'}`);
 
     // Check for duplicate events
     const eventId = body.event_id || `${event?.channel}:${event?.ts}`;
@@ -327,8 +718,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Handle channel messages
-    if (event?.type === "message" && !event.subtype) {
+    // Handle channel messages (including file_share for screenshot compliments)
+    if (event?.type === "message" && (!event.subtype || event.subtype === "file_share")) {
       const message = event;
 
       // Only process messages from the people channel
@@ -361,6 +752,30 @@ export async function POST(req: NextRequest) {
       if (!checkRateLimit(rateLimitKey)) {
         console.log(`⚠️ Rate limit exceeded for ${rateLimitKey}`);
         await addReaction(teamId, message.channel, message.ts, "warning");
+        return NextResponse.json({ ok: true });
+      }
+
+      // Check if message has files (for compliment screenshot processing)
+      const hasFiles = message.files && message.files.length > 0;
+      const isComplimentScreenshot = hasFiles && message.text?.toLowerCase().includes("compliment");
+
+      // If there's a file and it mentions compliment, process it as screenshot
+      if (isComplimentScreenshot) {
+        console.log("🖼️ [SLACK EVENTS] Compliment screenshot detected in People channel");
+
+        waitUntil(
+          processComplimentScreenshotAsync(
+            teamId,
+            userId,
+            message.files,
+            message.channel,
+            message.ts,
+            message.text || ""
+          ).catch(error => {
+            console.error("❌ processComplimentScreenshotAsync error:", error);
+          })
+        );
+
         return NextResponse.json({ ok: true });
       }
 

@@ -258,9 +258,7 @@ export default function RolodexPage() {
     const [authenticated, setAuthenticated] = useState(false);
     const [user, setUser] = useState<UserProfile | null>(null);
     const [showUserMenu, setShowUserMenu] = useState(false);
-    const [uploadingUserAvatar, setUploadingUserAvatar] = useState(false);
     const userMenuRef = useRef<HTMLDivElement>(null);
-    const userAvatarInputRef = useRef<HTMLInputElement>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [loading, setLoading] = useState(true);
     const [contributionsRefreshKey, setContributionsRefreshKey] = useState(0);
@@ -758,7 +756,12 @@ export default function RolodexPage() {
     useEffect(() => {
         if (!showListDropdownFor) return;
 
-        const handleClickOutside = () => {
+        const handleClickOutside = (e: MouseEvent) => {
+            // Check if clicking inside the dropdown
+            const dropdown = document.querySelector('[data-list-dropdown="true"]');
+            if (dropdown && dropdown.contains(e.target as Node)) {
+                return; // Don't close if clicking inside dropdown
+            }
             setShowListDropdownFor(null);
         };
 
@@ -2153,37 +2156,6 @@ export default function RolodexPage() {
             console.error("Error uploading image:", error);
         } finally {
             setUploadingImageFor(null);
-        }
-    };
-
-    const handleUserAvatarUpload = async (file: File) => {
-        setUploadingUserAvatar(true);
-
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-
-            const res = await fetch("/api/user/profile", {
-                method: "POST",
-                credentials: "include",
-                body: formData,
-            });
-
-            const data = await res.json();
-
-            if (!res.ok) {
-                console.error("Error uploading avatar:", data.error);
-                alert(`Failed to upload avatar: ${data.error}`);
-                return;
-            }
-
-            // Update local state with the new avatar URL
-            setUser((prev) => prev ? { ...prev, customAvatarUrl: data.avatarUrl } : null);
-        } catch (error) {
-            console.error("Error uploading avatar:", error);
-            alert("Failed to upload avatar. Please try again.");
-        } finally {
-            setUploadingUserAvatar(false);
         }
     };
 
@@ -4043,7 +4015,7 @@ export default function RolodexPage() {
                                                     Add to list
                                                 </button>
                                                 {showListDropdownFor === contact.id && (
-                                                    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
+                                                    <div data-list-dropdown="true" className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 min-w-[160px] py-1">
                                                         {lists.filter(l => !l.member_ids.includes(contact.id)).map(list => (
                                                             <button
                                                                 key={list.id}
@@ -4183,11 +4155,13 @@ export default function RolodexPage() {
                                             type TimelineItem =
                                                 | { type: "note"; data: Note; date: string }
                                                 | { type: "touchpoint"; data: Touchpoint; date: string }
-                                                | { type: "message"; data: { id: number; message_text: string; is_from_me: boolean; message_date: string }; date: string };
+                                                | { type: "message"; data: { id: number; message_text: string; is_from_me: boolean; message_date: string }; date: string }
+                                                | { type: "compliment"; data: Compliment; date: string };
 
                                             const timeline: TimelineItem[] = [
                                                 ...contact.notes.filter(n => !n.note.includes("LinkedIn Profile Import")).map(n => ({ type: "note" as const, data: n, date: n.created_at })),
                                                 ...contact.touchpoints.map(t => ({ type: "touchpoint" as const, data: t, date: t.created_at })),
+                                                ...(contact.compliments || []).map(c => ({ type: "compliment" as const, data: c, date: c.created_at })),
                                             ];
 
                                             if (showMessagesFor.has(contact.id) && contactMessages[contact.id]) {
@@ -4243,7 +4217,35 @@ export default function RolodexPage() {
                                                                     </div>
                                                                 );
                                                             }
-                                                            const note = item.data;
+                                                            if (item.type === "compliment") {
+                                                                const compliment = item.data;
+                                                                return (
+                                                                    <div key={`comp-${compliment.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
+                                                                        <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2 relative z-10">
+                                                                            <div className="w-[7px] h-[7px] rounded-full bg-pink-400 dark:bg-pink-500 ring-[3px] ring-white dark:ring-gray-900" />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0 py-1.5">
+                                                                            <p className="text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
+                                                                                <span className="text-pink-500 dark:text-pink-400 mr-1">✨</span>
+                                                                                &ldquo;{compliment.compliment}&rdquo;
+                                                                            </p>
+                                                                            <div className="flex items-center gap-1.5 mt-1">
+                                                                                <span className="text-[10px] text-gray-400 dark:text-gray-500">{formatTimeAgo(compliment.created_at)}</span>
+                                                                                {compliment.context && (
+                                                                                    <>
+                                                                                        <span className="text-[10px] text-gray-300 dark:text-gray-600">&middot;</span>
+                                                                                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{compliment.context}</span>
+                                                                                    </>
+                                                                                )}
+                                                                                <span className="text-[10px] font-medium text-pink-500 dark:text-pink-400 bg-pink-50 dark:bg-pink-900/30 px-1.5 py-0.5 rounded-full ml-1">
+                                                                                    compliment
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            const note = item.data as Note;
                                                             const isAutoNote = note.source_type === "website_analysis" || note.source_type === "auto_summary";
                                                             return (
                                                                 <div key={`note-${note.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
@@ -4731,11 +4733,6 @@ export default function RolodexPage() {
                                         </span>
                                     </div>
                                 )}
-                                {uploadingUserAvatar && (
-                                    <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-                                        <Loader2 className="h-3 w-3 animate-spin text-white" />
-                                    </div>
-                                )}
                             </button>
 
                             {/* Dropdown Menu */}
@@ -4749,31 +4746,6 @@ export default function RolodexPage() {
                                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                             {user?.email}
                                         </p>
-                                    </div>
-
-                                    {/* Upload Avatar */}
-                                    <div className="px-2 py-1">
-                                        <input
-                                            ref={userAvatarInputRef}
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    handleUserAvatarUpload(file);
-                                                    setShowUserMenu(false);
-                                                }
-                                            }}
-                                        />
-                                        <button
-                                            onClick={() => userAvatarInputRef.current?.click()}
-                                            disabled={uploadingUserAvatar}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                                        >
-                                            <Camera className="h-4 w-4" />
-                                            {uploadingUserAvatar ? "Uploading..." : "Change avatar"}
-                                        </button>
                                     </div>
 
                                     {/* Settings */}

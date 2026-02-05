@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 // DEV ONLY: Auto sign-in for local development
 // This bypasses the magic link flow when running on localhost
 
-const DEV_EMAIL = 'ashe.magalhaes@gmail.com';
+const DEV_EMAIL = process.env.DEV_EMAIL || 'dev@localhost';
 
 export async function POST(request: Request) {
     // Only allow in development

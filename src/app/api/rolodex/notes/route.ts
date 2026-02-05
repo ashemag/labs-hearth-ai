@@ -129,7 +129,7 @@ export async function PATCH(req: NextRequest) {
 
             // Regenerate embedding for updated note text
             try {
-                const embeddingVector = await generateEmbedding(updateData.note);
+                const embeddingVector = await generateEmbedding(updateData.note!);
                 updateData.embedding = formatEmbeddingForSupabase(embeddingVector);
             } catch (embeddingError) {
                 console.error("Error generating embedding for update:", embeddingError);

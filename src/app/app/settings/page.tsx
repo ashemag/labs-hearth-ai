@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -516,9 +516,9 @@ export default function SettingsPage() {
 
     const isPhone = (handle: string) => !handle.includes("@");
 
-    const filteredContacts = matchSearch
+    const filteredContacts = useMemo(() => matchSearch
         ? contacts.filter(c => c.name.toLowerCase().includes(matchSearch.toLowerCase()))
-        : contacts;
+        : contacts, [matchSearch, contacts]);
 
     return (
         <div className="min-h-screen bg-white dark:bg-black">
@@ -1128,15 +1128,15 @@ export default function SettingsPage() {
                                                     Link these people to contacts in your Rolodex.
                                                 </p>
                                                 <div className="space-y-1">
-                                                    {unmatchedCalendar.map((item) => {
+                                                    {(() => {
+                                                        const filteredCalendarContacts = calendarMatchSearch
+                                                            ? contacts.filter(c => c.name.toLowerCase().includes(calendarMatchSearch.toLowerCase()))
+                                                            : contacts;
+                                                        return unmatchedCalendar.map((item) => {
                                                         const isLinked = calendarRecentlyLinked.has(item.attendee_email);
                                                         const isLoading = calendarMatchLoading === item.attendee_email;
                                                         const isActive = activeCalendarMatch === item.attendee_email;
                                                         const isCreating = calendarCreatingFor === item.attendee_email;
-
-                                                        const filteredCalendarContacts = calendarMatchSearch
-                                                            ? contacts.filter(c => c.name.toLowerCase().includes(calendarMatchSearch.toLowerCase()))
-                                                            : contacts;
 
                                                         return (
                                                             <div
@@ -1298,7 +1298,8 @@ export default function SettingsPage() {
                                                                 </div>
                                                             </div>
                                                         );
-                                                    })}
+                                                    });
+                                                    })()}
                                                 </div>
                                             </div>
                                         )}

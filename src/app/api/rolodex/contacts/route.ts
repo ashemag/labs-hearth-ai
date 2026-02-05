@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isLinkedInUrl, fetchLinkedInProfile } from "@/lib/linkedin";
 import { isXHandle, extractXUsername, fetchXProfile } from "@/lib/x";
 import { normalizeLocation } from "@/lib/location/normalize";
+import { SupabaseClient } from "@supabase/supabase-js";
 
 export interface RolodexContact {
     id: number;
@@ -62,8 +63,11 @@ export interface RolodexContact {
 }
 
 // GET - Fetch all contacts with profiles and notes
-export async function GET() {
+export async function GET(request: NextRequest) {
     const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "500"), 1000);
+    const offset = Math.max(parseInt(searchParams.get("offset") || "0"), 0);
     
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
@@ -132,16 +136,35 @@ export async function GET() {
                 )
             `)
             .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            .range(offset, offset + limit - 1);
 
         if (peopleError) {
             console.error("Error fetching people:", peopleError);
-            return NextResponse.json({ error: peopleError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch contacts" }, { status: 500 });
         }
 
         // Transform to expected shape
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const contacts: RolodexContact[] = (people || []).map((person: any) => ({
+        interface PersonRecord {
+            id: number;
+            name: string;
+            created_at: string;
+            custom_profile_image_url: string | null;
+            custom_bio: string | null;
+            custom_location: string | null;
+            website_url: string | null;
+            hidden: boolean;
+            last_touchpoint: string | null;
+            people_x_profiles?: { username: string; display_name: string | null; bio: string | null; profile_image_url: string | null; followers_count: number | null; following_count: number | null; verified: boolean; website_url: string | null; location: string | null }[];
+            people_linkedin_profiles?: { linkedin_url: string; profile_image_url: string | null; headline: string | null; location: string | null }[];
+            people_notes?: { id: number; note: string; created_at: string; source_type: string | null }[];
+            people_touchpoints?: { id: number; created_at: string }[];
+            people_websites?: { id: number; url: string; created_at: string }[];
+            people_compliments?: { id: number; compliment: string; context: string | null; received_at: string | null; created_at: string }[];
+            people_contact_info?: { id: number; type: 'phone' | 'email'; value: string; created_at: string }[];
+        }
+
+        const contacts: RolodexContact[] = (people || []).map((person: PersonRecord) => ({
             id: person.id,
             name: person.name,
             created_at: person.created_at,
@@ -153,24 +176,19 @@ export async function GET() {
             last_touchpoint: person.last_touchpoint || null,
             x_profile: person.people_x_profiles?.[0] || null,
             linkedin_profile: person.people_linkedin_profiles?.[0] || null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            notes: (person.people_notes || []).sort((a: any, b: any) =>
+            notes: (person.people_notes || []).sort((a, b) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             ),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            touchpoints: (person.people_touchpoints || []).sort((a: any, b: any) =>
+            touchpoints: (person.people_touchpoints || []).sort((a, b) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             ),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            websites: (person.people_websites || []).sort((a: any, b: any) =>
+            websites: (person.people_websites || []).sort((a, b) =>
                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             ),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            compliments: (person.people_compliments || []).sort((a: any, b: any) =>
+            compliments: (person.people_compliments || []).sort((a, b) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             ),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            contact_info: (person.people_contact_info || []).sort((a: any, b: any) =>
+            contact_info: (person.people_contact_info || []).sort((a, b) =>
                 new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             ),
         }));
@@ -224,8 +242,7 @@ export async function POST(req: NextRequest) {
 }
 
 // Handle name-only contact creation
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleNameOnlyImport(supabase: any, userId: string, name: string): Promise<NextResponse> {
+async function handleNameOnlyImport(supabase: SupabaseClient, userId: string, name: string): Promise<NextResponse> {
         // Create person with just a name
         const { data: person, error: personError } = await supabase
             .from("people")
@@ -238,7 +255,7 @@ async function handleNameOnlyImport(supabase: any, userId: string, name: string)
 
         if (personError) {
             console.error("Error creating person:", personError);
-            return NextResponse.json({ error: personError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
         }
 
         console.log(`✓ Created contact: ${name}`);
@@ -267,8 +284,7 @@ async function handleNameOnlyImport(supabase: any, userId: string, name: string)
 }
 
 // Handle LinkedIn import
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: string): Promise<NextResponse> {
+async function handleLinkedInImport(supabase: SupabaseClient, userId: string, linkedinUrl: string): Promise<NextResponse> {
     // Normalize the URL for checking duplicates
     const normalizedUrl = linkedinUrl.toLowerCase().replace(/\/$/, "");
     const usernameMatch = normalizedUrl.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_]+)/i);
@@ -314,7 +330,7 @@ async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: 
 
     if (personError) {
         console.error("Error creating person:", personError);
-        return NextResponse.json({ error: personError.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
     }
 
     // Create LinkedIn profile entry
@@ -370,8 +386,7 @@ async function handleLinkedInImport(supabase: any, userId: string, linkedinUrl: 
 }
 
 // Handle X/Twitter import using SerpAPI + LLM enrichment
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleXImport(supabase: any, userId: string, handle: string): Promise<NextResponse> {
+async function handleXImport(supabase: SupabaseClient, userId: string, handle: string): Promise<NextResponse> {
     const username = extractXUsername(handle);
     
     if (!username) {
@@ -416,7 +431,7 @@ async function handleXImport(supabase: any, userId: string, handle: string): Pro
 
     if (personError) {
         console.error("Error creating person:", personError);
-        return NextResponse.json({ error: personError.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
     }
 
     // Create X profile entry

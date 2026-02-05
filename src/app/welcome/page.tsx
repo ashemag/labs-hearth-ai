@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { motion } from "framer-motion";
+import HearthLogo from "@/components/HearthLogo";
 import { Check, Download, Chrome } from "lucide-react";
 
 export default function WelcomePage() {
@@ -13,8 +12,8 @@ export default function WelcomePage() {
 
   const canContinue = macDownloaded || chromeInstalled;
 
-  // Update these URLs when deployed
-  const MAC_DOWNLOAD_URL = process.env.NEXT_PUBLIC_MAC_APP_URL || "https://hearth.ai/downloads/Hearth.dmg";
+  // Redirects to the latest universal DMG from GitHub Releases
+  const MAC_DOWNLOAD_URL = "/api/download/mac";
   const CHROME_EXTENSION_URL = process.env.NEXT_PUBLIC_CHROME_EXTENSION_URL || "https://chrome.google.com/webstore/detail/hearth";
 
   const handleMacDownload = () => {
@@ -36,32 +35,7 @@ export default function WelcomePage() {
       <div className="w-full max-w-md mx-auto px-6">
         {/* Logo with pulsing dot */}
         <div className="flex justify-center mb-8">
-          <div className="relative">
-            <Image
-              src="/brand/logo_square_new.png"
-              alt="Hearth"
-              width={40}
-              height={40}
-              priority
-            />
-            <div
-              className="absolute w-[14px] h-[14px] rounded-full bg-white"
-              style={{ left: '13px', top: '22px' }}
-            />
-            <motion.div
-              className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
-              style={{ left: '14.5px', top: '23.5px' }}
-              animate={{
-                scale: [1, 1.1, 1],
-                opacity: [0.7, 1, 0.7],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          </div>
+          <HearthLogo />
         </div>
 
         {/* Welcome text */}

@@ -67,19 +67,19 @@ export async function GET() {
         const touchpoints = [
             ...(notes?.map(n => ({
                 people_id: n.people_id,
-                contact_name: (n.people as { name: string } | null)?.name || 'Unknown',
+                contact_name: (n.people as unknown as { name: string } | null)?.name || 'Unknown',
                 timestamp: n.created_at,
                 type: 'note' as const,
             })) || []),
             ...(messages?.filter(m => m.people_id !== null).map(m => ({
                 people_id: m.people_id,
-                contact_name: (m.people as { name: string } | null)?.name || m.contact_name || 'Unknown',
+                contact_name: (m.people as unknown as { name: string } | null)?.name || m.contact_name || 'Unknown',
                 timestamp: m.message_date,
                 type: 'imessage' as const,
             })) || []),
             ...(calendarEvents?.map(e => ({
                 people_id: e.people_id,
-                contact_name: (e.people as { name: string } | null)?.name || e.attendee_name || 'Unknown',
+                contact_name: (e.people as unknown as { name: string } | null)?.name || e.attendee_name || 'Unknown',
                 timestamp: e.event_start,
                 type: 'calendar' as const,
             })) || []),

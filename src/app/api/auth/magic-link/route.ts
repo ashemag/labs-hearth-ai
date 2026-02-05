@@ -4,15 +4,35 @@ import { NextResponse } from 'next/server';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const ALLOWED_ELECTRON_REDIRECT_HOSTS = new Set(["localhost", "127.0.0.1", "labs.hearth.ai"]);
+// Simple in-memory rate limiter: max 5 requests per email per 15 minutes
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function isRateLimited(email: string): boolean {
+    const now = Date.now();
+    const entry = rateLimitMap.get(email);
+    if (!entry || now > entry.resetAt) {
+        rateLimitMap.set(email, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return false;
+    }
+    entry.count++;
+    return entry.count > RATE_LIMIT_MAX;
+}
+
+const ALLOWED_MAGIC_LINK_REDIRECT_HOSTS = new Set(["localhost", "127.0.0.1", "labs.hearth.ai"]);
+const ALLOWED_MAGIC_LINK_CALLBACK_PATHS = new Set([
+    "/auth/electron-callback",
+    "/auth/ios-callback",
+]);
 
 function getSafeRedirectUrl(redirectTo?: string | null) {
     if (!redirectTo) return null;
     try {
         const url = new URL(redirectTo);
-        const isAllowedHost = ALLOWED_ELECTRON_REDIRECT_HOSTS.has(url.hostname);
-        const isElectronCallback = url.pathname === "/auth/electron-callback";
-        if (isAllowedHost && isElectronCallback) {
+        const isAllowedHost = ALLOWED_MAGIC_LINK_REDIRECT_HOSTS.has(url.hostname);
+        const isAllowedCallback = ALLOWED_MAGIC_LINK_CALLBACK_PATHS.has(url.pathname);
+        if (isAllowedHost && isAllowedCallback) {
             return url.toString();
         }
     } catch {
@@ -27,6 +47,10 @@ export async function POST(request: Request) {
 
         if (!email) {
             return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+        }
+
+        if (isRateLimited(email.toLowerCase())) {
+            return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
         }
 
         // Get the origin from the request (works for both localhost and production)
@@ -146,4 +170,3 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
-

@@ -1,7 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Only allow in development or with a secret key
+  const url = new URL(request.url);
+  const secret = url.searchParams.get("secret");
+  const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+
+  if (!isLocalhost && secret !== process.env.SETUP_DB_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 

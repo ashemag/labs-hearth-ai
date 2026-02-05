@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { motion } from "framer-motion";
+import HearthLogo from "@/components/HearthLogo";
 import { loadStripe } from "@stripe/stripe-js";
 import {
     Elements,
@@ -127,16 +126,12 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
 function SuccessView() {
     const router = useRouter();
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            router.push("/welcome");
-        }, 2000);
-        return () => clearTimeout(timer);
-    }, [router]);
+    // Redirects to the latest universal DMG from GitHub Releases
+    const DOWNLOAD_URL = '/api/download/mac';
 
     return (
         <div className="text-center">
-            <div className="mb-6">
+            <div className="mb-8">
                 <h2 className="text-2xl font-medium tracking-tight text-gray-600">
                     Welcome to Hearth
                 </h2>
@@ -147,9 +142,39 @@ function SuccessView() {
                     Lifetime access. We&apos;re building this together.
                 </p>
             </div>
-            <p className="text-xs text-gray-400">
-                Setting things up...
-            </p>
+
+            {/* Download Button */}
+            <div className="mb-6">
+                <p className="text-sm text-gray-500 mb-4">
+                    Download the iMessage Sync app
+                </p>
+                <a
+                    href={DOWNLOAD_URL}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download for Mac
+                </a>
+                <p className="text-xs text-gray-400 mt-2">
+                    Works on all Macs (Apple Silicon &amp; Intel)
+                </p>
+            </div>
+
+            {/* Installation Note */}
+            <div className="text-xs text-gray-400 mb-6 max-w-[280px] mx-auto">
+                <p className="mb-2">After downloading:</p>
+                <p>Right-click the app and select Open (first time only)</p>
+            </div>
+
+            {/* Continue to Dashboard */}
+            <button
+                onClick={() => router.push('/app/rolodex')}
+                className="text-sm text-gray-500 hover:text-gray-600 transition-colors cursor-pointer underline underline-offset-2"
+            >
+                Continue to Dashboard
+            </button>
         </div>
     );
 }
@@ -298,18 +323,11 @@ function PaymentHeader() {
                     Once, forever
                 </p>
                 <p className="mt-3 text-xs text-gray-400 max-w-[280px] mx-auto">
-                    As the product grows, you&apos;re grandfathered in because of your early bet on us. Welcome to the team.
+                    As the product grows, you&apos;re grandfathered in.
+                    <br />
+                    Welcome to the team.
                 </p>
             </div>
-
-            {/* Tagline */}
-            <p className="text-center text-sm mb-6 text-gray-400">
-                A new era of human tooling
-            </p>
-
-            <p className="text-center text-xs mb-6 text-gray-400">
-                Early version · Your feedback makes us better
-            </p>
         </>
     );
 }
@@ -347,40 +365,7 @@ export default function PaymentPage() {
             <div className="w-full max-w-sm mx-auto px-6 relative z-10">
                 {/* Logo with pulsing dot */}
                 <div className="flex justify-center mb-8">
-                    <div className="relative">
-                        <Image
-                            src="/brand/logo_square_new.png"
-                            alt="Hearth"
-                            width={40}
-                            height={40}
-                            priority
-                        />
-                        {/* Circle to cover the original orange dot */}
-                        <div
-                            className="absolute w-[14px] h-[14px] rounded-full bg-white"
-                            style={{
-                                left: '13px',
-                                top: '22px',
-                            }}
-                        />
-                        {/* Pulsing orange dot */}
-                        <motion.div
-                            className="absolute w-[11px] h-[11px] rounded-full bg-brand-orange"
-                            style={{
-                                left: '14.5px',
-                                top: '23.5px',
-                            }}
-                            animate={{
-                                scale: [1, 1.1, 1],
-                                opacity: [0.7, 1, 0.7],
-                            }}
-                            transition={{
-                                duration: 3,
-                                repeat: Infinity,
-                                ease: "easeInOut",
-                            }}
-                        />
-                    </div>
+                    <HearthLogo />
                 </div>
 
                 <PaymentContent />

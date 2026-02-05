@@ -1,7 +1,41 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+
+// Configure auto-updater
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+});
+
+autoUpdater.on('update-not-available', () => {
+    console.log('App is up to date');
+});
+
+autoUpdater.on('download-progress', (progress) => {
+    console.log(`Download progress: ${Math.round(progress.percent)}%`);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    // Notify the renderer process
+    if (mainWindow) {
+        mainWindow.webContents.send('update-downloaded', info);
+    }
+});
+
+autoUpdater.on('error', (error) => {
+    console.error('Auto-updater error:', error);
+});
 
 function debugLog(...args) {
     console.log(...args);
@@ -339,7 +373,7 @@ function extractTextFromAttributedBody(blob) {
 
 // API configuration
 // For local dev testing, use localhost. Change to production URL when deploying.
-const USE_LOCAL_DEV = true; // Set to false for production builds
+const USE_LOCAL_DEV = !app.isPackaged; // Auto-detect: use localhost in dev, production URL in packaged builds
 
 function getApiBaseUrl() {
     if (process.env.HEARTH_API_URL) {
@@ -362,9 +396,9 @@ function getWebAppBaseUrl() {
     return 'https://labs.hearth.ai';
 }
 
-// Supabase configuration (public keys - safe to include)
-const SUPABASE_URL = 'https://pqlkkgtbvaegqqqnozvl.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_CuzgVaLWBQjcabA7v77jjQ_EzCyv--I';
+// Supabase configuration (public anon keys)
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://pqlkkgtbvaegqqqnozvl.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_CuzgVaLWBQjcabA7v77jjQ_EzCyv--I';
 
 // Custom protocol for magic link redirect
 const PROTOCOL = 'hearth-sync';
@@ -529,7 +563,6 @@ let pendingProtocolUrl = null;
 // Handle the protocol URL (magic link callback)
 function handleProtocolUrl(url) {
     console.log('=== RECEIVED PROTOCOL URL ===');
-    console.log('URL:', url);
 
     try {
         const hashPart = url.split('#')[1];
@@ -695,6 +728,18 @@ app.whenReady().then(async () => {
         handleProtocolUrl(pendingProtocolUrl);
         pendingProtocolUrl = null;
     }
+
+    // Check for updates after window is ready (only in production)
+    if (app.isPackaged) {
+        setTimeout(() => {
+            autoUpdater.checkForUpdatesAndNotify();
+        }, 3000);
+
+        // Check for updates every 24 hours
+        setInterval(() => {
+            autoUpdater.checkForUpdatesAndNotify();
+        }, 24 * 60 * 60 * 1000);
+    }
 });
 
 app.on('window-all-closed', () => {
@@ -799,8 +844,8 @@ ipcMain.handle('get-auth', async () => {
 });
 
 // Get recent messages
-ipcMain.handle('get-recent-messages', async (event, { sinceDate, sinceMessageId, limit = 500 }) => {
-    debugLog('get-recent-messages called, sinceDate:', sinceDate, 'sinceMessageId:', sinceMessageId, 'limit:', limit);
+ipcMain.handle('get-recent-messages', async (event, { sinceDate, sinceMessageId }) => {
+    debugLog('get-recent-messages called, sinceDate:', sinceDate, 'sinceMessageId:', sinceMessageId);
     try {
         const db = openDatabase();
         
@@ -841,7 +886,6 @@ ipcMain.handle('get-recent-messages', async (event, { sinceDate, sinceMessageId,
             JOIN handle h ON m.handle_id = h.ROWID
             WHERE ${whereClause}
             ORDER BY m.ROWID ASC
-            LIMIT ${limit}
         `;
 
         const result = db.exec(query);
@@ -976,6 +1020,9 @@ ipcMain.handle('get-last-sync', async () => {
     }
 });
 
+// Track whether we've already uploaded contact images this session
+let hasUploadedImagesThisSession = false;
+
 // Sync messages to Hearth API
 ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
     if (!authData.accessToken) {
@@ -996,152 +1043,54 @@ ipcMain.handle('sync-to-hearth', async (event, { messages }) => {
 
         const result = await response.json();
 
-        // After sync, upload Apple contact images for all handles in the background
-        try {
-            const handleIds = messages.map(m => m.handle_id).filter(Boolean);
-            if (handleIds.length > 0) {
-                const imageMap = getContactImagesFromAddressBook();
-                const imagesToUpload = {};
-                for (const handleId of handleIds) {
-                    const isEmail = handleId.includes('@');
-                    const lookupKey = isEmail ? handleId.toLowerCase() : normalizePhoneForLookup(handleId);
-                    if (lookupKey && imageMap.has(lookupKey)) {
-                        const img = imageMap.get(lookupKey);
-                        imagesToUpload[handleId] = `data:${img.mimeType};base64,${img.base64}`;
-                    }
-                }
+        // After first successful sync, upload contact images once (fire-and-forget)
+        if (!hasUploadedImagesThisSession) {
+            hasUploadedImagesThisSession = true;
+            (async () => {
+                try {
+                    const imgDb = openDatabase();
+                    const handleResult = imgDb.exec('SELECT DISTINCT id FROM handle');
+                    imgDb.close();
 
-                const imageCount = Object.keys(imagesToUpload).length;
-                if (imageCount > 0) {
-                    console.log(`[Sync] Uploading ${imageCount} Apple contact images...`);
-                    const imgRes = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-handle-images`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ images: imagesToUpload })
-                    });
-                    if (imgRes.ok) {
-                        const imgResult = await imgRes.json();
-                        console.log(`[Sync] Uploaded ${imgResult.uploaded} handle images`);
+                    if (handleResult.length && handleResult[0].values.length) {
+                        const allHandles = handleResult[0].values.map(row => row[0]).filter(Boolean);
+                        const imageMap = getContactImagesFromAddressBook();
+                        const imagesToUpload = {};
+
+                        for (const handleId of allHandles) {
+                            const isEmail = handleId.includes('@');
+                            const lookupKey = isEmail ? handleId.toLowerCase() : normalizePhoneForLookup(handleId);
+                            if (lookupKey && imageMap.has(lookupKey)) {
+                                const img = imageMap.get(lookupKey);
+                                imagesToUpload[handleId] = `data:${img.mimeType};base64,${img.base64}`;
+                            }
+                        }
+
+                        const imageCount = Object.keys(imagesToUpload).length;
+                        if (imageCount > 0) {
+                            console.log(`[Sync] Uploading ${imageCount} Apple contact images in background...`);
+                            const imgRes = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-handle-images`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ images: imagesToUpload })
+                            });
+                            if (imgRes.ok) {
+                                const imgResult = await imgRes.json();
+                                console.log(`[Sync] Uploaded ${imgResult.uploaded} handle images`);
+                            }
+                        }
                     }
+                } catch (imgError) {
+                    console.error('[Sync] Error uploading handle images (non-fatal):', imgError);
+                    hasUploadedImagesThisSession = false; // retry next sync
                 }
-            }
-        } catch (imgError) {
-            console.error('[Sync] Error uploading handle images (non-fatal):', imgError);
+            })();
         }
 
         return result;
     } catch (error) {
         console.error('Error syncing to Hearth:', error);
         return { success: false, error: error.message };
-    }
-});
-
-// Backfill contact info from already-synced iMessages
-ipcMain.handle('backfill-contact-info', async () => {
-    if (!authData.accessToken) {
-        return { success: false, error: 'Not authenticated' };
-    }
-
-    try {
-        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-sync`, {
-            method: 'PATCH',
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || `Backfill failed: ${response.status}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('Error backfilling contact info:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// Upload Apple contact images for all known handles to the server (backfill)
-ipcMain.handle('upload-handle-images', async () => {
-    if (!authData.accessToken) {
-        return { success: false, error: 'Not authenticated' };
-    }
-
-    try {
-        // Get all handles from iMessage database
-        const db = openDatabase();
-        const result = db.exec('SELECT DISTINCT id FROM handle');
-        db.close();
-
-        if (!result.length || !result[0].values.length) {
-            return { success: true, uploaded: 0, message: 'No handles found' };
-        }
-
-        const allHandles = result[0].values.map(row => row[0]).filter(Boolean);
-        console.log(`[Upload Images] Found ${allHandles.length} handles in iMessage DB`);
-
-        const imageMap = getContactImagesFromAddressBook();
-        const imagesToUpload = {};
-
-        for (const handleId of allHandles) {
-            const isEmail = handleId.includes('@');
-            const lookupKey = isEmail ? handleId.toLowerCase() : normalizePhoneForLookup(handleId);
-            if (lookupKey && imageMap.has(lookupKey)) {
-                const img = imageMap.get(lookupKey);
-                imagesToUpload[handleId] = `data:${img.mimeType};base64,${img.base64}`;
-            }
-        }
-
-        const imageCount = Object.keys(imagesToUpload).length;
-        if (imageCount === 0) {
-            return { success: true, uploaded: 0, message: 'No Apple contact images found for any handles' };
-        }
-
-        console.log(`[Upload Images] Uploading ${imageCount} Apple contact images...`);
-        const response = await authenticatedFetch(`${getApiBaseUrl()}/rolodex/imessage-handle-images`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ images: imagesToUpload })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || `Upload failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log(`[Upload Images] Uploaded ${data.uploaded} handle images`);
-        return { success: true, uploaded: data.uploaded };
-    } catch (error) {
-        console.error('[Upload Images] Error:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-// Get contact images from macOS AddressBook for unmatched handles
-ipcMain.handle('get-contact-images', async (event, handleIds) => {
-    try {
-        const imageMap = getContactImagesFromAddressBook();
-        const result = {};
-
-        for (const handleId of handleIds) {
-            // Normalize the handle for lookup
-            const isEmail = handleId.includes('@');
-            let lookupKey;
-            if (isEmail) {
-                lookupKey = handleId.toLowerCase();
-            } else {
-                lookupKey = normalizePhoneForLookup(handleId);
-            }
-
-            if (lookupKey && imageMap.has(lookupKey)) {
-                const img = imageMap.get(lookupKey);
-                result[handleId] = `data:${img.mimeType};base64,${img.base64}`;
-            }
-        }
-
-        return { success: true, images: result };
-    } catch (error) {
-        console.error('Error getting contact images:', error);
-        return { success: false, error: error.message, images: {} };
     }
 });
 

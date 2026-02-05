@@ -13,7 +13,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-// Secret for cron job authentication (optional, for extra security)
+// Secret for cron job authentication (required in production)
 const CRON_SECRET = process.env.CRON_SECRET;
 
 interface GoogleOAuthRecord {
@@ -81,12 +81,10 @@ async function refreshAccessToken(oauthRecord: GoogleOAuthRecord): Promise<strin
 // POST - Renew expiring webhook subscriptions
 // Call this via cron job (e.g., daily) to keep webhooks active
 export async function POST(req: NextRequest) {
-    // Optional: verify cron secret for security
-    if (CRON_SECRET) {
-        const authHeader = req.headers.get("authorization");
-        if (authHeader !== `Bearer ${CRON_SECRET}`) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+    // Verify cron secret for security
+    const authHeader = req.headers.get("authorization");
+    if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Find watches expiring in the next 24 hours
