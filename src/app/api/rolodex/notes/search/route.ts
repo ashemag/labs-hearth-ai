@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
         if (error) {
             console.error("Error searching notes:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to search notes" }, { status: 500 });
         }
 
         // Fetch person details for each result

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (authError) {
       console.error("Auth error:", authError);
-      return NextResponse.json({ error: authError.message }, { status: 500 });
+      return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
     }
 
     // Add to allowlist so they can proceed
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       if (authData.user) {
         await supabase.auth.admin.deleteUser(authData.user.id);
       }
-      return NextResponse.json({ error: allowlistError.message }, { status: 500 });
+      return NextResponse.json({ error: "Failed to add user to allowlist" }, { status: 500 });
     }
 
     // Generate a magic link for this user
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     if (linkError) {
       console.error("Link error:", linkError);
-      return NextResponse.json({ error: linkError.message }, { status: 500 });
+      return NextResponse.json({ error: "Failed to generate magic link" }, { status: 500 });
     }
 
     // The magic link from Supabase points to their domain, but contains token_hash and type params

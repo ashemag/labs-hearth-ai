@@ -1,14 +1,18 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 // DEV ONLY: Auto sign-in for local development (iOS simulator)
 const DEV_EMAIL = process.env.DEV_EMAIL || 'dev@localhost';
 
 export async function POST(request: Request) {
+    // Only allow in development
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Not available' }, { status: 404 });
+    }
+
     const origin = request.headers.get('origin') || '';
     const host = request.headers.get('host') || '';
     const forwardedHost = request.headers.get('x-forwarded-host') || '';
-    console.log('[dev-token] origin:', origin, 'host:', host, 'x-forwarded-host:', forwardedHost);
     const isLocalhost =
         origin.includes('localhost') ||
         origin.includes('127.0.0.1') ||
@@ -25,10 +29,7 @@ export async function POST(request: Request) {
     }
 
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createAdminClient();
 
         const { data: existingUsers } = await supabase.auth.admin.listUsers();
         let user = existingUsers?.users.find(u => u.email === DEV_EMAIL);

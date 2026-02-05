@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ success: true, already_member: true });
             }
             console.error("Error adding to list:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to add contact to list" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });
@@ -71,7 +71,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error removing from list:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to remove contact from list" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

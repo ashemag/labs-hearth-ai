@@ -1,9 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function TestWelcomePage() {
   const router = useRouter();
+  const [blocked, setBlocked] = useState(true);
+
+  useEffect(() => {
+    // Block in production
+    if (window.location.hostname !== "localhost" && !window.location.hostname.includes("127.0.0.1")) {
+      router.replace("/");
+      return;
+    }
+    setBlocked(false);
+  }, [router]);
+
+  if (blocked) return null;
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8">

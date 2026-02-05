@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error("Error adding compliment:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to add compliment" }, { status: 500 });
         }
 
         return NextResponse.json({ compliment: data });
@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest) {
 
         if (error) {
             console.error("Error updating compliment:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to update compliment" }, { status: 500 });
         }
 
         return NextResponse.json({ compliment: data });
@@ -126,7 +126,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting compliment:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete compliment" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

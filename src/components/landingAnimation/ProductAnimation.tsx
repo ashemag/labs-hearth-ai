@@ -91,8 +91,7 @@ export default function AutoTypingSearch() {
 
   useEffect(() => {
     if (isPaused) return;
-    // @ts-ignore
-    let timer;
+    let timer: ReturnType<typeof setTimeout>;
     if (!isDeleting && displayedText !== currentPhrase) {
       // Typing forward
       timer = setTimeout(() => {
@@ -120,7 +119,6 @@ export default function AutoTypingSearch() {
       setCurrentPhraseIndex((prev) => (prev + 1) % phrases.length);
     }
 
-    // @ts-ignore
     return () => clearTimeout(timer);
   }, [displayedText, isDeleting, isPaused, currentPhrase, isLastPhrase]);
 

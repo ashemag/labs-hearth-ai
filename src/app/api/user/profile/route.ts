@@ -21,7 +21,7 @@ export async function GET() {
         if (error && error.code !== "PGRST116") {
             // PGRST116 = no rows returned, which is fine for new users
             console.error("Error fetching profile:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
         }
 
         return NextResponse.json({ profile: profile || null });

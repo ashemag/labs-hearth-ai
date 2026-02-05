@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error("Error adding note:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to save note" }, { status: 500 });
         }
 
         // Extract and save mentions
@@ -154,7 +154,7 @@ export async function PATCH(req: NextRequest) {
 
         if (error) {
             console.error("Error updating note:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to update note" }, { status: 500 });
         }
 
         // Update mentions only if note text was updated
@@ -205,7 +205,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting note:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete note" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

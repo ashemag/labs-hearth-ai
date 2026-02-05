@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
 
             if (personError) {
                 console.error("[LinkedIn Import] Error creating contact:", personError);
-                return NextResponse.json({ error: personError.message }, { status: 500 });
+                return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
             }
 
             peopleId = newPerson.id;

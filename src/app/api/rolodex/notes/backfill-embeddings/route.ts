@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
         if (fetchError) {
             console.error("Error fetching notes:", fetchError);
-            return NextResponse.json({ error: fetchError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch notes" }, { status: 500 });
         }
 
         if (!notes || notes.length === 0) {

@@ -198,12 +198,11 @@ export default function ActivityGridMobile() {
                   height: "100%",
                   background: "linear-gradient(90deg, #a7715f 0%, transparent 100%)",
                   mixBlendMode: "overlay",
+                  x: overlayX,
                 }}
                 initial={{ x: -300 }}
                 animate={{ x: 300 }}
                 transition={{ duration: 0.8, ease: "easeInOut" }}
-                // @ts-ignore
-                style={{ x: overlayX }}
               />
             </motion.div>
           )}

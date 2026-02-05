@@ -22,7 +22,7 @@ export async function GET() {
 
         if (customError) {
             console.error("Error fetching custom locations:", customError);
-            return NextResponse.json({ error: customError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch locations" }, { status: 500 });
         }
 
         // Get locations from X profiles

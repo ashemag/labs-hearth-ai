@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest) {
 
         if (error) {
             console.error("Error updating person:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to update contact" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, person: data });

@@ -1,13 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { MAGIC_LINK_RATE_LIMIT_MAX, MAGIC_LINK_RATE_LIMIT_WINDOW_MS } from '@/lib/constants';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Simple in-memory rate limiter: max 5 requests per email per 15 minutes
+// Simple in-memory rate limiter
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_MAX = MAGIC_LINK_RATE_LIMIT_MAX;
+const RATE_LIMIT_WINDOW_MS = MAGIC_LINK_RATE_LIMIT_WINDOW_MS;
 
 function isRateLimited(email: string): boolean {
     const now = Date.now();
@@ -59,10 +60,7 @@ export async function POST(request: Request) {
         const callbackUrl = safeRedirectTo || `${origin}/auth/callback`;
 
         // Use service role to check allowlist and generate link
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createAdminClient();
 
         // Check allowlist
         const { data: allowlistEntry } = await supabase

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     if (error) {
         console.error("[iMessage Sync] Error fetching last sync:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch last sync" }, { status: 500 });
     }
 
     // Find the maximum imessage_id (as integer)
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
 
         if (contactsError) {
             console.error("[iMessage Sync] Error fetching contacts:", contactsError);
-            return NextResponse.json({ error: contactsError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to sync messages" }, { status: 500 });
         }
 
         // Build lookup maps for phone and email
@@ -429,7 +429,7 @@ export async function PATCH(req: NextRequest) {
             .not("handle_id", "is", null);
 
         if (handlesError) {
-            return NextResponse.json({ error: handlesError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to backfill contact info" }, { status: 500 });
         }
 
         // Deduplicate by handle_id

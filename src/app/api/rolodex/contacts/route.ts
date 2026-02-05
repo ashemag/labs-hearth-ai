@@ -349,7 +349,7 @@ async function handleLinkedInImport(supabase: SupabaseClient, userId: string, li
         console.error("Error creating LinkedIn profile:", profileError);
         // Clean up person if profile creation failed
         await supabase.from("people").delete().eq("id", person.id);
-        return NextResponse.json({ error: profileError.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to link LinkedIn profile" }, { status: 500 });
     }
 
     console.log(`✓ Imported LinkedIn profile for ${linkedInProfile.fullName}`, {
@@ -454,7 +454,7 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
         console.error("Error creating X profile:", profileError);
         // Clean up person if profile creation failed
         await supabase.from("people").delete().eq("id", person.id);
-        return NextResponse.json({ error: profileError.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to link X profile" }, { status: 500 });
     }
 
     console.log(`✓ Imported X profile for @${xProfile.username}`, {
@@ -530,7 +530,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting contact:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete contact" }, { status: 500 });
         }
 
         console.log(`✓ Deleted contact ${contactId}`);

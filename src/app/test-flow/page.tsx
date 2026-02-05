@@ -1,10 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function TestFlowPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(true);
+
+  useEffect(() => {
+    // Block in production
+    if (window.location.hostname !== "localhost" && !window.location.hostname.includes("127.0.0.1")) {
+      router.replace("/");
+      return;
+    }
+    setBlocked(false);
+  }, [router]);
 
   const startTestFlow = async () => {
     setLoading(true);
@@ -23,7 +35,6 @@ export default function TestFlowPage() {
         return;
       }
 
-      // Redirect directly to the magic link to sign in
       window.location.href = data.testUser.magicLink;
     } catch (err) {
       setError("Network error");
@@ -31,6 +42,8 @@ export default function TestFlowPage() {
       setLoading(false);
     }
   };
+
+  if (blocked) return null;
 
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8">

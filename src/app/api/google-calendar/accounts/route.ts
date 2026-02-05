@@ -18,7 +18,7 @@ export async function GET() {
 
     if (error) {
         console.error("Error fetching accounts:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch Google accounts" }, { status: 500 });
     }
 
     return NextResponse.json({ accounts: accounts || [] });
@@ -56,7 +56,7 @@ export async function DELETE(req: NextRequest) {
 
     if (error) {
         console.error("Error deleting account:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to delete Google account" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

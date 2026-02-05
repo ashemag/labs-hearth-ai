@@ -31,7 +31,7 @@ export async function GET() {
 
         if (error) {
             console.error("Error fetching todos:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch todos" }, { status: 500 });
         }
 
         // Transform to include contact name at top level
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error("Error creating todo:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to create todo" }, { status: 500 });
         }
 
         const people = data.people as unknown as { name: string } | null;
@@ -169,7 +169,7 @@ export async function PATCH(req: NextRequest) {
 
         if (error) {
             console.error("Error updating todo:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to update todo" }, { status: 500 });
         }
 
         const people = data.people as unknown as { name: string } | null;
@@ -216,7 +216,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting todo:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete todo" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

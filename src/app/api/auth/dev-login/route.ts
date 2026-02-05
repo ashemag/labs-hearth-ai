@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 // DEV ONLY: Auto sign-in for local development
 // This bypasses the magic link flow when running on localhost
@@ -8,18 +8,19 @@ const DEV_EMAIL = process.env.DEV_EMAIL || 'dev@localhost';
 
 export async function POST(request: Request) {
     // Only allow in development
+    if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'Not available' }, { status: 404 });
+    }
+
     const origin = request.headers.get('origin') || '';
     const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-    
+
     if (!isLocalhost) {
         return NextResponse.json({ error: 'Not allowed in production' }, { status: 403 });
     }
 
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabase = createAdminClient();
 
         // Check if user exists, if not create them
         const { data: existingUsers } = await supabase.auth.admin.listUsers();

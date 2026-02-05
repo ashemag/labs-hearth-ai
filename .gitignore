@@ -61,3 +61,7 @@ ios/build/
 xcuserdata/
 *.xcscmblueprint
 *.xcuserdatad
+
+# Electron
+electron-imessage/dist/
+electron-imessage/out/

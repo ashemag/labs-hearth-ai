@@ -27,7 +27,7 @@ export async function GET() {
 
     if (error) {
         console.error("Error fetching unmatched:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch unmatched attendees" }, { status: 500 });
     }
 
     // Group by email
@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest) {
 
     if (updateError) {
         console.error("Error linking events:", updateError);
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to link calendar events" }, { status: 500 });
     }
 
     // Add email to contact_info if not already there
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
 
     if (createError || !person) {
         console.error("Error creating contact:", createError);
-        return NextResponse.json({ error: createError?.message || "Failed to create contact" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
     }
 
     // Add email to contact_info

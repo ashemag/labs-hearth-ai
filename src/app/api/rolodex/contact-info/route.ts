@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
             .order("created_at", { ascending: true });
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch contact info" }, { status: 500 });
         }
 
         return NextResponse.json({ contact_info: data || [] });
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
             if (error.code === '23505') { // Unique violation
                 return NextResponse.json({ error: "This contact info already exists" }, { status: 409 });
             }
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to add contact info" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, contact_info: data });
@@ -123,7 +123,7 @@ export async function DELETE(req: NextRequest) {
             .eq("user_id", user.id);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete contact info" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

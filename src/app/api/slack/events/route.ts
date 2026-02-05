@@ -7,19 +7,16 @@ import { waitUntil } from "@vercel/functions";
 import crypto from "crypto";
 import { getValidSlackToken, getUserIdForWorkspace, forceRefreshSlackToken } from "@/lib/slack/token-manager";
 import { processPeopleMessage } from "@/lib/people/processor";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { SLACK_PEOPLE_CHANNEL_ID } from "@/lib/constants";
 
-// Supabase client for screenshot compliment processing
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-  : null;
+// Supabase admin client for screenshot compliment processing
+let supabase: ReturnType<typeof createAdminClient> | null = null;
+try { supabase = createAdminClient(); } catch { supabase = null; }
 
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 
-// HARDCODED PEOPLE CHANNEL ID - update this to your channel
-const PEOPLE_CHANNEL_ID = process.env.SLACK_PEOPLE_CHANNEL_ID || "C09MPL84L6S";
+const PEOPLE_CHANNEL_ID = SLACK_PEOPLE_CHANNEL_ID;
 
 // Message subtypes to ignore
 const IGNORED_MESSAGE_SUBTYPES = new Set([

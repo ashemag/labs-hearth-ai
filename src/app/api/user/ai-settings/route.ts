@@ -18,7 +18,7 @@ export async function GET() {
         .single();
 
     if (error && error.code !== "PGRST116") {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch AI settings" }, { status: 500 });
     }
 
     if (!data) {
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         .upsert(updateData, { onConflict: "user_id" });
 
     if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to save AI settings" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
@@ -102,7 +102,7 @@ export async function DELETE() {
         .eq("user_id", user.id);
 
     if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to delete AI settings" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

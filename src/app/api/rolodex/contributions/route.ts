@@ -29,7 +29,7 @@ export async function GET() {
 
         if (notesError) {
             console.error("Error fetching notes:", notesError);
-            return NextResponse.json({ error: notesError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch contributions" }, { status: 500 });
         }
 
         // Fetch iMessages - we only need people_id and message_date for contributions
@@ -44,7 +44,7 @@ export async function GET() {
 
         if (messagesError) {
             console.error("Error fetching iMessages:", messagesError);
-            return NextResponse.json({ error: messagesError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch contributions" }, { status: 500 });
         }
 
         // Fetch calendar events (only past events, linked to contacts)

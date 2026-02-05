@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
 
             if (updateError) {
                 console.error("Error updating X profile:", updateError);
-                return NextResponse.json({ error: updateError.message }, { status: 500 });
+                return NextResponse.json({ error: "Failed to update X profile" }, { status: 500 });
             }
 
             xProfile = updatedProfile;
@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
 
             if (createError) {
                 console.error("Error creating X profile:", createError);
-                return NextResponse.json({ error: createError.message }, { status: 500 });
+                return NextResponse.json({ error: "Failed to link X profile" }, { status: 500 });
             }
 
             xProfile = newProfile;
@@ -298,7 +298,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting X profile:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to unlink X profile" }, { status: 500 });
         }
 
         console.log(`✓ Unlinked X profile from contact ${peopleId}`);

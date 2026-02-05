@@ -3,12 +3,10 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
 const SLACK_SECRET = process.env.SLACK_SECRET!;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Fail fast if critical env vars are missing
 if (!SLACK_CLIENT_ID || !SLACK_SECRET) {
@@ -95,7 +93,7 @@ export async function GET(req: NextRequest) {
 
     // 3) Store tokens in the slack_tokens table (keyed by team_id for multi-workspace)
     try {
-      const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const sb = createAdminClient();
 
       // Calculate expiration time (default to 12 hours if not provided)
       const expiresIn = tokens.expires_in || 43200; // 12 hours in seconds

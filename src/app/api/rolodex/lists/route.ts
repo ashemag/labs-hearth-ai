@@ -30,7 +30,7 @@ export async function GET() {
 
         if (error) {
             console.error("Error fetching lists:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch lists" }, { status: 500 });
         }
 
         // Transform to include member count
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error("Error creating list:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to create list" }, { status: 500 });
         }
 
         return NextResponse.json({
@@ -137,7 +137,7 @@ export async function PATCH(req: NextRequest) {
 
         if (error) {
             console.error("Error updating list:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to update list" }, { status: 500 });
         }
 
         return NextResponse.json({ list: data });
@@ -173,7 +173,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting list:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete list" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

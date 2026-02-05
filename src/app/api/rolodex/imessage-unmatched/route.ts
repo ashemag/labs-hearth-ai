@@ -19,7 +19,7 @@ export async function GET() {
             .is("people_id", null);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to fetch unmatched messages" }, { status: 500 });
         }
 
         // Group by handle_id and count messages
@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
 
         if (personError) {
             console.error("[iMessage Unmatched] Error creating contact:", personError);
-            return NextResponse.json({ error: personError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
         }
 
         // Link the handle and upload image

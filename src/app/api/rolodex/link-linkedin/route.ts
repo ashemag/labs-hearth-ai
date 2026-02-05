@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
         if (createError) {
             console.error("Error creating LinkedIn profile:", createError);
-            return NextResponse.json({ error: createError.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to link LinkedIn profile" }, { status: 500 });
         }
 
         console.log(`✓ Linked LinkedIn profile to contact ${people_id}`, { 
@@ -140,7 +140,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting LinkedIn profile:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to unlink LinkedIn profile" }, { status: 500 });
         }
 
         console.log(`✓ Unlinked LinkedIn profile from contact ${peopleId}`);

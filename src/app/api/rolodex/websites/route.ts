@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
         if (error) {
             console.error("Error adding website:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to add website" }, { status: 500 });
         }
 
         return NextResponse.json({ website: data });
@@ -67,7 +67,7 @@ export async function DELETE(req: NextRequest) {
 
         if (error) {
             console.error("Error deleting website:", error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            return NextResponse.json({ error: "Failed to delete website" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });
