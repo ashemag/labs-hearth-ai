@@ -34,12 +34,13 @@ import {
     LogOut,
     Palette,
     Settings,
+    ImagePlus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
 import ChatWidget from "@/components/ChatWidget";
-import type { Contact, RolodexList, Todo, ContextMenuState, DiscoveryResult, UserProfile } from "./types";
+import type { Contact, RolodexList, Todo, ContextMenuState, DiscoveryResult, UserProfile, StandaloneCompliment } from "./types";
 import CommandSearchModal from "./CommandSearchModal";
 import AddContactModal from "./AddContactModal";
 import DiscoveryPanel from "./DiscoveryPanel";
@@ -132,6 +133,16 @@ export default function RolodexPage() {
         return false;
     });
     const [showBoostSheet, setShowBoostSheet] = useState(false);
+    const [standaloneCompliments, setStandaloneCompliments] = useState<StandaloneCompliment[]>([]);
+    const [showBoostAddForm, setShowBoostAddForm] = useState(false);
+    const [boostNewCompliment, setBoostNewCompliment] = useState("");
+    const [boostNewSource, setBoostNewSource] = useState("");
+    const [boostNewContext, setBoostNewContext] = useState("");
+    const [boostAddLoading, setBoostAddLoading] = useState(false);
+    const [boostImageFile, setBoostImageFile] = useState<File | null>(null);
+    const [boostImagePreview, setBoostImagePreview] = useState<string | null>(null);
+    const [boostDragOver, setBoostDragOver] = useState(false);
+    const [boostExtracting, setBoostExtracting] = useState(false);
     const pendingListDeleteRef = useRef<{ list: RolodexList; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
     const [completedTodosExpanded, setCompletedTodosExpanded] = useState(false);
     const [todoNameFilter, setTodoNameFilter] = useState<{ id: number; name: string; profileImage: string | null } | null>(null);
@@ -288,6 +299,21 @@ export default function RolodexPage() {
         }
     }, []);
 
+    // Fetch standalone compliments (not linked to any contact)
+    const fetchStandaloneCompliments = useCallback(async () => {
+        try {
+            const res = await fetch("/api/rolodex/compliments", {
+                credentials: "include",
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStandaloneCompliments(data.compliments || []);
+            }
+        } catch (error) {
+            console.error("Error fetching standalone compliments:", error);
+        }
+    }, []);
+
     // Fetch all unique locations for autocomplete
     const fetchLocations = useCallback(async () => {
         try {
@@ -309,8 +335,9 @@ export default function RolodexPage() {
             fetchLists();
             fetchTodos();
             fetchLocations();
+            fetchStandaloneCompliments();
         }
-    }, [authenticated, fetchContacts, fetchLists, fetchTodos, fetchLocations]);
+    }, [authenticated, fetchContacts, fetchLists, fetchTodos, fetchLocations, fetchStandaloneCompliments]);
 
     // Set up Supabase real-time subscriptions for automatic data refresh
     useEffect(() => {
@@ -387,6 +414,7 @@ export default function RolodexPage() {
                 (payload) => {
                     console.log('[Realtime] people_compliments change:', payload);
                     fetchContacts();
+                    fetchStandaloneCompliments();
                 }
             )
             .on(
@@ -997,6 +1025,97 @@ export default function RolodexPage() {
             );
         } catch (error) {
             console.error("Error deleting compliment:", error);
+        }
+    };
+
+    const handleBoostImageFile = async (file: File) => {
+        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (!allowedTypes.includes(file.type) || file.size > 5 * 1024 * 1024) return;
+        setBoostImageFile(file);
+        const reader = new FileReader();
+        reader.onload = (e) => setBoostImagePreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+        setShowBoostAddForm(true);
+
+        // Auto-extract compliment text via GPT-4o Vision
+        setBoostExtracting(true);
+        try {
+            const formData = new FormData();
+            formData.append("image", file);
+            const res = await fetch("/api/rolodex/compliments/extract", {
+                method: "POST",
+                credentials: "include",
+                body: formData,
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.compliments?.length > 0) {
+                    setBoostNewCompliment(data.compliments.join(" "));
+                }
+                if (data.personName) {
+                    setBoostNewSource(data.personName);
+                }
+                if (data.context) {
+                    setBoostNewContext(data.context);
+                }
+            }
+        } catch (error) {
+            console.error("Error extracting compliment:", error);
+        } finally {
+            setBoostExtracting(false);
+        }
+    };
+
+    const clearBoostForm = () => {
+        setBoostNewCompliment("");
+        setBoostNewSource("");
+        setBoostNewContext("");
+        setBoostImageFile(null);
+        setBoostImagePreview(null);
+        setBoostExtracting(false);
+        setShowBoostAddForm(false);
+    };
+
+    const handleAddStandaloneCompliment = async () => {
+        if (!boostNewCompliment.trim()) return;
+
+        setBoostAddLoading(true);
+        try {
+            const res = await fetch("/api/rolodex/compliments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    compliment: boostNewCompliment.trim(),
+                    source_name: boostNewSource.trim() || null,
+                    context: boostNewContext.trim() || null,
+                }),
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setStandaloneCompliments((prev) => [data.compliment, ...prev]);
+                clearBoostForm();
+            }
+        } catch (error) {
+            console.error("Error adding standalone compliment:", error);
+        } finally {
+            setBoostAddLoading(false);
+        }
+    };
+
+    const handleDeleteStandaloneCompliment = async (complimentId: number) => {
+        try {
+            const res = await fetch(`/api/rolodex/compliments?id=${complimentId}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+
+            if (res.ok) {
+                setStandaloneCompliments((prev) => prev.filter((c) => c.id !== complimentId));
+            }
+        } catch (error) {
+            console.error("Error deleting standalone compliment:", error);
         }
     };
 
@@ -2677,7 +2796,7 @@ export default function RolodexPage() {
             />
 
             {/* Boost (Compliments) Sheet */}
-            <Sheet open={showBoostSheet && !loading} onOpenChange={setShowBoostSheet}>
+            <Sheet open={showBoostSheet && !loading} onOpenChange={(open) => { setShowBoostSheet(open); if (!open) clearBoostForm(); }}>
                 <SheetHeader>
                     <SheetTitle className="flex items-center gap-2">
                         <button
@@ -2689,26 +2808,173 @@ export default function RolodexPage() {
                         </button>
                         <Sparkles className="h-5 w-5 text-gray-500 dark:text-gray-400" />
                         Confidence Boost
+                        <button
+                            onClick={() => showBoostAddForm ? clearBoostForm() : setShowBoostAddForm(true)}
+                            className="ml-auto p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            aria-label="Add compliment"
+                        >
+                            {showBoostAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                        </button>
                     </SheetTitle>
                     <SheetDescription>
-                        {contacts.reduce((sum, c) => sum + c.compliments.length, 0)} compliments from your network
+                        {contacts.reduce((sum, c) => sum + c.compliments.length, 0) + standaloneCompliments.length} compliments collected
                     </SheetDescription>
                 </SheetHeader>
                 <SheetContent className="p-4">
-                    {(() => {
-                        // Collect all compliments with contact info
-                        const allCompliments = contacts.flatMap(contact =>
-                            contact.compliments.map(comp => ({
-                                ...comp,
-                                contact: {
-                                    id: contact.id,
-                                    name: contact.name,
-                                    profileImage: contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url || null,
-                                },
-                            }))
-                        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                  <div
+                    className="relative"
+                    onPaste={(e) => {
+                        const items = e.clipboardData?.items;
+                        if (!items) return;
+                        for (const item of Array.from(items)) {
+                            if (item.type.startsWith("image/")) {
+                                e.preventDefault();
+                                const file = item.getAsFile();
+                                if (file) handleBoostImageFile(file);
+                                return;
+                            }
+                        }
+                    }}
+                    onDragOver={(e) => {
+                        e.preventDefault();
+                        setBoostDragOver(true);
+                    }}
+                    onDragLeave={(e) => {
+                        e.preventDefault();
+                        setBoostDragOver(false);
+                    }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        setBoostDragOver(false);
+                        const file = e.dataTransfer?.files?.[0];
+                        if (file && file.type.startsWith("image/")) {
+                            handleBoostImageFile(file);
+                        }
+                    }}
+                  >
+                    {/* Drag overlay */}
+                    {boostDragOver && (
+                        <div className="absolute inset-0 z-50 bg-brand-orange/10 border-2 border-dashed border-brand-orange rounded-xl flex items-center justify-center pointer-events-none">
+                            <div className="text-center">
+                                <ImagePlus className="h-8 w-8 text-brand-orange mx-auto mb-2" />
+                                <p className="text-sm font-medium text-brand-orange">Drop screenshot here</p>
+                            </div>
+                        </div>
+                    )}
 
-                        if (allCompliments.length === 0) {
+                    {/* Add compliment form */}
+                    {showBoostAddForm && (
+                        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-2">
+                            {/* Image preview / drop zone */}
+                            {boostImagePreview ? (
+                                <div className="relative">
+                                    <img
+                                        src={boostImagePreview}
+                                        alt="Screenshot preview"
+                                        className={`w-full rounded-lg border border-gray-200 dark:border-gray-700 transition-opacity ${boostExtracting ? "opacity-60" : ""}`}
+                                    />
+                                    {boostExtracting && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="flex items-center gap-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full">
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                Extracting text...
+                                            </div>
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={() => { setBoostImageFile(null); setBoostImagePreview(null); }}
+                                        className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <label className="flex flex-col items-center justify-center py-4 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-brand-orange/50 hover:bg-gray-100/50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <ImagePlus className="h-5 w-5 text-gray-400 mb-1" />
+                                    <span className="text-xs text-gray-400">Drop, paste, or click to add screenshot</span>
+                                    <input
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp,image/gif"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) handleBoostImageFile(file);
+                                            e.target.value = "";
+                                        }}
+                                    />
+                                </label>
+                            )}
+                            <input
+                                type="text"
+                                placeholder="Quote text (optional with screenshot)"
+                                value={boostNewCompliment}
+                                onChange={(e) => setBoostNewCompliment(e.target.value)}
+                                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-orange/50"
+                            />
+                            <input
+                                type="text"
+                                placeholder="From (optional)"
+                                value={boostNewSource}
+                                onChange={(e) => setBoostNewSource(e.target.value)}
+                                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-orange/50"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Context (optional)"
+                                value={boostNewContext}
+                                onChange={(e) => setBoostNewContext(e.target.value)}
+                                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-orange/50"
+                            />
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={clearBoostForm}
+                                    className="text-xs px-3 py-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddStandaloneCompliment}
+                                    disabled={!boostNewCompliment.trim() || boostAddLoading || boostExtracting}
+                                    className="text-xs px-3 py-1.5 rounded-lg bg-brand-orange text-white hover:bg-brand-orange-dark transition-colors disabled:opacity-40"
+                                >
+                                    {boostAddLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {(() => {
+                        // Collect contact-linked compliments
+                        const contactCompliments = contacts.flatMap(contact =>
+                            contact.compliments.map(comp => ({
+                                id: comp.id,
+                                compliment: comp.compliment,
+                                context: comp.context,
+                                received_at: comp.received_at,
+                                created_at: comp.created_at,
+                                sourceName: contact.name,
+                                contactId: contact.id as number | null,
+                                profileImage: contact.custom_profile_image_url || contact.x_profile?.profile_image_url || contact.linkedin_profile?.profile_image_url || null,
+                            }))
+                        );
+
+                        // Collect standalone compliments
+                        const standaloneItems = standaloneCompliments.map(comp => ({
+                            id: comp.id,
+                            compliment: comp.compliment,
+                            context: comp.context,
+                            received_at: comp.received_at,
+                            created_at: comp.created_at,
+                            sourceName: comp.source_name || null,
+                            contactId: null as number | null,
+                            profileImage: null as string | null,
+                        }));
+
+                        // Merge and sort by date
+                        const allCompliments = [...contactCompliments, ...standaloneItems]
+                            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+                        if (allCompliments.length === 0 && !showBoostAddForm) {
                             return (
                                 <div className="flex flex-col items-center justify-center py-12 text-center">
                                     <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
@@ -2718,7 +2984,7 @@ export default function RolodexPage() {
                                         No compliments yet
                                     </h3>
                                     <p className="text-sm text-gray-500 dark:text-gray-400 max-w-[240px]">
-                                        Add compliments to contacts to build your confidence boost collection.
+                                        Paste a screenshot or type kind words people have said to you.
                                     </p>
                                 </div>
                             );
@@ -2728,38 +2994,46 @@ export default function RolodexPage() {
                             <div className="space-y-3">
                                 {allCompliments.map(comp => (
                                     <div
-                                        key={comp.id}
+                                        key={`${comp.contactId ? 'c' : 's'}-${comp.id}`}
                                         className="group bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
                                         onClick={() => {
-                                            setShowBoostSheet(false);
-                                            setTimeout(() => {
-                                                setSelectedContactId(comp.contact.id);
-                                            }, 150);
+                                            if (comp.contactId) {
+                                                setShowBoostSheet(false);
+                                                setTimeout(() => {
+                                                    setSelectedContactId(comp.contactId!);
+                                                }, 150);
+                                            }
                                         }}
                                     >
                                         <div className="flex items-start gap-3">
-                                            {comp.contact.profileImage ? (
-                                                <Image
-                                                    src={comp.contact.profileImage}
-                                                    alt={comp.contact.name}
-                                                    width={36}
-                                                    height={36}
-                                                    className="rounded-full flex-shrink-0"
-                                                />
-                                            ) : (
-                                                <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                        {comp.contact.name.charAt(0).toUpperCase()}
-                                                    </span>
-                                                </div>
+                                            {comp.sourceName && (
+                                                comp.profileImage ? (
+                                                    <Image
+                                                        src={comp.profileImage}
+                                                        alt={comp.sourceName}
+                                                        width={36}
+                                                        height={36}
+                                                        className="rounded-full flex-shrink-0"
+                                                    />
+                                                ) : (
+                                                    <div className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                            {comp.sourceName.charAt(0).toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                )
                                             )}
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900 dark:text-white mb-0.5">
-                                                    {comp.contact.name}
-                                                </p>
-                                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                                    &ldquo;{comp.compliment}&rdquo;
-                                                </p>
+                                                {comp.sourceName && (
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-white mb-0.5">
+                                                        {comp.sourceName}
+                                                    </p>
+                                                )}
+                                                {comp.compliment && (
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                                        &ldquo;{comp.compliment}&rdquo;
+                                                    </p>
+                                                )}
                                                 <div className="flex items-center gap-2 mt-2">
                                                     {comp.context && (
                                                         <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-200/70 dark:bg-gray-700/50 px-2 py-0.5 rounded-full">
@@ -2773,6 +3047,18 @@ export default function RolodexPage() {
                                                             year: new Date(comp.received_at || comp.created_at).getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
                                                         })}
                                                     </span>
+                                                    {!comp.contactId && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteStandaloneCompliment(comp.id);
+                                                            }}
+                                                            className="ml-auto opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 transition-all"
+                                                            aria-label="Delete compliment"
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -2781,6 +3067,7 @@ export default function RolodexPage() {
                             </div>
                         );
                     })()}
+                  </div>
                 </SheetContent>
             </Sheet>
 

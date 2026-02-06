@@ -17,6 +17,16 @@ export interface Compliment {
     created_at: string;
 }
 
+export interface StandaloneCompliment {
+    id: number;
+    compliment: string | null;
+    context: string | null;
+    source_name: string | null;
+    image_url: string | null;
+    received_at: string | null;
+    created_at: string;
+}
+
 export interface XProfile {
     username: string;
     display_name: string | null;
