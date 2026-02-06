@@ -32,6 +32,12 @@ import { createClient } from "@/lib/supabase/client";
 type SettingsTab = "profile" | "ai" | "imessage" | "calendar";
 
 
+interface PreviewMessage {
+    message_text: string;
+    is_from_me: boolean;
+    message_date: string;
+}
+
 interface UnmatchedHandle {
     handle_id: string;
     contact_name: string | null;
@@ -44,6 +50,7 @@ interface RolodexContact {
     custom_profile_image_url: string | null;
     x_profile: { profile_image_url: string | null; username: string } | null;
     linkedin_profile: { profile_image_url: string | null } | null;
+    last_touchpoint: string | null;
 }
 
 interface GoogleAccount {
@@ -91,6 +98,11 @@ export default function SettingsPage() {
     const [newContactName, setNewContactName] = useState("");
     const [createLoading, setCreateLoading] = useState(false);
 
+    // Message preview state
+    const [expandedHandle, setExpandedHandle] = useState<string | null>(null);
+    const [previewMessages, setPreviewMessages] = useState<PreviewMessage[]>([]);
+    const [previewLoading, setPreviewLoading] = useState(false);
+
     // AI Provider settings state
     const [aiProvider, setAiProvider] = useState<string>("anthropic");
     const [aiApiKey, setAiApiKey] = useState("");
@@ -130,6 +142,7 @@ export default function SettingsPage() {
     const calendarDropdownRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const createInputRef = useRef<HTMLInputElement>(null);
+    const previewScrollRef = useRef<HTMLDivElement>(null);
 
     const fetchData = useCallback(async () => {
         try {
@@ -434,6 +447,7 @@ export default function SettingsPage() {
     }, [creatingFor]);
 
     const handleLink = async (handleId: string, peopleId: number) => {
+        if (matchLoading) return; // Prevent double-click
         setMatchLoading(handleId);
         try {
             const body: Record<string, unknown> = { handle_id: handleId, people_id: peopleId };
@@ -445,6 +459,7 @@ export default function SettingsPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
+                if (expandedHandle === handleId) { setExpandedHandle(null); setPreviewMessages([]); }
                 markLinked(handleId);
             }
         } catch (err) {
@@ -457,7 +472,7 @@ export default function SettingsPage() {
     };
 
     const handleCreateAndLink = async (handleId: string) => {
-        if (!newContactName.trim()) return;
+        if (!newContactName.trim() || createLoading) return; // Prevent double-click
         setCreateLoading(true);
         try {
             const body: Record<string, unknown> = {
@@ -472,6 +487,7 @@ export default function SettingsPage() {
                 body: JSON.stringify(body),
             });
             if (res.ok) {
+                if (expandedHandle === handleId) { setExpandedHandle(null); setPreviewMessages([]); }
                 markLinked(handleId);
             }
         } catch (err) {
@@ -507,6 +523,37 @@ export default function SettingsPage() {
         }, 300);
     };
 
+    const togglePreview = async (handleId: string) => {
+        if (expandedHandle === handleId) {
+            setExpandedHandle(null);
+            setPreviewMessages([]);
+            return;
+        }
+        setExpandedHandle(handleId);
+        setPreviewLoading(true);
+        setPreviewMessages([]);
+        try {
+            const res = await fetch(`/api/rolodex/imessage-preview?handle_id=${encodeURIComponent(handleId)}`, {
+                credentials: "include",
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setPreviewMessages(data.messages || []);
+            }
+        } catch (err) {
+            console.error("Failed to fetch message preview:", err);
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    // Scroll preview to bottom when messages load
+    useEffect(() => {
+        if (previewMessages.length > 0 && previewScrollRef.current) {
+            previewScrollRef.current.scrollTop = previewScrollRef.current.scrollHeight;
+        }
+    }, [previewMessages]);
+
     const formatHandle = (handle: string) => {
         if (handle.includes("@")) return handle;
         const cleaned = handle.replace(/[^+\d]/g, "");
@@ -516,9 +563,17 @@ export default function SettingsPage() {
 
     const isPhone = (handle: string) => !handle.includes("@");
 
-    const filteredContacts = useMemo(() => matchSearch
-        ? contacts.filter(c => c.name.toLowerCase().includes(matchSearch.toLowerCase()))
-        : contacts, [matchSearch, contacts]);
+    const filteredContacts = useMemo(() => {
+        const sorted = [...contacts].sort((a, b) => {
+            if (!a.last_touchpoint && !b.last_touchpoint) return 0;
+            if (!a.last_touchpoint) return 1;
+            if (!b.last_touchpoint) return -1;
+            return new Date(b.last_touchpoint).getTime() - new Date(a.last_touchpoint).getTime();
+        });
+        return matchSearch
+            ? sorted.filter(c => c.name.toLowerCase().includes(matchSearch.toLowerCase()))
+            : sorted;
+    }, [matchSearch, contacts]);
 
     return (
         <div className="min-h-screen bg-white dark:bg-black">
@@ -815,16 +870,23 @@ export default function SettingsPage() {
                                 const appleImg = appleImages[item.handle_id];
 
                                 return (
+                                    <div key={item.handle_id} className={`rounded-lg transition-all duration-300 ${
+                                        isLinked
+                                            ? "bg-green-50 dark:bg-green-900/20 opacity-0 scale-95"
+                                            : expandedHandle === item.handle_id
+                                                ? "bg-gray-50 dark:bg-gray-900/30"
+                                                : ""
+                                    }`}>
                                     <div
-                                        key={item.handle_id}
                                         className={`group relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg transition-all duration-300 ${
-                                            isLinked
-                                                ? "bg-green-50 dark:bg-green-900/20 opacity-0 scale-95"
-                                                : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                                            !isLinked && expandedHandle !== item.handle_id ? "hover:bg-gray-50 dark:hover:bg-gray-900/30" : ""
                                         }`}
                                     >
                                         {/* Left: Contact info with Apple photo */}
-                                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <button
+                                            onClick={() => togglePreview(item.handle_id)}
+                                            className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                                        >
                                             <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
                                                 {appleImg ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
@@ -858,7 +920,7 @@ export default function SettingsPage() {
                                                     {item.message_count} message{item.message_count !== 1 ? "s" : ""}
                                                 </p>
                                             </div>
-                                        </div>
+                                        </button>
 
                                         {/* Right: Actions */}
                                         <div className="flex items-center gap-1.5 flex-shrink-0" ref={isActive ? dropdownRef : undefined}>
@@ -999,6 +1061,39 @@ export default function SettingsPage() {
                                             )}
                                                 </div>
                                             </div>
+
+                                        {/* Message preview */}
+                                        {expandedHandle === item.handle_id && (
+                                            <div className="px-4 pb-3">
+                                                <div ref={previewScrollRef} className="ml-12 max-h-64 overflow-y-auto space-y-1.5 pr-2">
+                                                    {previewLoading ? (
+                                                        <div className="flex items-center justify-center py-4">
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+                                                        </div>
+                                                    ) : previewMessages.length === 0 ? (
+                                                        <p className="text-xs text-gray-400 text-center py-3">No messages found</p>
+                                                    ) : (
+                                                        previewMessages.map((msg, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                className={`flex ${msg.is_from_me ? "justify-end" : "justify-start"}`}
+                                                            >
+                                                                <div
+                                                                    className={`max-w-[80%] px-3 py-1.5 rounded-2xl text-xs leading-relaxed ${
+                                                                        msg.is_from_me
+                                                                            ? "bg-blue-500 text-white rounded-br-md"
+                                                                            : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-bl-md"
+                                                                    }`}
+                                                                >
+                                                                    {msg.message_text}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                        </div>
                                         );
                                     })}
                                     </div>

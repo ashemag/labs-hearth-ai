@@ -219,14 +219,6 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         return weeks;
     }, [contributionMap]);
 
-    if (loading) {
-        return (
-            <div className="mb-5 animate-pulse">
-                <div className="h-[28px] bg-gray-100 dark:bg-gray-800/30 rounded" />
-            </div>
-        );
-    }
-
     const handleDateClick = (date: string, count: number) => {
         if (count === 0) {
             setSelectedDate(null);
@@ -236,11 +228,11 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
     };
 
     return (
-        <div className="mb-5 pt-1">
-            <div className="flex gap-4 items-start">
+        <div className={`mb-5 pt-1 transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}>
+            <div className="flex gap-4 items-start overflow-x-auto">
                 {/* Grid */}
                 <TooltipProvider delayDuration={100}>
-                    <div className="flex gap-[2px]">
+                    <div className="flex gap-[2px] flex-shrink-0">
                         {gridData.map((week, weekIndex) => (
                             <div key={weekIndex} className="flex flex-col gap-[2px]">
                                 {week.map((day) => {

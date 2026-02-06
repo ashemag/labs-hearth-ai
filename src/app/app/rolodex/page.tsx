@@ -22,6 +22,7 @@ import {
     Check,
     Search,
     CheckCircle2,
+    ChevronRight,
     ClipboardList,
     PanelRightClose,
     Pin,
@@ -46,6 +47,7 @@ import TodoSheet from "./TodoSheet";
 import ProfilePanel from "./ProfilePanel";
 import ListsSidebar from "./ListsSidebar";
 import ContactsTable from "./ContactsTable";
+import { toast } from "sonner";
 
 export default function RolodexPage() {
     const [authLoading, setAuthLoading] = useState(true);
@@ -67,6 +69,7 @@ export default function RolodexPage() {
     const [savingNote, setSavingNote] = useState(false);
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [showListSubmenu, setShowListSubmenu] = useState(false);
     const [merging, setMerging] = useState(false);
     // Unified link adding state
     const [addingLinkFor, setAddingLinkFor] = useState<number | null>(null);
@@ -129,6 +132,7 @@ export default function RolodexPage() {
         return false;
     });
     const [showBoostSheet, setShowBoostSheet] = useState(false);
+    const pendingListDeleteRef = useRef<{ list: RolodexList; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
     const [completedTodosExpanded, setCompletedTodosExpanded] = useState(false);
     const [todoNameFilter, setTodoNameFilter] = useState<{ id: number; name: string; profileImage: string | null } | null>(null);
     const [todoNameSearch, setTodoNameSearch] = useState("");
@@ -487,11 +491,12 @@ export default function RolodexPage() {
 
     // Close context menu on click outside
     useEffect(() => {
-        const handleClick = () => { setContextMenu(null); setListContextMenu(null); };
+        const handleClick = () => { setContextMenu(null); setListContextMenu(null); setShowListSubmenu(false); };
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
                 setContextMenu(null);
                 setListContextMenu(null);
+                setShowListSubmenu(false);
                 setSelectedContacts(new Set());
             }
         };
@@ -1645,9 +1650,14 @@ export default function RolodexPage() {
             setSelectedContacts(new Set([contactId]));
         }
 
+        const menuWidth = 180;
+        const menuHeight = 250;
+        const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
+        const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
+
         setContextMenu({
-            x: e.clientX,
-            y: e.clientY,
+            x,
+            y,
             contactId,
         });
     };
@@ -1677,22 +1687,54 @@ export default function RolodexPage() {
         }
     };
 
-    const handleDeleteList = async (listId: number) => {
-        try {
-            const res = await fetch(`/api/rolodex/lists?id=${listId}`, {
+    const handleDeleteList = (listId: number) => {
+        // Cancel any existing pending delete and execute it immediately
+        if (pendingListDeleteRef.current) {
+            clearTimeout(pendingListDeleteRef.current.timeoutId);
+            fetch(`/api/rolodex/lists?id=${pendingListDeleteRef.current.list.id}`, {
                 method: "DELETE",
                 credentials: "include",
-            });
-
-            if (res.ok) {
-                setLists((prev) => prev.filter((l) => l.id !== listId));
-                if (activeList === listId) {
-                    setActiveList("curated");
-                }
-            }
-        } catch (error) {
-            console.error("Error deleting list:", error);
+            }).catch((err) => console.error("Error deleting list:", err));
+            pendingListDeleteRef.current = null;
         }
+
+        const listToDelete = lists.find((l) => l.id === listId);
+        if (!listToDelete) return;
+
+        // Optimistically remove
+        setLists((prev) => prev.filter((l) => l.id !== listId));
+        if (activeList === listId) {
+            setActiveList("curated");
+        }
+
+        // Schedule actual delete after 5 seconds
+        const timeoutId = setTimeout(async () => {
+            try {
+                await fetch(`/api/rolodex/lists?id=${listId}`, {
+                    method: "DELETE",
+                    credentials: "include",
+                });
+            } catch (error) {
+                console.error("Error deleting list:", error);
+            }
+            pendingListDeleteRef.current = null;
+        }, 5000);
+
+        pendingListDeleteRef.current = { list: listToDelete, timeoutId };
+
+        toast(`Deleted "${listToDelete.name}"`, {
+            duration: 5000,
+            action: {
+                label: "Undo",
+                onClick: () => {
+                    if (pendingListDeleteRef.current?.list.id === listId) {
+                        clearTimeout(pendingListDeleteRef.current.timeoutId);
+                        setLists((prev) => [...prev, listToDelete].sort((a, b) => a.id - b.id));
+                        pendingListDeleteRef.current = null;
+                    }
+                },
+            },
+        });
     };
 
     const handleUpdateListAppearance = async (listId: number, updates: { color?: string; emoji?: string }) => {
@@ -2260,9 +2302,9 @@ export default function RolodexPage() {
         }
     };
 
-    if (authLoading || !authenticated) {
+    if (authLoading || !authenticated || loading) {
         return (
-            <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
+            <div className="h-screen bg-white dark:bg-black flex items-center justify-center">
                 <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
             </div>
         );
@@ -2328,54 +2370,101 @@ export default function RolodexPage() {
                             Merge contacts
                         </button>
                     )}
-                    {/* List options */}
+                    {/* Add to list - submenu (flyout on desktop, inline on mobile) */}
                     {selectedContacts.size >= 1 && lists.length > 0 && (
                         <>
                             {selectedContacts.size === 2 && <div className="border-t border-gray-100 dark:border-gray-800 my-1" />}
-                            <div className="px-3 py-1.5 text-xs font-medium text-gray-400 uppercase">
-                                Add to list
+                            <div className="relative group/list">
+                                <button
+                                    onClick={() => setShowListSubmenu(!showListSubmenu)}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    <span className="flex-1">Add to list</span>
+                                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform md:transition-none ${showListSubmenu ? "rotate-90 md:rotate-0" : ""}`} />
+                                </button>
+                                {/* Invisible bridge so cursor can travel to submenu (desktop only) */}
+                                <div className="hidden md:invisible md:group-hover/list:visible md:block absolute left-full top-0 w-2 h-full" />
+                                {/* Desktop: flyout submenu on hover */}
+                                <div className="hidden md:invisible md:group-hover/list:visible md:block absolute left-full top-0 -mt-1 ml-1.5 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px] max-h-64 overflow-y-auto">
+                                    {lists.map((list) => {
+                                        const selectedIds = Array.from(selectedContacts);
+                                        const allInList = selectedIds.every((id) => list.member_ids.includes(id));
+                                        const someInList = selectedIds.some((id) => list.member_ids.includes(id));
+
+                                        return (
+                                            <button
+                                                key={list.id}
+                                                onClick={() => {
+                                                    selectedIds.forEach((id) => {
+                                                        if (allInList) {
+                                                            handleRemoveFromList(list.id, id);
+                                                        } else if (!list.member_ids.includes(id)) {
+                                                            handleAddToList(list.id, id);
+                                                        }
+                                                    });
+                                                    setContextMenu(null);
+                                                    setShowListSubmenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                            >
+                                                {list.emoji ? (
+                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
+                                                ) : (
+                                                    <div
+                                                        className="w-3 h-3 rounded-full flex-shrink-0"
+                                                        style={{ backgroundColor: list.color }}
+                                                    />
+                                                )}
+                                                <span className="flex-1 truncate">{list.name}</span>
+                                                {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
+                                                {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {/* Mobile: inline list on click */}
+                                {showListSubmenu && (
+                                    <div className="md:hidden max-h-48 overflow-y-auto">
+                                        {lists.map((list) => {
+                                            const selectedIds = Array.from(selectedContacts);
+                                            const allInList = selectedIds.every((id) => list.member_ids.includes(id));
+                                            const someInList = selectedIds.some((id) => list.member_ids.includes(id));
+
+                                            return (
+                                                <button
+                                                    key={list.id}
+                                                    onClick={() => {
+                                                        selectedIds.forEach((id) => {
+                                                            if (allInList) {
+                                                                handleRemoveFromList(list.id, id);
+                                                            } else if (!list.member_ids.includes(id)) {
+                                                                handleAddToList(list.id, id);
+                                                            }
+                                                        });
+                                                        setContextMenu(null);
+                                                        setShowListSubmenu(false);
+                                                    }}
+                                                    className="w-full pl-10 pr-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                                >
+                                                    {list.emoji ? (
+                                                        <span className="text-sm flex-shrink-0">{list.emoji}</span>
+                                                    ) : (
+                                                        <div
+                                                            className="w-3 h-3 rounded-full flex-shrink-0"
+                                                            style={{ backgroundColor: list.color }}
+                                                        />
+                                                    )}
+                                                    <span className="flex-1 truncate">{list.name}</span>
+                                                    {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
+                                                    {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            {lists.map((list) => {
-                                const selectedIds = Array.from(selectedContacts);
-                                const allInList = selectedIds.every((id) => list.member_ids.includes(id));
-                                const someInList = selectedIds.some((id) => list.member_ids.includes(id));
-
-                                return (
-                                    <button
-                                        key={list.id}
-                                        onClick={() => {
-                                            selectedIds.forEach((id) => {
-                                                if (allInList) {
-                                                    handleRemoveFromList(list.id, id);
-                                                } else if (!list.member_ids.includes(id)) {
-                                                    handleAddToList(list.id, id);
-                                                }
-                                            });
-                                            setContextMenu(null);
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
-                                    >
-                                        {list.emoji ? (
-                                            <span className="text-sm flex-shrink-0">{list.emoji}</span>
-                                        ) : (
-                                            <div
-                                                className="w-3 h-3 rounded-full flex-shrink-0"
-                                                style={{ backgroundColor: list.color }}
-                                            />
-                                        )}
-                                        <span className="flex-1 truncate">{list.name}</span>
-                                        {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
-                                        {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
-                                    </button>
-                                );
-                            })}
                         </>
-                    )}
-
-                    {selectedContacts.size === 1 && lists.length === 0 && (
-                        <div className="px-4 py-2 text-sm text-gray-400 dark:text-gray-500">
-                            No lists yet
-                        </div>
                     )}
 
                     {/* Hide/Unhide option */}
@@ -2920,17 +3009,6 @@ export default function RolodexPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* Confidence Boost Button */}
-                        <button
-                            onClick={() => setShowBoostSheet(true)}
-                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
-                        >
-                            <Sparkles className="h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
-                                Boost
-                            </span>
-                        </button>
-
                         {/* Todo Button */}
                         <button
                             onClick={() => setShowTodoSheet(true)}
@@ -2939,6 +3017,17 @@ export default function RolodexPage() {
                             <ClipboardList className="h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-300 group-hover:scale-110" />
                             <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
                                 To Do
+                            </span>
+                        </button>
+
+                        {/* Confidence Boost Button */}
+                        <button
+                            onClick={() => setShowBoostSheet(true)}
+                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
+                        >
+                            <Sparkles className="h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-300 group-hover:scale-110" />
+                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
+                                Boost
                             </span>
                         </button>
 
@@ -3148,13 +3237,6 @@ export default function RolodexPage() {
                                 </div>
                             </div>
                         )}
-
-                    {/* Loading State */}
-                    {loading && (
-                        <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                        </div>
-                    )}
 
                     {/* Empty State */}
                     {!loading && contacts.length === 0 && (

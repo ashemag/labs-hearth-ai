@@ -14,7 +14,7 @@ export async function GET() {
         // Get all messages where people_id is null, grouped by handle_id
         const { data: messages, error } = await supabase
             .from("people_imessages")
-            .select("handle_id, contact_name")
+            .select("handle_id, contact_name, message_date")
             .eq("user_id", user.id)
             .is("people_id", null);
 
@@ -22,8 +22,8 @@ export async function GET() {
             return NextResponse.json({ error: "Failed to fetch unmatched messages" }, { status: 500 });
         }
 
-        // Group by handle_id and count messages
-        const handleMap = new Map<string, { handle_id: string; contact_name: string | null; message_count: number }>();
+        // Group by handle_id, count messages, and track most recent message
+        const handleMap = new Map<string, { handle_id: string; contact_name: string | null; message_count: number; last_message_date: string | null }>();
         for (const msg of messages || []) {
             const existing = handleMap.get(msg.handle_id);
             if (existing) {
@@ -32,16 +32,27 @@ export async function GET() {
                 if (!existing.contact_name && msg.contact_name) {
                     existing.contact_name = msg.contact_name;
                 }
+                // Track most recent message
+                if (msg.message_date && (!existing.last_message_date || msg.message_date > existing.last_message_date)) {
+                    existing.last_message_date = msg.message_date;
+                }
             } else {
                 handleMap.set(msg.handle_id, {
                     handle_id: msg.handle_id,
                     contact_name: msg.contact_name,
                     message_count: 1,
+                    last_message_date: msg.message_date || null,
                 });
             }
         }
 
-        const unmatched = Array.from(handleMap.values()).sort((a, b) => b.message_count - a.message_count);
+        const unmatched = Array.from(handleMap.values()).sort((a, b) => {
+            // Sort by most recent message first
+            if (!a.last_message_date && !b.last_message_date) return 0;
+            if (!a.last_message_date) return 1;
+            if (!b.last_message_date) return -1;
+            return b.last_message_date.localeCompare(a.last_message_date);
+        });
 
         // Look up Apple contact images from storage
         const handleImages: Record<string, string> = {};
@@ -142,10 +153,26 @@ async function linkHandleToContact(
         throw new Error(updateError.message);
     }
 
-    // Save phone/email to people_contact_info
+    // Save phone/email to people_contact_info (skip if already linked to another contact)
     const isEmail = handleId.includes("@");
     const type = isEmail ? "email" : "phone";
     const value = isEmail ? handleId.toLowerCase().trim() : handleId.replace(/[^+\d]/g, "");
+
+    // Check if this handle is already linked to a different contact
+    const { data: existingInfo } = await supabase
+        .from("people_contact_info")
+        .select("people_id")
+        .eq("user_id", userId)
+        .eq("type", type)
+        .eq("value", value)
+        .neq("people_id", peopleId)
+        .limit(1)
+        .maybeSingle();
+
+    if (existingInfo) {
+        console.log(`[iMessage Unmatched] Handle ${handleId} already linked to contact ${existingInfo.people_id}, skipping duplicate`);
+        throw new Error(`This handle is already linked to another contact (ID: ${existingInfo.people_id})`);
+    }
 
     const { error: infoError } = await supabase
         .from("people_contact_info")
@@ -256,6 +283,10 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: true, linked: count });
     } catch (error) {
         console.error("[iMessage Unmatched] Error:", error);
+        const message = error instanceof Error ? error.message : "Internal server error";
+        if (message.includes("already linked")) {
+            return NextResponse.json({ error: message }, { status: 409 });
+        }
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
@@ -274,6 +305,27 @@ export async function POST(req: NextRequest) {
 
         if (!handle_id || !name) {
             return NextResponse.json({ error: "handle_id and name are required" }, { status: 400 });
+        }
+
+        // Check if this handle is already linked to an existing contact
+        const isEmail = handle_id.includes("@");
+        const infoType = isEmail ? "email" : "phone";
+        const infoValue = isEmail ? handle_id.toLowerCase().trim() : handle_id.replace(/[^+\d]/g, "");
+
+        const { data: existingLink } = await supabase
+            .from("people_contact_info")
+            .select("people_id")
+            .eq("user_id", user.id)
+            .eq("type", infoType)
+            .eq("value", infoValue)
+            .limit(1)
+            .maybeSingle();
+
+        if (existingLink) {
+            return NextResponse.json(
+                { error: "This handle is already linked to an existing contact", existing_contact_id: existingLink.people_id },
+                { status: 409 }
+            );
         }
 
         // Create the new contact

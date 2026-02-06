@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { Toaster } from "sonner";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
     return (
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <ErrorBoundary>
                 {children}
             </ErrorBoundary>
+            <Toaster position="bottom-right" richColors />
         </div>
     );
 }
