@@ -124,15 +124,23 @@ export async function PATCH(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { display_name } = body;
+        const { display_name, linked_emails } = body;
+
+        const updateData: Record<string, unknown> = {
+            id: user.id,
+            updated_at: new Date().toISOString(),
+        };
+        if (display_name !== undefined) updateData.display_name = display_name;
+        if (linked_emails !== undefined) {
+            // Normalize and dedupe
+            updateData.linked_emails = [...new Set(
+                (linked_emails as string[]).map((e: string) => e.toLowerCase().trim()).filter(Boolean)
+            )];
+        }
 
         const { error: upsertError } = await supabase
             .from("user_profiles")
-            .upsert({
-                id: user.id,
-                display_name,
-                updated_at: new Date().toISOString(),
-            }, {
+            .upsert(updateData, {
                 onConflict: "id",
             });
 

@@ -155,6 +155,7 @@ interface ProfilePanelProps {
 
     // Loading
     loadingMessagesFor: number | null;
+    generatingSummaryFor: number | null;
     showMessagesFor: Set<number>;
 
     // Callbacks
@@ -283,6 +284,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         showListDropdownFor,
         setShowListDropdownFor,
         loadingMessagesFor,
+        generatingSummaryFor,
         showMessagesFor,
         onClose,
         handleUpdateName,
@@ -780,17 +782,22 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                             <div>
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest">Touchpoints</h3>
-                                    <button
-                                        onClick={() => toggleMessagesForContact(contact.id)}
-                                        className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
-                                            showMessagesFor.has(contact.id)
-                                                ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
-                                                : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                        }`}
-                                        title={showMessagesFor.has(contact.id) ? "Hide iMessages" : "Show iMessages"}
-                                    >
-                                        {loadingMessagesFor === contact.id ? "..." : showMessagesFor.has(contact.id) ? "iMessages on" : "iMessages"}
-                                    </button>
+                                    <div className="flex items-center gap-1.5">
+                                        {generatingSummaryFor === contact.id && (
+                                            <Loader2 className="h-3 w-3 animate-spin text-violet-400 dark:text-violet-500" />
+                                        )}
+                                        <button
+                                            onClick={() => toggleMessagesForContact(contact.id)}
+                                            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                                                showMessagesFor.has(contact.id)
+                                                    ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
+                                                    : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                            }`}
+                                            title={showMessagesFor.has(contact.id) ? "Hide iMessages" : "Show iMessages"}
+                                        >
+                                            {loadingMessagesFor === contact.id ? "..." : showMessagesFor.has(contact.id) ? "iMessages on" : "iMessages"}
+                                        </button>
+                                    </div>
                                 </div>
                                 {/* Add note input - minimal composer */}
                                 <div className="mb-4 relative group/composer">

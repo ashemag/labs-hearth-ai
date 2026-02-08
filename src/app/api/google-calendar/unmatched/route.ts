@@ -17,6 +17,16 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Get user's linked emails to exclude
+    const { data: userProfile } = await supabase
+        .from("user_profiles")
+        .select("linked_emails")
+        .eq("id", user.id)
+        .single();
+    const linkedEmails = new Set(
+        (userProfile?.linked_emails || []).map((e: string) => e.toLowerCase().trim())
+    );
+
     // Get all unmatched attendees grouped by email
     const { data: events, error } = await supabase
         .from("people_calendar_events")
@@ -30,10 +40,11 @@ export async function GET() {
         return NextResponse.json({ error: "Failed to fetch unmatched attendees" }, { status: 500 });
     }
 
-    // Group by email
+    // Group by email, excluding user's linked emails
     const grouped = new Map<string, UnmatchedAttendee>();
     for (const event of events || []) {
         const email = event.attendee_email.toLowerCase();
+        if (linkedEmails.has(email)) continue;
         if (!grouped.has(email)) {
             grouped.set(email, {
                 attendee_email: event.attendee_email,

@@ -114,6 +114,16 @@ export async function POST(req: NextRequest) {
         // Get fresh access token
         const accessToken = await refreshAccessToken(supabase, oauthRecord as GoogleOAuthRecord);
 
+        // Get user's linked emails to exclude from attendees
+        const { data: userProfile } = await supabase
+            .from("user_profiles")
+            .select("linked_emails")
+            .eq("id", user.id)
+            .single();
+        const linkedEmails = new Set(
+            (userProfile?.linked_emails || []).map((e: string) => e.toLowerCase().trim())
+        );
+
         // Get user's contacts for matching
         const { data: contacts } = await supabase
             .from("people")
@@ -205,9 +215,9 @@ export async function POST(req: NextRequest) {
         for (const event of events) {
             if (!event.start?.dateTime && !event.start?.date) continue;
 
-            // Get all attendees except the user
+            // Get all attendees except the user and their linked emails
             const attendees = (event.attendees || []).filter(
-                a => !a.self && normalizeEmail(a.email) !== userEmail
+                a => !a.self && normalizeEmail(a.email) !== userEmail && !linkedEmails.has(normalizeEmail(a.email))
             );
 
             // If no attendees (solo event), skip

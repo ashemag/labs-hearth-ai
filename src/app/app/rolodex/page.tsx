@@ -48,6 +48,7 @@ import TodoSheet from "./TodoSheet";
 import ProfilePanel from "./ProfilePanel";
 import ListsSidebar from "./ListsSidebar";
 import ContactsTable from "./ContactsTable";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function RolodexPage() {
@@ -204,6 +205,7 @@ export default function RolodexPage() {
         message_date: string;
     }>>>({});
     const [loadingMessagesFor, setLoadingMessagesFor] = useState<number | null>(null);
+    const [generatingSummaryFor, setGeneratingSummaryFor] = useState<number | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const noteInputRef = useRef<HTMLTextAreaElement>(null);
     const editNoteInputRef = useRef<HTMLInputElement>(null);
@@ -488,6 +490,7 @@ export default function RolodexPage() {
             }, 350); // Sheet animation is 300ms
 
             // Generate conversation summary in the background (non-blocking)
+            setGeneratingSummaryFor(selectedContactId);
             fetch(`/api/rolodex/contacts/${selectedContactId}/generate-summary`, {
                 method: "POST",
                 credentials: "include"
@@ -511,7 +514,8 @@ export default function RolodexPage() {
                         }));
                     }
                 })
-                .catch(err => console.error("Failed to generate summary:", err));
+                .catch(err => console.error("Failed to generate summary:", err))
+                .finally(() => setGeneratingSummaryFor(null));
 
             return () => clearTimeout(timer);
         }
@@ -3162,6 +3166,7 @@ export default function RolodexPage() {
                 showListDropdownFor={showListDropdownFor}
                 setShowListDropdownFor={setShowListDropdownFor}
                 loadingMessagesFor={loadingMessagesFor}
+                generatingSummaryFor={generatingSummaryFor}
                 showMessagesFor={showMessagesFor}
                 onClose={() => {
                     setSelectedContactId(null);
@@ -3435,34 +3440,24 @@ export default function RolodexPage() {
                             <div className="flex-1 min-w-0">
                                 {/* Filter Bar */}
                                 <div className="flex items-center gap-3 mb-4">
-                                    {/* Search/Filter */}
-                                    <div className="relative flex-1 max-w-xs">
-                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="Filter..."
-                                            className="w-full pl-8 pr-14 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border-0 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-600"
-                                        />
-                                        {searchQuery ? (
-                                            <button
-                                                onClick={() => setSearchQuery("")}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                            >
-                                                <X className="h-3.5 w-3.5" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => setShowCommandSearch(true)}
-                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
-                                                title="Search contacts (⌘K)"
-                                            >
-                                                <Command className="h-2.5 w-2.5" />
-                                                <span>K</span>
-                                            </button>
-                                        )}
-                                    </div>
+                                    {/* Search Button - opens command menu */}
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowCommandSearch(true);
+                                            setCommandSearchQuery("");
+                                            setCommandSearchIndex(0);
+                                        }}
+                                        className="h-8 w-full max-w-xs justify-between text-sm text-muted-foreground font-normal bg-gray-100 dark:bg-gray-800 border-0 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <Search className="h-3.5 w-3.5" />
+                                            Search...
+                                        </span>
+                                        <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                                            <Command className="h-2.5 w-2.5" />K
+                                        </kbd>
+                                    </Button>
 
                                     {/* Hidden contacts toggle */}
                                     {contacts.some(c => c.hidden) && (

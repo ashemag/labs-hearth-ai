@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/google-calendar/watch/renew",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

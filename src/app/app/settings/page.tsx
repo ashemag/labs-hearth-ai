@@ -26,6 +26,8 @@ import {
     Plus,
     Camera,
     User,
+    ArrowRight,
+    Wand2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -74,6 +76,18 @@ interface UnmatchedCalendarAttendee {
     latest_event: string;
 }
 
+interface CalendarMatchSuggestion {
+    attendee_email: string;
+    attendee_name: string | null;
+    event_count: number;
+    action: "match" | "create" | "skip" | "me";
+    matched_contact_id?: number;
+    matched_contact_name?: string;
+    confidence: "high" | "medium" | "low";
+    reason: string;
+    suggested_name?: string;
+}
+
 export default function SettingsPage() {
     const [unmatched, setUnmatched] = useState<UnmatchedHandle[]>([]);
     const [contacts, setContacts] = useState<RolodexContact[]>([]);
@@ -83,6 +97,11 @@ export default function SettingsPage() {
     // Profile/Avatar state
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const avatarInputRef = useRef<HTMLInputElement>(null);
+
+    // Linked emails state
+    const [linkedEmails, setLinkedEmails] = useState<string[]>([]);
+    const [newLinkedEmail, setNewLinkedEmail] = useState("");
+    const [linkedEmailsSaving, setLinkedEmailsSaving] = useState(false);
 
     // Apple contact images: handle_id -> data URI
     const [appleImages, setAppleImages] = useState<Record<string, string>>({});
@@ -131,12 +150,20 @@ export default function SettingsPage() {
     const [unmatchedCalendar, setUnmatchedCalendar] = useState<UnmatchedCalendarAttendee[]>([]);
     const [activeCalendarMatch, setActiveCalendarMatch] = useState<string | null>(null);
     const [calendarMatchSearch, setCalendarMatchSearch] = useState("");
-    const [calendarMatchLoading, setCalendarMatchLoading] = useState<string | null>(null);
+    const [calendarMatchLoading, setCalendarMatchLoading] = useState<{ email: string; contactId: number } | null>(null);
     const [calendarRecentlyLinked, setCalendarRecentlyLinked] = useState<Set<string>>(new Set());
     const [calendarCreatingFor, setCalendarCreatingFor] = useState<string | null>(null);
     const [calendarNewContactName, setCalendarNewContactName] = useState("");
     const [calendarCreateLoading, setCalendarCreateLoading] = useState(false);
     const [calendarWatches, setCalendarWatches] = useState<CalendarWatch[]>([]);
+
+    // LLM suggestion state
+    const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarMatchSuggestion[]>([]);
+    const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+    const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+    const [acceptingEmail, setAcceptingEmail] = useState<string | null>(null);
+
+    const autoSuggestRef = useRef(false);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const calendarDropdownRef = useRef<HTMLDivElement>(null);
@@ -191,8 +218,36 @@ export default function SettingsPage() {
             const accountsData = await accountsRes.json();
             const unmatchedData = await unmatchedRes.json();
             const watchesData = await watchesRes.json();
-            if (accountsData.accounts) setGoogleAccounts(accountsData.accounts);
-            if (unmatchedData.unmatched) setUnmatchedCalendar(unmatchedData.unmatched);
+            if (accountsData.accounts) {
+                setGoogleAccounts(accountsData.accounts);
+                // Auto-add connected calendar emails to linked emails
+                const calendarEmails = (accountsData.accounts as GoogleAccount[])
+                    .map((a: GoogleAccount) => a.google_email.toLowerCase().trim())
+                    .filter(Boolean);
+                if (calendarEmails.length > 0) {
+                    setLinkedEmails(prev => {
+                        const combined = [...new Set([...prev, ...calendarEmails])];
+                        if (combined.length > prev.length) {
+                            // Save the new list (fire and forget)
+                            fetch("/api/user/profile", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({ linked_emails: combined }),
+                            }).catch(() => {});
+                            return combined;
+                        }
+                        return prev;
+                    });
+                }
+            }
+            if (unmatchedData.unmatched) {
+                setUnmatchedCalendar(unmatchedData.unmatched);
+                // Auto-trigger AI matching if there are unmatched attendees
+                if (unmatchedData.unmatched.length > 0) {
+                    autoSuggestRef.current = true;
+                }
+            }
             if (watchesData.watches) setCalendarWatches(watchesData.watches);
         } catch (err) {
             console.error("Failed to fetch calendar data:", err);
@@ -260,7 +315,7 @@ export default function SettingsPage() {
     };
 
     const handleCalendarLink = async (attendeeEmail: string, peopleId: number) => {
-        setCalendarMatchLoading(attendeeEmail);
+        setCalendarMatchLoading({ email: attendeeEmail, contactId: peopleId });
         try {
             const res = await fetch("/api/google-calendar/unmatched", {
                 method: "PATCH",
@@ -316,6 +371,83 @@ export default function SettingsPage() {
             setCalendarCreatingFor(null);
             setCalendarNewContactName("");
         }
+    };
+
+    const handleSuggestMatches = async () => {
+        setSuggestionsLoading(true);
+        setSuggestionsError(null);
+        setCalendarSuggestions([]);
+        try {
+            const res = await fetch("/api/google-calendar/unmatched/suggest", {
+                method: "POST",
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (data.error) {
+                setSuggestionsError(data.error);
+            } else if (data.suggestions) {
+                setCalendarSuggestions(data.suggestions);
+            }
+        } catch (err) {
+            console.error("Failed to get suggestions:", err);
+            setSuggestionsError("Failed to generate suggestions");
+        } finally {
+            setSuggestionsLoading(false);
+        }
+    };
+
+    const handleAcceptSuggestion = async (suggestion: CalendarMatchSuggestion) => {
+        setAcceptingEmail(suggestion.attendee_email);
+        try {
+            if (suggestion.action === "me") {
+                // Mark as user's own email
+                await handleMarkAsMe(suggestion.attendee_email);
+            } else if (suggestion.action === "match" && suggestion.matched_contact_id) {
+                // Link to existing contact
+                await handleCalendarLink(suggestion.attendee_email, suggestion.matched_contact_id);
+            } else if (suggestion.action === "create" && suggestion.suggested_name) {
+                // Create new contact and link
+                const res = await fetch("/api/google-calendar/unmatched", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        attendee_email: suggestion.attendee_email,
+                        name: suggestion.suggested_name,
+                    }),
+                });
+                if (res.ok) {
+                    setCalendarRecentlyLinked(prev => new Set(prev).add(suggestion.attendee_email));
+                    setTimeout(() => {
+                        setUnmatchedCalendar(prev => prev.filter(u => u.attendee_email !== suggestion.attendee_email));
+                        setCalendarRecentlyLinked(prev => {
+                            const next = new Set(prev);
+                            next.delete(suggestion.attendee_email);
+                            return next;
+                        });
+                    }, 600);
+                }
+            }
+            // Remove from suggestions
+            setCalendarSuggestions(prev => prev.filter(s => s.attendee_email !== suggestion.attendee_email));
+        } catch (err) {
+            console.error("Failed to accept suggestion:", err);
+        } finally {
+            setAcceptingEmail(null);
+        }
+    };
+
+    const handleDismissSuggestion = (email: string) => {
+        setCalendarSuggestions(prev => prev.filter(s => s.attendee_email !== email));
+    };
+
+    const handleAcceptAllSuggestions = async () => {
+        const actionable = calendarSuggestions.filter(s => s.action !== "skip");
+        for (const suggestion of actionable) {
+            await handleAcceptSuggestion(suggestion);
+        }
+        // Clear remaining skips
+        setCalendarSuggestions([]);
     };
 
     const handleSaveAiSettings = async () => {
@@ -391,6 +523,47 @@ export default function SettingsPage() {
         }
     };
 
+    const saveLinkedEmails = async (emails: string[]) => {
+        setLinkedEmailsSaving(true);
+        try {
+            const res = await fetch("/api/user/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ linked_emails: emails }),
+            });
+            if (res.ok) {
+                setLinkedEmails(emails);
+            }
+        } catch (err) {
+            console.error("Failed to save linked emails:", err);
+        } finally {
+            setLinkedEmailsSaving(false);
+        }
+    };
+
+    const handleAddLinkedEmail = () => {
+        const email = newLinkedEmail.toLowerCase().trim();
+        if (!email || !email.includes("@")) return;
+        if (linkedEmails.includes(email)) { setNewLinkedEmail(""); return; }
+        const updated = [...linkedEmails, email];
+        setNewLinkedEmail("");
+        saveLinkedEmails(updated);
+    };
+
+    const handleRemoveLinkedEmail = (email: string) => {
+        saveLinkedEmails(linkedEmails.filter(e => e !== email));
+    };
+
+    const handleMarkAsMe = async (email: string) => {
+        const normalized = email.toLowerCase().trim();
+        if (linkedEmails.includes(normalized)) return;
+        await saveLinkedEmails([...linkedEmails, normalized]);
+        // Remove from unmatched list and suggestions
+        setUnmatchedCalendar(prev => prev.filter(u => u.attendee_email.toLowerCase() !== normalized));
+        setCalendarSuggestions(prev => prev.filter(s => s.attendee_email.toLowerCase() !== normalized));
+    };
+
     useEffect(() => {
         const supabase = createClient();
         supabase.auth.getUser().then(async ({ data }) => {
@@ -402,6 +575,22 @@ export default function SettingsPage() {
                     if (profileRes.ok) {
                         const { profile } = await profileRes.json();
                         customAvatarUrl = profile?.avatar_url || null;
+                        // Seed linked emails with auth email + any saved ones
+                        const saved = profile?.linked_emails || [];
+                        const authEmail = data.user.email?.toLowerCase().trim();
+                        if (authEmail && !saved.includes(authEmail)) {
+                            const withAuth = [authEmail, ...saved];
+                            setLinkedEmails(withAuth);
+                            // Persist
+                            fetch("/api/user/profile", {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({ linked_emails: withAuth }),
+                            }).catch(() => {});
+                        } else {
+                            setLinkedEmails(saved);
+                        }
                     }
                 } catch (e) {
                     console.error("Error fetching user profile:", e);
@@ -445,6 +634,15 @@ export default function SettingsPage() {
             createInputRef.current.focus();
         }
     }, [creatingFor]);
+
+    // Auto-trigger AI suggestions when calendar data loads with unmatched attendees
+    useEffect(() => {
+        if (!calendarLoading && autoSuggestRef.current) {
+            autoSuggestRef.current = false;
+            handleSuggestMatches();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [calendarLoading]);
 
     const handleLink = async (handleId: string, peopleId: number) => {
         if (matchLoading) return; // Prevent double-click
@@ -731,6 +929,58 @@ export default function SettingsPage() {
                                                     <p className="text-sm text-gray-900 dark:text-white">{user.email}</p>
                                                 </div>
                                             )}
+                                        </div>
+                                    </div>
+
+                                    {/* Linked Emails */}
+                                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            My Email Addresses
+                                        </label>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+                                            Add your other email addresses. These will be excluded from calendar matching.
+                                        </p>
+
+                                        {linkedEmails.length > 0 && (
+                                            <div className="space-y-1.5 mb-3">
+                                                {linkedEmails.map((email) => (
+                                                    <div
+                                                        key={email}
+                                                        className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
+                                                    >
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <Mail className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                                            <span className="text-sm text-gray-900 dark:text-white truncate">{email}</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveLinkedEmail(email)}
+                                                            disabled={linkedEmailsSaving}
+                                                            className="p-1 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 disabled:opacity-50"
+                                                        >
+                                                            <X className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="email"
+                                                value={newLinkedEmail}
+                                                onChange={(e) => setNewLinkedEmail(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === "Enter") handleAddLinkedEmail(); }}
+                                                placeholder="Add email address..."
+                                                className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                                            />
+                                            <button
+                                                onClick={handleAddLinkedEmail}
+                                                disabled={!newLinkedEmail.trim() || linkedEmailsSaving}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                                            >
+                                                {linkedEmailsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                                Add
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -1172,32 +1422,18 @@ export default function SettingsPage() {
                                                                     </div>
                                                                     <p className="text-xs text-gray-400 dark:text-gray-500">
                                                                         {account.last_sync_at
-                                                                            ? `Last synced ${new Date(account.last_sync_at).toLocaleDateString()}`
-                                                                            : "Never synced"}
+                                                                            ? `Synced ${new Date(account.last_sync_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                                                                            : "Waiting for first sync"}
                                                                     </p>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() => handleSyncCalendar(account.id)}
-                                                                    disabled={calendarSyncing === account.id}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
-                                                                >
-                                                                    {calendarSyncing === account.id ? (
-                                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                                    ) : (
-                                                                        <RefreshCw className="h-3 w-3" />
-                                                                    )}
-                                                                    Sync
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDisconnectGoogle(account.id)}
-                                                                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                                                                    title="Disconnect"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </button>
-                                                            </div>
+                                                            <button
+                                                                onClick={() => handleDisconnectGoogle(account.id)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                                                                title="Disconnect"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
                                                         </div>
                                                         );
                                                     })}
@@ -1216,186 +1452,365 @@ export default function SettingsPage() {
                                         {/* Unmatched Attendees */}
                                         {unmatchedCalendar.length > 0 && (
                                             <div>
-                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                                                    Unmatched Calendar Attendees
-                                                </h3>
-                                                <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
-                                                    Link these people to contacts in your Rolodex.
-                                                </p>
-                                                <div className="space-y-1">
-                                                    {(() => {
-                                                        const filteredCalendarContacts = calendarMatchSearch
-                                                            ? contacts.filter(c => c.name.toLowerCase().includes(calendarMatchSearch.toLowerCase()))
-                                                            : contacts;
-                                                        return unmatchedCalendar.map((item) => {
-                                                        const isLinked = calendarRecentlyLinked.has(item.attendee_email);
-                                                        const isLoading = calendarMatchLoading === item.attendee_email;
-                                                        const isActive = activeCalendarMatch === item.attendee_email;
-                                                        const isCreating = calendarCreatingFor === item.attendee_email;
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div>
+                                                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                            Unmatched Calendar Attendees
+                                                        </h3>
+                                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                            {unmatchedCalendar.length} people from your calendar aren&apos;t linked to contacts yet.
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={handleSuggestMatches}
+                                                        disabled={suggestionsLoading}
+                                                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        {suggestionsLoading ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Wand2 className="h-4 w-4" />
+                                                        )}
+                                                        {suggestionsLoading ? "Analyzing..." : "Auto-Match with AI"}
+                                                    </button>
+                                                </div>
 
-                                                        return (
-                                                            <div
-                                                                key={item.attendee_email}
-                                                                className={`group relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg transition-all duration-300 ${
-                                                                    isLinked
-                                                                        ? "bg-green-50 dark:bg-green-900/20 opacity-0 scale-95"
-                                                                        : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
-                                                                }`}
-                                                            >
-                                                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                                                        <Mail className="h-3.5 w-3.5 text-gray-400" />
-                                                                    </div>
-                                                                    <div className="min-w-0">
-                                                                        {item.attendee_name ? (
-                                                                            <>
-                                                                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                                                                    {item.attendee_name}
-                                                                                </p>
-                                                                                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                                                                                    {item.attendee_email}
-                                                                                </p>
-                                                                            </>
-                                                                        ) : (
-                                                                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                                                                {item.attendee_email}
-                                                                            </p>
-                                                                        )}
-                                                                        <p className="text-[11px] text-gray-300 dark:text-gray-600">
-                                                                            {item.event_count} event{item.event_count !== 1 ? "s" : ""}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
+                                                {suggestionsError && (
+                                                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg">
+                                                        <p className="text-xs text-red-600 dark:text-red-400">{suggestionsError}</p>
+                                                    </div>
+                                                )}
 
-                                                                <div className="flex items-center gap-1.5 flex-shrink-0" ref={isActive ? calendarDropdownRef : undefined}>
-                                                                    {isLinked ? (
-                                                                        <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
-                                                                            <Check className="h-4 w-4" />
-                                                                            <span className="text-xs font-medium">Linked</span>
-                                                                        </div>
-                                                                    ) : isCreating ? (
-                                                                        <div className="flex items-center gap-2">
-                                                                            <input
-                                                                                type="text"
-                                                                                value={calendarNewContactName}
-                                                                                onChange={(e) => setCalendarNewContactName(e.target.value)}
-                                                                                onKeyDown={(e) => {
-                                                                                    if (e.key === "Enter" && calendarNewContactName.trim()) handleCalendarCreateAndLink(item.attendee_email);
-                                                                                    else if (e.key === "Escape") { setCalendarCreatingFor(null); setCalendarNewContactName(""); }
-                                                                                }}
-                                                                                placeholder={item.attendee_name || "Contact name"}
-                                                                                autoFocus
-                                                                                className="px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 w-40"
-                                                                            />
-                                                                            <button
-                                                                                onClick={() => handleCalendarCreateAndLink(item.attendee_email)}
-                                                                                disabled={!calendarNewContactName.trim() || calendarCreateLoading}
-                                                                                className="p-1.5 text-gray-700 hover:text-gray-900 disabled:text-gray-300 transition-colors"
-                                                                            >
-                                                                                {calendarCreateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => { setCalendarCreatingFor(null); setCalendarNewContactName(""); }}
-                                                                                className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-                                                                            >
-                                                                                <X className="h-3.5 w-3.5" />
-                                                                            </button>
-                                                                        </div>
-                                                                    ) : isActive ? (
-                                                                        <div className="relative">
-                                                                            <div className="w-64 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl shadow-gray-200/50 dark:shadow-black/50 overflow-hidden">
-                                                                                <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-                                                                                    <div className="flex items-center gap-2 px-2">
-                                                                                        <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                                                                                        <input
-                                                                                            type="text"
-                                                                                            value={calendarMatchSearch}
-                                                                                            onChange={(e) => setCalendarMatchSearch(e.target.value)}
-                                                                                            placeholder="Search contacts..."
-                                                                                            autoFocus
-                                                                                            className="w-full text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
-                                                                                        />
-                                                                                        <button
-                                                                                            onClick={() => { setActiveCalendarMatch(null); setCalendarMatchSearch(""); }}
-                                                                                            className="p-0.5 text-gray-400 hover:text-gray-600"
-                                                                                        >
-                                                                                            <X className="h-3.5 w-3.5" />
-                                                                                        </button>
+                                                {/* LLM Suggestions */}
+                                                {calendarSuggestions.length > 0 && (
+                                                    <div className="mb-6">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <p className="text-xs font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+                                                                AI Suggestions
+                                                            </p>
+                                                            {calendarSuggestions.filter(s => s.action !== "skip").length > 0 && (
+                                                                <button
+                                                                    onClick={handleAcceptAllSuggestions}
+                                                                    className="text-xs font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
+                                                                >
+                                                                    Accept all matches
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            {calendarSuggestions.map((suggestion) => {
+                                                                const isAccepting = acceptingEmail === suggestion.attendee_email;
+                                                                const confidenceColors = {
+                                                                    high: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
+                                                                    medium: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400",
+                                                                    low: "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400",
+                                                                };
+                                                                const actionLabels: Record<string, string> = {
+                                                                    match: "Link to existing",
+                                                                    create: "Create new contact",
+                                                                    skip: "Skip (generic email)",
+                                                                    me: "This is you",
+                                                                };
+
+                                                                return (
+                                                                    <div
+                                                                        key={suggestion.attendee_email}
+                                                                        className={`relative rounded-xl border transition-all ${
+                                                                            suggestion.action === "skip"
+                                                                                ? "border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 opacity-60"
+                                                                                : suggestion.action === "me"
+                                                                                    ? "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10"
+                                                                                    : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/50"
+                                                                        }`}
+                                                                    >
+                                                                        <div className="px-4 py-3">
+                                                                            <div className="flex items-start justify-between gap-3">
+                                                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                                                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                                                        <Mail className="h-3.5 w-3.5 text-gray-400" />
+                                                                                    </div>
+                                                                                    <div className="min-w-0 flex-1">
+                                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                                                {suggestion.attendee_name || suggestion.attendee_email}
+                                                                                            </p>
+                                                                                            <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full ${confidenceColors[suggestion.confidence]}`}>
+                                                                                                {suggestion.confidence}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {suggestion.attendee_name && (
+                                                                                            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                                                                                                {suggestion.attendee_email}
+                                                                                            </p>
+                                                                                        )}
+                                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                                            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                                                                                {suggestion.event_count} event{suggestion.event_count !== 1 ? "s" : ""}
+                                                                                            </span>
+                                                                                            <span className="text-[11px] text-gray-300 dark:text-gray-600">|</span>
+                                                                                            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                                                                                {actionLabels[suggestion.action]}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        {suggestion.action === "match" && suggestion.matched_contact_name && (
+                                                                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                                                                <ArrowRight className="h-3 w-3 text-purple-400" />
+                                                                                                <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
+                                                                                                    {suggestion.matched_contact_name}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {suggestion.action === "create" && suggestion.suggested_name && (
+                                                                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                                                                <UserPlus className="h-3 w-3 text-blue-400" />
+                                                                                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                                                                                    New: {suggestion.suggested_name}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        {suggestion.action === "me" && (
+                                                                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                                                                <User className="h-3 w-3 text-blue-500" />
+                                                                                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                                                                                    Your email - will be added to linked emails
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 italic">
+                                                                                            {suggestion.reason}
+                                                                                        </p>
                                                                                     </div>
                                                                                 </div>
 
-                                                                                <div className="max-h-48 overflow-y-auto py-1">
-                                                                                    {filteredCalendarContacts.length === 0 && calendarMatchSearch ? (
-                                                                                        <p className="text-xs text-gray-400 text-center py-4">No contacts found</p>
-                                                                                    ) : (
-                                                                                        filteredCalendarContacts.slice(0, 20).map((c) => {
-                                                                                            const img = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
-                                                                                            return (
-                                                                                                <button
-                                                                                                    key={c.id}
-                                                                                                    onClick={() => handleCalendarLink(item.attendee_email, c.id)}
-                                                                                                    disabled={isLoading}
-                                                                                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                                                                                >
-                                                                                                    {img ? (
-                                                                                                        <Image
-                                                                                                            src={img}
-                                                                                                            alt={c.name}
-                                                                                                            width={24}
-                                                                                                            height={24}
-                                                                                                            className="rounded-full flex-shrink-0"
-                                                                                                        />
-                                                                                                    ) : (
-                                                                                                        <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                                                                                            <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
-                                                                                                                {c.name.charAt(0).toUpperCase()}
-                                                                                                            </span>
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    <span className="text-sm text-gray-900 dark:text-white truncate">
-                                                                                                        {c.name}
-                                                                                                    </span>
-                                                                                                    {isLoading && (
-                                                                                                        <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-auto" />
-                                                                                                    )}
-                                                                                                </button>
-                                                                                            );
-                                                                                        })
+                                                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                                                    {suggestion.action !== "skip" && (
+                                                                                        <button
+                                                                                            onClick={() => handleAcceptSuggestion(suggestion)}
+                                                                                            disabled={isAccepting}
+                                                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                                                                                        >
+                                                                                            {isAccepting ? (
+                                                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                            ) : (
+                                                                                                <Check className="h-3 w-3" />
+                                                                                            )}
+                                                                                            Accept
+                                                                                        </button>
                                                                                     )}
-                                                                                </div>
-
-                                                                                <div className="border-t border-gray-100 dark:border-gray-800 py-1">
                                                                                     <button
-                                                                                        onClick={() => {
-                                                                                            setActiveCalendarMatch(null);
-                                                                                            setCalendarMatchSearch("");
-                                                                                            setCalendarCreatingFor(item.attendee_email);
-                                                                                            setCalendarNewContactName(item.attendee_name || "");
-                                                                                        }}
-                                                                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
+                                                                                        onClick={() => handleMarkAsMe(suggestion.attendee_email)}
+                                                                                        disabled={linkedEmailsSaving}
+                                                                                        className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+                                                                                        title="This is my email"
                                                                                     >
-                                                                                        <UserPlus className="h-4 w-4 flex-shrink-0" />
-                                                                                        <span className="text-sm">Create new contact</span>
+                                                                                        <User className="h-3 w-3" />
+                                                                                        Me
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleDismissSuggestion(suggestion.attendee_email)}
+                                                                                        className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                                                                        title="Dismiss"
+                                                                                    >
+                                                                                        <X className="h-3.5 w-3.5" />
                                                                                     </button>
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                    ) : (
-                                                                        <button
-                                                                            onClick={() => setActiveCalendarMatch(item.attendee_email)}
-                                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                                                        >
-                                                                            <Link2 className="h-3 w-3" />
-                                                                            Match
-                                                                            <ChevronDown className="h-3 w-3" />
-                                                                        </button>
-                                                                    )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Manual matching fallback list */}
+                                                {calendarSuggestions.length === 0 && (
+                                                    <div className="space-y-1">
+                                                        {(() => {
+                                                            const filteredCalendarContacts = calendarMatchSearch
+                                                                ? contacts.filter(c => c.name.toLowerCase().includes(calendarMatchSearch.toLowerCase()))
+                                                                : contacts;
+                                                            return unmatchedCalendar.map((item) => {
+                                                            const isLinked = calendarRecentlyLinked.has(item.attendee_email);
+                                                            const isRowLoading = calendarMatchLoading?.email === item.attendee_email;
+                                                            const isActive = activeCalendarMatch === item.attendee_email;
+                                                            const isCreating = calendarCreatingFor === item.attendee_email;
+
+                                                            return (
+                                                                <div
+                                                                    key={item.attendee_email}
+                                                                    className={`group relative flex items-center justify-between gap-4 px-4 py-3 rounded-lg transition-all duration-300 ${
+                                                                        isLinked
+                                                                            ? "bg-green-50 dark:bg-green-900/20 opacity-0 scale-95"
+                                                                            : "hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                                            <Mail className="h-3.5 w-3.5 text-gray-400" />
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            {item.attendee_name ? (
+                                                                                <>
+                                                                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                                        {item.attendee_name}
+                                                                                    </p>
+                                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                                                                                        {item.attendee_email}
+                                                                                    </p>
+                                                                                </>
+                                                                            ) : (
+                                                                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                                    {item.attendee_email}
+                                                                                </p>
+                                                                            )}
+                                                                            <p className="text-[11px] text-gray-300 dark:text-gray-600">
+                                                                                {item.event_count} event{item.event_count !== 1 ? "s" : ""}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-1.5 flex-shrink-0" ref={isActive ? calendarDropdownRef : undefined}>
+                                                                        {isLinked ? (
+                                                                            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+                                                                                <Check className="h-4 w-4" />
+                                                                                <span className="text-xs font-medium">Linked</span>
+                                                                            </div>
+                                                                        ) : isCreating ? (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <input
+                                                                                    type="text"
+                                                                                    value={calendarNewContactName}
+                                                                                    onChange={(e) => setCalendarNewContactName(e.target.value)}
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === "Enter" && calendarNewContactName.trim()) handleCalendarCreateAndLink(item.attendee_email);
+                                                                                        else if (e.key === "Escape") { setCalendarCreatingFor(null); setCalendarNewContactName(""); }
+                                                                                    }}
+                                                                                    placeholder={item.attendee_name || "Contact name"}
+                                                                                    autoFocus
+                                                                                    className="px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 w-40"
+                                                                                />
+                                                                                <button
+                                                                                    onClick={() => handleCalendarCreateAndLink(item.attendee_email)}
+                                                                                    disabled={!calendarNewContactName.trim() || calendarCreateLoading}
+                                                                                    className="p-1.5 text-gray-700 hover:text-gray-900 disabled:text-gray-300 transition-colors"
+                                                                                >
+                                                                                    {calendarCreateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => { setCalendarCreatingFor(null); setCalendarNewContactName(""); }}
+                                                                                    className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                                                                                >
+                                                                                    <X className="h-3.5 w-3.5" />
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : isActive ? (
+                                                                            <div className="relative">
+                                                                                <div className="w-64 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl shadow-gray-200/50 dark:shadow-black/50 overflow-hidden">
+                                                                                    <div className="p-2 border-b border-gray-100 dark:border-gray-800">
+                                                                                        <div className="flex items-center gap-2 px-2">
+                                                                                            <Search className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                                                                                            <input
+                                                                                                type="text"
+                                                                                                value={calendarMatchSearch}
+                                                                                                onChange={(e) => setCalendarMatchSearch(e.target.value)}
+                                                                                                placeholder="Search contacts..."
+                                                                                                autoFocus
+                                                                                                className="w-full text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                                                                                            />
+                                                                                            <button
+                                                                                                onClick={() => { setActiveCalendarMatch(null); setCalendarMatchSearch(""); }}
+                                                                                                className="p-0.5 text-gray-400 hover:text-gray-600"
+                                                                                            >
+                                                                                                <X className="h-3.5 w-3.5" />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <div className="max-h-48 overflow-y-auto py-1">
+                                                                                        {filteredCalendarContacts.length === 0 && calendarMatchSearch ? (
+                                                                                            <p className="text-xs text-gray-400 text-center py-4">No contacts found</p>
+                                                                                        ) : (
+                                                                                            filteredCalendarContacts.slice(0, 20).map((c) => {
+                                                                                                const img = c.custom_profile_image_url || c.x_profile?.profile_image_url || c.linkedin_profile?.profile_image_url;
+                                                                                                return (
+                                                                                                    <button
+                                                                                                        key={c.id}
+                                                                                                        onClick={() => handleCalendarLink(item.attendee_email, c.id)}
+                                                                                                        disabled={isRowLoading}
+                                                                                                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                                                                                    >
+                                                                                                        {img ? (
+                                                                                                            <Image
+                                                                                                                src={img}
+                                                                                                                alt={c.name}
+                                                                                                                width={24}
+                                                                                                                height={24}
+                                                                                                                className="rounded-full flex-shrink-0"
+                                                                                                            />
+                                                                                                        ) : (
+                                                                                                            <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                                                                                                <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                                                                                                                    {c.name.charAt(0).toUpperCase()}
+                                                                                                                </span>
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                        <span className="text-sm text-gray-900 dark:text-white truncate">
+                                                                                                            {c.name}
+                                                                                                        </span>
+                                                                                                        {calendarMatchLoading?.email === item.attendee_email && calendarMatchLoading?.contactId === c.id && (
+                                                                                                            <Loader2 className="h-3 w-3 animate-spin text-gray-400 ml-auto" />
+                                                                                                        )}
+                                                                                                    </button>
+                                                                                                );
+                                                                                            })
+                                                                                        )}
+                                                                                    </div>
+
+                                                                                    <div className="border-t border-gray-100 dark:border-gray-800 py-1">
+                                                                                        <button
+                                                                                            onClick={() => {
+                                                                                                setActiveCalendarMatch(null);
+                                                                                                setCalendarMatchSearch("");
+                                                                                                setCalendarCreatingFor(item.attendee_email);
+                                                                                                setCalendarNewContactName(item.attendee_name || "");
+                                                                                            }}
+                                                                                            className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
+                                                                                        >
+                                                                                            <UserPlus className="h-4 w-4 flex-shrink-0" />
+                                                                                            <span className="text-sm">Create new contact</span>
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button
+                                                                                    onClick={() => handleMarkAsMe(item.attendee_email)}
+                                                                                    disabled={linkedEmailsSaving}
+                                                                                    className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50"
+                                                                                    title="This is my email"
+                                                                                >
+                                                                                    <User className="h-3 w-3" />
+                                                                                    Me
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => setActiveCalendarMatch(item.attendee_email)}
+                                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                                                                >
+                                                                                    <Link2 className="h-3 w-3" />
+                                                                                    Match
+                                                                                    <ChevronDown className="h-3 w-3" />
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        );
-                                                    });
-                                                    })()}
-                                                </div>
+                                                            );
+                                                        });
+                                                        })()}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
