@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import HearthLogo from "@/components/HearthLogo";
@@ -16,7 +15,6 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewState>("form");
   const emailInputRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,27 +58,16 @@ export default function SignInPage() {
     setError(null);
 
     try {
-      // Check if already on waitlist
-      const { data: existing } = await supabase
-        .from("waitlist")
-        .select("email")
-        .eq("email", email.toLowerCase())
-        .single();
+      const response = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.toLowerCase() }),
+      });
 
-      if (existing) {
-        setView("waitlist-joined");
-        setLoading(false);
-        return;
-      }
-
-      // Add to waitlist
-      const { error } = await supabase
-        .from("waitlist")
-        .insert({ email: email.toLowerCase() });
-
-      if (error) {
-        console.error("Waitlist error:", error);
-        setError(error.message);
+      if (!response.ok) {
+        const message = await response.text();
+        console.error("Waitlist error:", message);
+        setError(message || "Something went wrong. Please try again.");
         setLoading(false);
         return;
       }
