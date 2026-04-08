@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { buildPrivateMediaUrl } from "@/lib/storage-urls";
 
 // GET - Fetch user profile
 export async function GET() {
@@ -82,12 +83,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
         }
 
-        // Get the public URL
-        const { data: urlData } = supabase.storage
-            .from("user-avatars")
-            .getPublicUrl(filename);
-
-        const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`; // Add cache buster
+        const avatarUrl = buildPrivateMediaUrl("user-avatars", filename);
 
         // Upsert user profile with new avatar URL
         const { error: upsertError } = await supabase

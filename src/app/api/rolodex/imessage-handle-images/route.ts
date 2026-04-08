@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { buildPrivateMediaUrl } from "@/lib/storage-urls";
 
 // POST - Upload Apple contact images for iMessage handles (called from Electron after sync)
 export async function POST(req: NextRequest) {
@@ -101,10 +102,7 @@ export async function GET(req: NextRequest) {
         for (const ext of ["jpg", "png"]) {
             const fileName = `${handleId}.${ext}`;
             if (fileSet.has(fileName)) {
-                const { data: urlData } = supabase.storage
-                    .from("contact-images")
-                    .getPublicUrl(`${user.id}/handles/${fileName}`);
-                images[handleId] = `${urlData.publicUrl}?t=${Date.now()}`;
+                images[handleId] = buildPrivateMediaUrl("contact-images", `${user.id}/handles/${fileName}`);
                 break;
             }
         }

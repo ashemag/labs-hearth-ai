@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { buildPrivateMediaUrl } from "@/lib/storage-urls";
 
 // POST - Upload a profile image for a contact
 export async function POST(req: NextRequest) {
@@ -69,12 +70,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
         }
 
-        // Get the public URL
-        const { data: urlData } = supabase.storage
-            .from("contact-images")
-            .getPublicUrl(filename);
-
-        const imageUrl = `${urlData.publicUrl}?t=${Date.now()}`; // Add cache buster
+        const imageUrl = buildPrivateMediaUrl("contact-images", filename);
 
         // Update the contact with the new image URL
         const { error: updateError } = await supabase
@@ -147,4 +143,3 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-

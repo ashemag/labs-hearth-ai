@@ -63,9 +63,10 @@ ON CONFLICT (email) DO NOTHING;
 ALTER TABLE allowlist ENABLE ROW LEVEL SECURITY;
 ALTER TABLE waitlist ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read access to allowlist" ON allowlist FOR SELECT USING (true);
+CREATE POLICY "Allow authenticated users to read their own allowlist entry" ON allowlist
+  FOR SELECT TO authenticated
+  USING (lower(email) = lower(coalesce(auth.jwt()->>'email', '')));
 CREATE POLICY "Allow public insert to waitlist" ON waitlist FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public read access to waitlist" ON waitlist FOR SELECT USING (true);
         `,
         results
       }, { status: 400 });

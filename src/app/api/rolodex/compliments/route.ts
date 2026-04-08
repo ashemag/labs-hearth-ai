@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { buildPrivateMediaUrl, extractStoragePath } from "@/lib/storage-urls";
 
 // GET - Fetch standalone compliments (no linked contact)
 export async function GET() {
@@ -102,11 +103,7 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
             }
 
-            const { data: urlData } = supabase.storage
-                .from("contact-images")
-                .getPublicUrl(filename);
-
-            image_url = `${urlData.publicUrl}?t=${Date.now()}`;
+            image_url = buildPrivateMediaUrl("contact-images", filename);
         }
 
         const { data, error } = await supabase
@@ -235,10 +232,9 @@ export async function DELETE(req: NextRequest) {
         // Clean up image from storage if it exists
         if (existing?.image_url) {
             try {
-                const url = new URL(existing.image_url.split("?")[0]);
-                const pathParts = url.pathname.split("/contact-images/");
-                if (pathParts[1]) {
-                    await supabase.storage.from("contact-images").remove([pathParts[1]]);
+                const storagePath = extractStoragePath(existing.image_url, "contact-images");
+                if (storagePath) {
+                    await supabase.storage.from("contact-images").remove([storagePath]);
                 }
             } catch {
                 // Non-critical, ignore cleanup errors

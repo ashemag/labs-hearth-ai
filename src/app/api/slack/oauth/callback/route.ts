@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyOAuthState } from "@/lib/oauth-state";
 
 const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
 const SLACK_SECRET = process.env.SLACK_SECRET!;
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
   const code = searchParams.get("code");
   const error = searchParams.get("error");
-  const state = searchParams.get("state"); // Contains user_id
+  const state = searchParams.get("state");
 
   // Handle user denial
   if (error) {
@@ -38,17 +39,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Parse state to get user_id
-  let userId: string | null = null;
-  if (state) {
-    try {
-      const stateData = JSON.parse(Buffer.from(state, 'base64').toString());
-      userId = stateData.user_id;
-      console.log(`✅ [SLACK OAUTH] User ID from state: ${userId}`);
-    } catch {
-      console.warn("⚠️ [SLACK OAUTH] Could not parse state parameter");
-    }
+  const verifiedState = state ? verifyOAuthState(state, "slack") : null;
+  if (!verifiedState) {
+    console.warn("⚠️ [SLACK OAUTH] Invalid or expired state parameter");
+    return NextResponse.redirect(
+      new URL("/slack/error?reason=invalid_state", req.url)
+    );
   }
+  const userId = verifiedState.userId;
+  console.log(`✅ [SLACK OAUTH] User ID from state: ${userId}`);
 
   console.log("✅ [SLACK OAUTH] Authorization code received");
 
@@ -163,4 +162,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-

@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createOAuthState } from "@/lib/oauth-state";
 
 const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
 
@@ -19,11 +20,7 @@ export async function GET(req: NextRequest) {
 
   console.log(`🔗 [SLACK CONNECT] Initiating OAuth for user: ${user.id}`);
 
-  // Create state parameter with user ID (base64 encoded)
-  const state = Buffer.from(JSON.stringify({
-    user_id: user.id,
-    timestamp: Date.now(),
-  })).toString('base64');
+  const state = createOAuthState(user.id, "slack");
 
   // Build Slack OAuth URL
   const scopes = [
@@ -53,5 +50,4 @@ export async function GET(req: NextRequest) {
   console.log(`🔗 [SLACK CONNECT] Redirecting to Slack OAuth`);
   return NextResponse.redirect(slackUrl.toString());
 }
-
 

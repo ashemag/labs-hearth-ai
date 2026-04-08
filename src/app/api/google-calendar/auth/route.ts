@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createOAuthState } from "@/lib/oauth-state";
 
 // Google OAuth configuration
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
@@ -32,7 +33,7 @@ export async function GET() {
         scope: SCOPES,
         access_type: "offline",
         prompt: "consent",  // Force consent to get refresh token
-        state: user.id,  // Pass user ID in state for callback
+        state: createOAuthState(user.id, "google"),
     });
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

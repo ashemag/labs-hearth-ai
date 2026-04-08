@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { buildPrivateMediaUrl } from "@/lib/storage-urls";
 
 // GET - Fetch unmatched iMessage handles (grouped by handle_id)
 export async function GET() {
@@ -70,10 +71,7 @@ export async function GET() {
                 const fileName = `${item.handle_id}.${ext}`;
                 if (fileSet.has(fileName)) {
                     const fullPath = `${user.id}/handles/${fileName}`;
-                    const { data: urlData } = supabase.storage
-                        .from("contact-images")
-                        .getPublicUrl(fullPath);
-                    handleImages[item.handle_id] = `${urlData.publicUrl}?t=${Date.now()}`;
+                    handleImages[item.handle_id] = buildPrivateMediaUrl("contact-images", fullPath);
                     break;
                 }
             }
@@ -121,11 +119,7 @@ async function uploadContactImage(
             return null;
         }
 
-        const { data: urlData } = supabase.storage
-            .from("contact-images")
-            .getPublicUrl(filename);
-
-        return `${urlData.publicUrl}?t=${Date.now()}`;
+        return buildPrivateMediaUrl("contact-images", filename);
     } catch (err) {
         console.error("[iMessage Unmatched] Image upload exception:", err);
         return null;
@@ -223,13 +217,9 @@ async function linkHandleToContact(
                         .upload(destFilename, buffer, { contentType, upsert: true });
 
                     if (!copyError) {
-                        const { data: urlData } = supabase.storage
-                            .from("contact-images")
-                            .getPublicUrl(destFilename);
-
                         await supabase
                             .from("people")
-                            .update({ custom_profile_image_url: `${urlData.publicUrl}?t=${Date.now()}` })
+                            .update({ custom_profile_image_url: buildPrivateMediaUrl("contact-images", destFilename) })
                             .eq("id", peopleId);
                         console.log(`[iMessage Unmatched] Copied handle image to contact ${peopleId}`);
                     }

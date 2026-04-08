@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
 import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
+import { buildPrivateMediaUrl } from "@/lib/storage-urls";
 
 interface XProfileData {
     profileUrl: string;
@@ -445,11 +446,7 @@ async function downloadAndUploadImage(
             return null;
         }
 
-        const { data: urlData } = supabase.storage
-            .from("contact-images")
-            .getPublicUrl(filename);
-
-        return `${urlData.publicUrl}?t=${Date.now()}`;
+        return buildPrivateMediaUrl("contact-images", filename);
 
     } catch (error) {
         console.error("[Image Download/Upload] Error:", error);

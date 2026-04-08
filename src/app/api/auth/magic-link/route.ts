@@ -27,6 +27,21 @@ const ALLOWED_MAGIC_LINK_CALLBACK_PATHS = new Set([
     "/auth/ios-callback",
 ]);
 
+function getSafeAppOrigin(requestUrl: string) {
+    const fallback = process.env.NEXT_PUBLIC_APP_URL || "https://labs.hearth.ai";
+
+    try {
+        const url = new URL(requestUrl);
+        if (ALLOWED_MAGIC_LINK_REDIRECT_HOSTS.has(url.hostname)) {
+            return url.origin;
+        }
+    } catch {
+        return fallback;
+    }
+
+    return fallback;
+}
+
 function getSafeRedirectUrl(redirectTo?: string | null) {
     if (!redirectTo) return null;
     try {
@@ -54,8 +69,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
         }
 
-        // Get the origin from the request (works for both localhost and production)
-        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_APP_URL || 'https://labs.hearth.ai';
+        const origin = getSafeAppOrigin(request.url);
         const safeRedirectTo = getSafeRedirectUrl(redirectTo);
         const callbackUrl = safeRedirectTo || `${origin}/auth/callback`;
 

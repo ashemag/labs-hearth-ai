@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encrypt } from "@/lib/crypto";
 import { v4 as uuidv4 } from "uuid";
+import { verifyOAuthState } from "@/lib/oauth-state";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
@@ -26,7 +27,7 @@ interface GoogleUserInfo {
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
-    const state = searchParams.get("state");  // User ID
+    const state = searchParams.get("state");
     const error = searchParams.get("error");
 
     // Redirect URL for after processing
@@ -42,6 +43,11 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${settingsUrl}&error=missing_params`);
     }
 
+    const verifiedState = verifyOAuthState(state, "google");
+    if (!verifiedState) {
+        return NextResponse.redirect(`${settingsUrl}&error=invalid_state`);
+    }
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -49,8 +55,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(`${settingsUrl}&error=unauthorized`);
     }
 
-    // Verify state matches the user ID
-    if (state !== user.id) {
+    if (verifiedState.userId !== user.id) {
         return NextResponse.redirect(`${settingsUrl}&error=invalid_state`);
     }
 

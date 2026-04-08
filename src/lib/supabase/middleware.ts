@@ -1,6 +1,28 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+function isProtectedApiPath(pathname: string) {
+    if (pathname === "/api/google-calendar/webhook" ||
+        pathname === "/api/google-calendar/watch/renew") {
+        return false;
+    }
+
+    return [
+        "/api/chat",
+        "/api/media",
+        "/api/rolodex",
+        "/api/user",
+        "/api/google-calendar",
+        "/api/slack/connect",
+        "/api/slack/workspaces",
+        "/api/slack/options",
+    ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function apiError(message: string, status: number) {
+    return NextResponse.json({ error: message }, { status });
+}
+
 export async function updateSession(request: NextRequest) {
     let supabaseResponse = NextResponse.next({
         request,
@@ -49,6 +71,10 @@ export async function updateSession(request: NextRequest) {
             // User is authenticated but NOT on allowlist - sign them out immediately
             await supabase.auth.signOut();
 
+            if (isProtectedApiPath(request.nextUrl.pathname)) {
+                return apiError("Forbidden", 403);
+            }
+
             // If they're trying to access anything other than public pages, redirect to sign-in
             if (request.nextUrl.pathname !== "/" &&
                 !request.nextUrl.pathname.startsWith("/sign-") &&
@@ -90,6 +116,10 @@ export async function updateSession(request: NextRequest) {
                 return NextResponse.redirect(url);
             }
 
+            if (isProtectedApiPath(request.nextUrl.pathname) && !hasPaid) {
+                return apiError("Payment required", 402);
+            }
+
             // If on payment page but already paid, redirect to app
             if (request.nextUrl.pathname === "/payment" && hasPaid) {
                 const url = request.nextUrl.clone();
@@ -99,6 +129,10 @@ export async function updateSession(request: NextRequest) {
         }
     } else {
         // Not authenticated - protect app routes
+        if (isProtectedApiPath(request.nextUrl.pathname)) {
+            return apiError("Unauthorized", 401);
+        }
+
         if (request.nextUrl.pathname.startsWith("/app") ||
             request.nextUrl.pathname === "/payment") {
             const url = request.nextUrl.clone();
@@ -109,4 +143,3 @@ export async function updateSession(request: NextRequest) {
 
     return supabaseResponse;
 }
-
