@@ -148,6 +148,7 @@ export default function TodoSheet({
                                                         alt={contact.name}
                                                         width={24}
                                                         height={24}
+                                                        unoptimized
                                                         className="rounded-full flex-shrink-0"
                                                     />
                                                 ) : (
@@ -181,6 +182,7 @@ export default function TodoSheet({
                                             alt={todoNameFilter.name}
                                             width={18}
                                             height={18}
+                                            unoptimized
                                             className="rounded-full flex-shrink-0"
                                         />
                                     ) : (
@@ -303,6 +305,7 @@ export default function TodoSheet({
                                                         alt={todo.contactName}
                                                         width={16}
                                                         height={16}
+                                                        unoptimized
                                                         className="rounded-full flex-shrink-0"
                                                     />
                                                 ) : (
@@ -421,6 +424,7 @@ export default function TodoSheet({
                                                                         alt={todo.contactName}
                                                                         width={16}
                                                                         height={16}
+                                                                        unoptimized
                                                                         className="rounded-full flex-shrink-0 grayscale"
                                                                     />
                                                                 ) : (

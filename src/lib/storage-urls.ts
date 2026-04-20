@@ -66,3 +66,20 @@ export function extractStoragePath(urlOrPath: string | null | undefined, bucket:
 
   return null;
 }
+
+export function normalizePrivateMediaUrl(urlOrPath: string | null | undefined, bucket: PrivateBucket) {
+  if (!urlOrPath) {
+    return null;
+  }
+
+  if (urlOrPath.startsWith(`/api/media/${bucket}/`)) {
+    return urlOrPath;
+  }
+
+  const storagePath = extractStoragePath(urlOrPath, bucket);
+  if (!storagePath) {
+    return urlOrPath;
+  }
+
+  return buildPrivateMediaUrl(bucket, storagePath, false);
+}

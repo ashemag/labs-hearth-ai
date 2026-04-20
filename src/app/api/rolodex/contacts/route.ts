@@ -4,6 +4,8 @@ import { isLinkedInUrl, fetchLinkedInProfile } from "@/lib/linkedin";
 import { isXHandle, extractXUsername, fetchXProfile } from "@/lib/x";
 import { normalizeLocation } from "@/lib/location/normalize";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { downloadAndStoreContactProfileImage } from "@/lib/profile-image-import";
+import { normalizePrivateMediaUrl } from "@/lib/storage-urls";
 
 export interface RolodexContact {
     id: number;
@@ -164,34 +166,45 @@ export async function GET(request: NextRequest) {
             people_contact_info?: { id: number; type: 'phone' | 'email'; value: string; created_at: string }[];
         }
 
-        const contacts: RolodexContact[] = (people || []).map((person: PersonRecord) => ({
-            id: person.id,
-            name: person.name,
-            created_at: person.created_at,
-            custom_profile_image_url: person.custom_profile_image_url || null,
-            custom_bio: person.custom_bio || null,
-            custom_location: person.custom_location || null,
-            website_url: person.website_url || null,
-            hidden: person.hidden || false,
-            last_touchpoint: person.last_touchpoint || null,
-            x_profile: person.people_x_profiles?.[0] || null,
-            linkedin_profile: person.people_linkedin_profiles?.[0] || null,
-            notes: (person.people_notes || []).sort((a, b) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            ),
-            touchpoints: (person.people_touchpoints || []).sort((a, b) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            ),
-            websites: (person.people_websites || []).sort((a, b) =>
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            ),
-            compliments: (person.people_compliments || []).sort((a, b) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            ),
-            contact_info: (person.people_contact_info || []).sort((a, b) =>
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            ),
-        }));
+        const contacts: RolodexContact[] = (people || []).map((person: PersonRecord) => {
+            const xProfile = person.people_x_profiles?.[0] || null;
+            const linkedInProfile = person.people_linkedin_profiles?.[0] || null;
+
+            return {
+                id: person.id,
+                name: person.name,
+                created_at: person.created_at,
+                custom_profile_image_url: normalizePrivateMediaUrl(person.custom_profile_image_url, "contact-images"),
+                custom_bio: person.custom_bio || null,
+                custom_location: person.custom_location || null,
+                website_url: person.website_url || null,
+                hidden: person.hidden || false,
+                last_touchpoint: person.last_touchpoint || null,
+                x_profile: xProfile ? {
+                    ...xProfile,
+                    profile_image_url: normalizePrivateMediaUrl(xProfile.profile_image_url, "contact-images"),
+                } : null,
+                linkedin_profile: linkedInProfile ? {
+                    ...linkedInProfile,
+                    profile_image_url: normalizePrivateMediaUrl(linkedInProfile.profile_image_url, "contact-images"),
+                } : null,
+                notes: (person.people_notes || []).sort((a, b) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                ),
+                touchpoints: (person.people_touchpoints || []).sort((a, b) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                ),
+                websites: (person.people_websites || []).sort((a, b) =>
+                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                ),
+                compliments: (person.people_compliments || []).sort((a, b) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                ),
+                contact_info: (person.people_contact_info || []).sort((a, b) =>
+                    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                ),
+            };
+        });
 
         return NextResponse.json({ contacts });
     } catch (error) {
@@ -434,6 +447,22 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
         return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
     }
 
+    const uploadedImageUrl = await downloadAndStoreContactProfileImage(
+        supabase,
+        userId,
+        person.id,
+        xProfile.profileImageUrl,
+        "x"
+    );
+
+    if (uploadedImageUrl) {
+        await supabase
+            .from("people")
+            .update({ custom_profile_image_url: uploadedImageUrl })
+            .eq("id", person.id)
+            .eq("user_id", userId);
+    }
+
     // Create X profile entry
     const tempXUserId = `manual_${username.toLowerCase()}_${Date.now()}`;
     const { error: profileError } = await supabase
@@ -445,7 +474,7 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
             username: xProfile.username,
             display_name: xProfile.displayName,
             bio: xProfile.bio,
-            profile_image_url: xProfile.profileImageUrl,
+            profile_image_url: uploadedImageUrl || xProfile.profileImageUrl,
             location: normalizeLocation(xProfile.location),
             last_synced_at: new Date().toISOString(),
         });
@@ -461,7 +490,8 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
         displayName: xProfile.displayName,
         hasBio: !!xProfile.bio,
         hasLocation: !!xProfile.location,
-        hasAvatar: !!xProfile.profileImageUrl,
+        hasAvatar: !!uploadedImageUrl || !!xProfile.profileImageUrl,
+        storedAvatar: !!uploadedImageUrl,
     });
 
     // Return the new contact
@@ -469,7 +499,7 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
         id: person.id,
         name: person.name,
         created_at: person.created_at,
-        custom_profile_image_url: null,
+        custom_profile_image_url: uploadedImageUrl || null,
         custom_bio: null,
         custom_location: null,
         website_url: null,
@@ -479,7 +509,7 @@ async function handleXImport(supabase: SupabaseClient, userId: string, handle: s
             username: xProfile.username,
             display_name: xProfile.displayName,
             bio: xProfile.bio,
-            profile_image_url: xProfile.profileImageUrl,
+            profile_image_url: uploadedImageUrl || xProfile.profileImageUrl,
             followers_count: null,
             following_count: null,
             verified: false,

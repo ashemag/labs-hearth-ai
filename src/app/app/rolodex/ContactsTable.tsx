@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import Image from "next/image";
 import type { Contact, RolodexList } from "./types";
 import { formatTimeAgo } from "./types";
+import { contactMatchesSearchIndex, createContactSearchIndex } from "./search";
 
 interface ContactsTableProps {
     contacts: Contact[];
@@ -35,6 +37,62 @@ export default function ContactsTable({
     handleContextMenu,
     renderNoteWithMentions,
 }: ContactsTableProps) {
+    const searchIndexes = useMemo(() => {
+        return new Map(contacts.map((contact) => [
+            contact.id,
+            createContactSearchIndex(contact),
+        ]));
+    }, [contacts]);
+
+    const visibleContacts = useMemo(() => {
+        const activeListMemberIds = typeof activeList === "number"
+            ? new Set(lists.find((list) => list.id === activeList)?.member_ids || [])
+            : null;
+        const hiddenMemberIds = new Set<number>();
+
+        if (hiddenListIds.size > 0) {
+            lists.forEach((list) => {
+                if (hiddenListIds.has(list.id)) {
+                    list.member_ids.forEach((id) => hiddenMemberIds.add(id));
+                }
+            });
+        }
+
+        const hasSearch = searchQuery.trim().length > 0;
+
+        return contacts
+            .filter((contact) => {
+                if (contact.hidden && !showHiddenContacts) {
+                    return false;
+                }
+                if (activeList === "curated" && contact.notes.length === 0) {
+                    return false;
+                }
+                if (activeListMemberIds && !activeListMemberIds.has(contact.id)) {
+                    return false;
+                }
+                if (hiddenMemberIds.has(contact.id)) {
+                    return false;
+                }
+                if (hasSearch) {
+                    const index = searchIndexes.get(contact.id);
+                    return index ? contactMatchesSearchIndex(index, searchQuery) : false;
+                }
+                return true;
+            })
+            .sort((a, b) => {
+                const getLastActivity = (contact: Contact) => {
+                    const dates = [
+                        contact.last_touchpoint,
+                        contact.notes.find((note) => !note.note.includes("LinkedIn Profile Import"))?.created_at,
+                        contact.created_at,
+                    ].filter(Boolean) as string[];
+                    return Math.max(...dates.map((date) => new Date(date).getTime()));
+                };
+                return getLastActivity(b) - getLastActivity(a);
+            });
+    }, [activeList, contacts, hiddenListIds, lists, searchIndexes, searchQuery, showHiddenContacts]);
+
     return (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
             {/* Table Header */}
@@ -49,61 +107,7 @@ export default function ContactsTable({
 
             {/* Table Body */}
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {contacts
-                    .filter((contact) => {
-                        // Hidden contacts filter
-                        if (contact.hidden && !showHiddenContacts) {
-                            return false;
-                        }
-                        // Curated filter - contacts with any note
-                        if (activeList === "curated") {
-                            if (contact.notes.length === 0) return false;
-                        }
-                        // List filter
-                        if (typeof activeList === "number") {
-                            const list = lists.find((l) => l.id === activeList);
-                            if (!list?.member_ids.includes(contact.id)) return false;
-                        }
-                        // Hidden lists filter - exclude contacts in hidden lists
-                        if (hiddenListIds.size > 0) {
-                            const contactListIds = lists
-                                .filter(l => l.member_ids.includes(contact.id))
-                                .map(l => l.id);
-                            if (contactListIds.some(id => hiddenListIds.has(id))) {
-                                return false;
-                            }
-                        }
-                        // Search filter
-                        if (searchQuery.trim()) {
-                            const query = searchQuery.toLowerCase();
-                            const xp = contact.x_profile;
-                            const li = contact.linkedin_profile;
-                            return (
-                                contact.name.toLowerCase().includes(query) ||
-                                xp?.username?.toLowerCase().includes(query) ||
-                                xp?.bio?.toLowerCase().includes(query) ||
-                                xp?.location?.toLowerCase().includes(query) ||
-                                li?.headline?.toLowerCase().includes(query) ||
-                                li?.location?.toLowerCase().includes(query) ||
-                                li?.linkedin_url?.toLowerCase().includes(query) ||
-                                contact.notes.some((n) => n.note.toLowerCase().includes(query))
-                            );
-                        }
-                        return true;
-                    })
-                    .sort((a, b) => {
-                        // Sort by most recent activity (touchpoint, note, or created_at)
-                        const getLastActivity = (c: Contact) => {
-                            const dates = [
-                                c.last_touchpoint,
-                                c.notes.find(n => !n.note.includes("LinkedIn Profile Import"))?.created_at,
-                                c.created_at,
-                            ].filter(Boolean) as string[];
-                            return Math.max(...dates.map(d => new Date(d).getTime()));
-                        };
-                        return getLastActivity(b) - getLastActivity(a);
-                    })
-                    .map((contact) => {
+                {visibleContacts.map((contact) => {
                         const isSelected = selectedContacts.has(contact.id);
                         const xp = contact.x_profile;
                         const li = contact.linkedin_profile;
@@ -137,6 +141,7 @@ export default function ContactsTable({
                                                     alt={contact.name}
                                                     width={40}
                                                     height={40}
+                                                    unoptimized
                                                     className="rounded-full"
                                                 />
                                             ) : (

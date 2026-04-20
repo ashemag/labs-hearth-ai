@@ -136,6 +136,7 @@ export default function DiscoveryPanel({
                                                 alt={interaction.username}
                                                 width={24}
                                                 height={24}
+                                                unoptimized
                                                 className="rounded-full"
                                             />
                                         ) : (

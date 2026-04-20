@@ -152,6 +152,7 @@ export default function CommandSearchModal({
                                                         alt={result.person?.name || ""}
                                                         width={36}
                                                         height={36}
+                                                        unoptimized
                                                         className="rounded-full flex-shrink-0 mt-0.5"
                                                     />
                                                 ) : (
@@ -216,6 +217,7 @@ export default function CommandSearchModal({
                                                     alt={contact.name}
                                                     width={36}
                                                     height={36}
+                                                    unoptimized
                                                     className="rounded-full flex-shrink-0"
                                                 />
                                             ) : (

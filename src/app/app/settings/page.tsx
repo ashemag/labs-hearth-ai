@@ -30,6 +30,7 @@ import {
     Wand2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { smartCropImageToSquare } from "@/lib/smart-image-crop";
 
 type SettingsTab = "profile" | "ai" | "imessage" | "calendar";
 
@@ -496,8 +497,9 @@ export default function SettingsPage() {
         setUploadingAvatar(true);
 
         try {
+            const croppedFile = await smartCropImageToSquare(file);
             const formData = new FormData();
-            formData.append("avatar", file);
+            formData.append("file", croppedFile);
 
             const res = await fetch("/api/user/profile", {
                 method: "POST",
@@ -867,6 +869,7 @@ export default function SettingsPage() {
                                                             alt={user?.fullName || "Profile"}
                                                             width={96}
                                                             height={96}
+                                                            unoptimized
                                                             className="w-full h-full object-cover"
                                                         />
                                                     ) : (
@@ -887,7 +890,7 @@ export default function SettingsPage() {
                                                 <input
                                                     ref={avatarInputRef}
                                                     type="file"
-                                                    accept="image/*"
+                                                    accept="image/jpeg,image/png,image/webp,image/gif"
                                                     className="hidden"
                                                     onChange={(e) => {
                                                         const file = e.target.files?.[0];
@@ -1252,6 +1255,7 @@ export default function SettingsPage() {
                                                                                     alt={c.name}
                                                                                     width={24}
                                                                                     height={24}
+                                                                                    unoptimized
                                                                                     className="rounded-full flex-shrink-0"
                                                                                 />
                                                                             ) : (
@@ -1746,6 +1750,7 @@ export default function SettingsPage() {
                                                                                                                 alt={c.name}
                                                                                                                 width={24}
                                                                                                                 height={24}
+                                                                                                                unoptimized
                                                                                                                 className="rounded-full flex-shrink-0"
                                                                                                             />
                                                                                                         ) : (

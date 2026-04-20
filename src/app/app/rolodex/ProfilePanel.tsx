@@ -410,6 +410,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                             alt={contact.name}
                                             width={128}
                                             height={128}
+                                            unoptimized
                                             className="rounded-full object-cover ring-1 ring-gray-100 dark:ring-gray-800"
                                         />
                                     ) : (
@@ -868,7 +869,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                         className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${idx === mentionIndex ? "bg-gray-100 dark:bg-gray-700" : "hover:bg-gray-50 dark:hover:bg-gray-750"}`}
                                                     >
                                                         {profileImg ? (
-                                                            <Image src={profileImg} alt={c.name} width={22} height={22} className="rounded-full" />
+                                                            <Image src={profileImg} alt={c.name} width={22} height={22} unoptimized className="rounded-full" />
                                                         ) : (
                                                             <div className="w-[22px] h-[22px] rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                                                                 <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{c.name.charAt(0).toUpperCase()}</span>
@@ -1031,7 +1032,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                                                                 className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${idx === editMentionIndex ? "bg-gray-100 dark:bg-gray-700" : "hover:bg-gray-50 dark:hover:bg-gray-750"}`}
                                                                                             >
                                                                                                 {profileImg ? (
-                                                                                                    <Image src={profileImg} alt="" width={22} height={22} className="rounded-full object-cover" />
+                                                                                                    <Image src={profileImg} alt="" width={22} height={22} unoptimized className="rounded-full object-cover" />
                                                                                                 ) : (
                                                                                                     <div className="w-[22px] h-[22px] rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-[10px] font-medium text-gray-500">{c.name.charAt(0)}</div>
                                                                                                 )}

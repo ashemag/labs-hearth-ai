@@ -8,7 +8,7 @@
 // =============================================================================
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useDeferredValue } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -50,6 +50,8 @@ import ListsSidebar from "./ListsSidebar";
 import ContactsTable from "./ContactsTable";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { smartCropImageToSquare } from "@/lib/smart-image-crop";
+import { contactMatchesSearchIndex, createContactSearchIndex } from "./search";
 
 export default function RolodexPage() {
     const [authLoading, setAuthLoading] = useState(true);
@@ -120,6 +122,7 @@ export default function RolodexPage() {
     const [mentionPosition, setMentionPosition] = useState<{ top: number; left: number } | null>(null);
     const [mentionIndex, setMentionIndex] = useState(0);
     const [searchQuery, setSearchQuery] = useState("");
+    const deferredSearchQuery = useDeferredValue(searchQuery);
     const [pendingMentions, setPendingMentions] = useState<Map<string, number>>(new Map());
     // Edit note mention state
     const [editPendingMentions, setEditPendingMentions] = useState<Map<string, number>>(new Map());
@@ -653,11 +656,18 @@ export default function RolodexPage() {
     }, [commandSearchQuery]);
 
     // Filtered contacts for command search (sorted by most recent activity)
-    const sortedContacts = [...contacts].sort((a, b) => {
+    const sortedContacts = useMemo(() => [...contacts].sort((a, b) => {
         const aLastActivity = a.notes[0]?.created_at || a.created_at;
         const bLastActivity = b.notes[0]?.created_at || b.created_at;
         return new Date(bLastActivity).getTime() - new Date(aLastActivity).getTime();
-    });
+    }), [contacts]);
+
+    const contactSearchIndexes = useMemo(() => {
+        return new Map(contacts.map((contact) => [
+            contact.id,
+            createContactSearchIndex(contact),
+        ]));
+    }, [contacts]);
 
     // Count manual notes added this week (excluding auto-generated ones and 🌐 notes)
     const weekAgo = new Date();
@@ -674,19 +684,16 @@ export default function RolodexPage() {
     console.log("Notes this week:", notesThisWeekDetails);
     const notesThisWeek = notesThisWeekDetails.length;
 
-    const commandSearchResults = commandSearchQuery.trim()
-        ? sortedContacts.filter((contact) => {
-            const query = commandSearchQuery.toLowerCase();
-            const xp = contact.x_profile;
-            const li = contact.linkedin_profile;
-            return (
-                contact.name.toLowerCase().includes(query) ||
-                xp?.username?.toLowerCase().includes(query) ||
-                xp?.display_name?.toLowerCase().includes(query) ||
-                li?.headline?.toLowerCase().includes(query)
-            );
-        }).slice(0, 8)
-        : sortedContacts.slice(0, 8);
+    const commandSearchResults = useMemo(() => {
+        if (!commandSearchQuery.trim()) {
+            return sortedContacts.slice(0, 8);
+        }
+
+        return sortedContacts.filter((contact) => {
+            const index = contactSearchIndexes.get(contact.id);
+            return index ? contactMatchesSearchIndex(index, commandSearchQuery) : false;
+        }).slice(0, 8);
+    }, [commandSearchQuery, contactSearchIndexes, sortedContacts]);
 
     // Handle command search selection
     const handleCommandSearchSelect = (contactId: number) => {
@@ -2070,8 +2077,9 @@ export default function RolodexPage() {
         setUploadingImageFor(contactId);
 
         try {
+            const croppedFile = await smartCropImageToSquare(file);
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", croppedFile);
             formData.append("contactId", contactId.toString());
 
             const res = await fetch("/api/rolodex/contacts/image", {
@@ -2141,7 +2149,12 @@ export default function RolodexPage() {
                 setContacts((prev) =>
                     prev.map((c) =>
                         c.id === contactId
-                            ? { ...c, x_profile: data.x_profile, name: data.x_profile.display_name || c.name }
+                            ? {
+                                ...c,
+                                x_profile: data.x_profile,
+                                custom_profile_image_url: data.custom_profile_image_url || c.custom_profile_image_url,
+                                name: data.x_profile.display_name || c.name,
+                            }
                             : c
                     )
                 );
@@ -3017,6 +3030,7 @@ export default function RolodexPage() {
                                                         alt={comp.sourceName}
                                                         width={36}
                                                         height={36}
+                                                        unoptimized
                                                         className="rounded-full flex-shrink-0"
                                                     />
                                                 ) : (
@@ -3335,6 +3349,7 @@ export default function RolodexPage() {
                                         alt={user?.fullName || "Profile"}
                                         width={32}
                                         height={32}
+                                        unoptimized
                                         className="rounded-full ring-2 ring-white dark:ring-gray-800 shadow-sm object-cover"
                                     />
                                 ) : (
@@ -3507,7 +3522,7 @@ export default function RolodexPage() {
                                         selectedContacts={selectedContacts}
                                         selectedContactId={selectedContactId}
                                         activeList={activeList}
-                                        searchQuery={searchQuery}
+                                        searchQuery={deferredSearchQuery}
                                         showHiddenContacts={showHiddenContacts}
                                         hiddenListIds={hiddenListIds}
                                         setSelectedContactId={setSelectedContactId}

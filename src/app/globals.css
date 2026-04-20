@@ -81,7 +81,7 @@ body {
 .productImg1 {
   height: 80%;
   width: 80%;
-  background-image: url("/product/image1.png");
+  background-image: url("/product/onhold/image1.png");
   background-size: contain;
   background-repeat: no-repeat;
   border-radius: 10px;
@@ -97,7 +97,7 @@ body {
 .productImg2 {
   width: 80%;
   height: 100px;
-  background-image: url("/product/image2.png");
+  background-image: url("/product/onhold/image2.png");
   background-size: contain;
   background-repeat: no-repeat;
 }
@@ -105,7 +105,7 @@ body {
 .productImg3 {
   width: 80%;
   height: 80px;
-  background-image: url("/product/image3.png");
+  background-image: url("/product/onhold/image3.png");
   background-size: contain;
   background-repeat: no-repeat;
 }

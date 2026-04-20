@@ -14,7 +14,7 @@ const quotes = [
         <br /> Founder, Throughline
       </>
     ),
-    photo: "/testimonials/mattingly.jpeg",
+    photo: "/testimonials/mattingly_messina.png",
   },
   {
     quote:
@@ -28,7 +28,7 @@ const quotes = [
         Ops, HuggingFace
       </>
     ),
-    photo: "/testimonials/madisen.jpeg",
+    photo: "/testimonials/madisen_taylor.jpg",
   },
   {
     quote:
@@ -41,7 +41,7 @@ const quotes = [
         Co-Founder, Flair.ai
       </>
     ),
-    photo: "/testimonials/mickey.jpeg",
+    photo: "/testimonials/mickey_friedman.jpg",
   },
 ];
 

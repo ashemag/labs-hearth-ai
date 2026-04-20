@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
 import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
-import { buildPrivateMediaUrl } from "@/lib/storage-urls";
+import { downloadAndStoreContactProfileImage } from "@/lib/profile-image-import";
 
 interface XProfileData {
     profileUrl: string;
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     try {
         const body: XProfileData = await req.json();
-        const { profileUrl, username, name, bio, location: rawLocation, website, profileImageUrl, pinnedTweet, joinDate, followersCount, followingCount, note: userNote } = body;
+        const { username, name, bio, location: rawLocation, website, profileImageUrl, pinnedTweet, note: userNote } = body;
 
         console.log(`[X Import] Received body keys:`, Object.keys(body));
         console.log(`[X Import] User note:`, userNote ? `"${userNote}"` : '(none)');
@@ -85,24 +85,18 @@ export async function POST(req: NextRequest) {
         let peopleId: number;
         let uploadedImageUrl: string | null = null;
 
-        // Download and upload profile image to Supabase storage
-        if (profileImageUrl) {
-            try {
-                uploadedImageUrl = await downloadAndUploadImage(
-                    supabase,
-                    user.id,
-                    profileImageUrl,
-                    existingPeopleId
-                );
-                console.log(`[X Import] Uploaded image: ${uploadedImageUrl ? 'success' : 'failed'}`);
-            } catch (imageError) {
-                console.error("[X Import] Image upload error:", imageError);
-            }
-        }
-
         if (isUpdate && existingPeopleId) {
             // Update existing contact
             peopleId = existingPeopleId;
+
+            uploadedImageUrl = await downloadAndStoreContactProfileImage(
+                supabase,
+                user.id,
+                peopleId,
+                profileImageUrl,
+                "x"
+            );
+            console.log(`[X Import] Uploaded image: ${uploadedImageUrl ? 'success' : 'failed'}`);
 
             // Update or create X profile
             const { data: existingX } = await supabase
@@ -121,7 +115,7 @@ export async function POST(req: NextRequest) {
                         bio: bio || undefined,
                         location: location || undefined,
                         website_url: website || undefined,
-                        profile_image_url: uploadedImageUrl || profileImageUrl || undefined,
+                        profile_image_url: uploadedImageUrl || undefined,
                         last_synced_at: new Date().toISOString(),
                     })
                     .eq("id", existingX.id);
@@ -139,7 +133,7 @@ export async function POST(req: NextRequest) {
                         bio: bio || null,
                         location: location || null,
                         website_url: website || null,
-                        profile_image_url: uploadedImageUrl || profileImageUrl || null,
+                        profile_image_url: uploadedImageUrl || null,
                     });
             }
 
@@ -176,7 +170,7 @@ export async function POST(req: NextRequest) {
             }
 
             // ADD NOTE with X data
-            const noteContent = buildXNote(cleanUsername, name, bio, location, website, pinnedTweet, joinDate, followersCount, followingCount, profileUrl);
+            const noteContent = buildXNote(pinnedTweet);
             if (noteContent) {
                 await supabase
                     .from("people_notes")
@@ -234,24 +228,20 @@ export async function POST(req: NextRequest) {
 
             peopleId = newPerson.id;
 
-            // Upload image with actual people ID if needed
-            if (profileImageUrl && !uploadedImageUrl) {
-                try {
-                    uploadedImageUrl = await downloadAndUploadImage(
-                        supabase,
-                        user.id,
-                        profileImageUrl,
-                        peopleId
-                    );
-                    if (uploadedImageUrl) {
-                        await supabase
-                            .from("people")
-                            .update({ custom_profile_image_url: uploadedImageUrl })
-                            .eq("id", peopleId);
-                    }
-                } catch (imageError) {
-                    console.error("[X Import] Image upload error (retry):", imageError);
-                }
+            uploadedImageUrl = await downloadAndStoreContactProfileImage(
+                supabase,
+                user.id,
+                peopleId,
+                profileImageUrl,
+                "x"
+            );
+            console.log(`[X Import] Uploaded image: ${uploadedImageUrl ? 'success' : 'failed'}`);
+
+            if (uploadedImageUrl) {
+                await supabase
+                    .from("people")
+                    .update({ custom_profile_image_url: uploadedImageUrl })
+                    .eq("id", peopleId);
             }
 
             // Create X profile entry
@@ -267,11 +257,11 @@ export async function POST(req: NextRequest) {
                     bio: bio || null,
                     location: location || null,
                     website_url: website || null,
-                    profile_image_url: uploadedImageUrl || profileImageUrl || null,
+                    profile_image_url: uploadedImageUrl || null,
                 });
 
             // Add note with X data
-            const noteContent = buildXNote(cleanUsername, name, bio, location, website, pinnedTweet, joinDate, followersCount, followingCount, profileUrl);
+            const noteContent = buildXNote(pinnedTweet);
             if (noteContent) {
                 await supabase
                     .from("people_notes")
@@ -377,79 +367,11 @@ export async function POST(req: NextRequest) {
 /**
  * Build a formatted note from X data - only pinned tweet
  */
-function buildXNote(
-    username: string,
-    name: string | null,
-    bio: string | null,
-    location: string | null,
-    website: string | null,
-    pinnedTweet: string | null,
-    joinDate: string | null,
-    followersCount: string | null,
-    followingCount: string | null,
-    profileUrl: string | null
-): string | null {
+function buildXNote(pinnedTweet: string | null): string | null {
     // Only create a note if there's a pinned tweet
     if (pinnedTweet) {
         return pinnedTweet;
     }
     
     return null;
-}
-
-/**
- * Download an image from a URL and upload it to Supabase storage
- */
-async function downloadAndUploadImage(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    supabase: any,
-    userId: string,
-    imageUrl: string,
-    peopleId: number | null
-): Promise<string | null> {
-    if (!imageUrl) return null;
-
-    try {
-        const response = await fetch(imageUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'image/*',
-            },
-        });
-
-        if (!response.ok) {
-            console.error(`[Image Download] Failed to fetch image: ${response.status}`);
-            return null;
-        }
-
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        let ext = 'jpg';
-        if (contentType.includes('png')) ext = 'png';
-        else if (contentType.includes('webp')) ext = 'webp';
-        else if (contentType.includes('gif')) ext = 'gif';
-
-        const contactId = peopleId || `temp_${Date.now()}`;
-        const filename = `${userId}/${contactId}/x_profile.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-            .from("contact-images")
-            .upload(filename, buffer, {
-                contentType,
-                upsert: true,
-            });
-
-        if (uploadError) {
-            console.error("[Image Upload] Error:", uploadError);
-            return null;
-        }
-
-        return buildPrivateMediaUrl("contact-images", filename);
-
-    } catch (error) {
-        console.error("[Image Download/Upload] Error:", error);
-        return null;
-    }
 }

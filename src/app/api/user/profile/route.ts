@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildPrivateMediaUrl } from "@/lib/storage-urls";
+import { buildPrivateMediaUrl, normalizePrivateMediaUrl } from "@/lib/storage-urls";
 
 // GET - Fetch user profile
 export async function GET() {
@@ -25,7 +25,12 @@ export async function GET() {
             return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
         }
 
-        return NextResponse.json({ profile: profile || null });
+        return NextResponse.json({
+            profile: profile ? {
+                ...profile,
+                avatar_url: normalizePrivateMediaUrl(profile.avatar_url, "user-avatars"),
+            } : null
+        });
     } catch (error) {
         console.error("Error:", error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -151,4 +156,3 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-

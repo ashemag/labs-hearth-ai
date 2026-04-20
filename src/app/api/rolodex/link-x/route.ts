@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
+import { downloadAndStoreContactProfileImage } from "@/lib/profile-image-import";
 
 // Nitter instances to try (public mirrors of Twitter that are easier to scrape)
 const NITTER_INSTANCES = [
@@ -155,7 +156,7 @@ export async function POST(req: NextRequest) {
         // Check that the contact belongs to this user
         const { data: person, error: personError } = await supabase
             .from("people")
-            .select("id, name")
+            .select("id, name, custom_profile_image_url")
             .eq("id", people_id)
             .eq("user_id", user.id)
             .single();
@@ -180,6 +181,25 @@ export async function POST(req: NextRequest) {
             const avatarUrl = await getAvatarUrl(cleanHandle);
             if (avatarUrl) {
                 profileData.profile_image_url = avatarUrl;
+            }
+        }
+
+        const uploadedImageUrl = await downloadAndStoreContactProfileImage(
+            supabase,
+            user.id,
+            person.id,
+            profileData.profile_image_url,
+            "x"
+        );
+        if (uploadedImageUrl) {
+            profileData.profile_image_url = uploadedImageUrl;
+
+            if (!person.custom_profile_image_url) {
+                await supabase
+                    .from("people")
+                    .update({ custom_profile_image_url: uploadedImageUrl })
+                    .eq("id", people_id)
+                    .eq("user_id", user.id);
             }
         }
 
@@ -250,10 +270,12 @@ export async function POST(req: NextRequest) {
             hasDisplayName: !!profileData.display_name,
             hasBio: !!profileData.bio,
             hasAvatar: !!profileData.profile_image_url,
+            storedAvatar: !!uploadedImageUrl,
         });
 
         // Return in the format expected by the frontend
         return NextResponse.json({
+            custom_profile_image_url: uploadedImageUrl || person.custom_profile_image_url || null,
             x_profile: {
                 username: xProfile.username,
                 display_name: xProfile.display_name,
@@ -308,4 +330,3 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-
