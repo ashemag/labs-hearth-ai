@@ -238,8 +238,8 @@ Propose matches for each unmatched attendee. Return only a JSON array.`;
         });
 
         // Sort: matches first (high > medium > low), then creates, then skips
-        const actionOrder = { match: 0, create: 1, skip: 2 };
-        const confidenceOrder = { high: 0, medium: 1, low: 2 };
+        const actionOrder: Record<MatchSuggestion["action"], number> = { match: 0, me: 0, create: 1, skip: 2 };
+        const confidenceOrder: Record<MatchSuggestion["confidence"], number> = { high: 0, medium: 1, low: 2 };
         suggestions.sort((a, b) => {
             const actionDiff = actionOrder[a.action] - actionOrder[b.action];
             if (actionDiff !== 0) return actionDiff;

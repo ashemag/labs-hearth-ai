@@ -39,8 +39,8 @@ export function verifyOAuthState(state: string, provider: OAuthStatePayload["pro
   }
 
   const expectedSignature = signState(encodedPayload);
-  const providedBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expectedSignature);
+  const providedBuffer = new Uint8Array(Buffer.from(signature));
+  const expectedBuffer = new Uint8Array(Buffer.from(expectedSignature));
 
   if (
     providedBuffer.length !== expectedBuffer.length ||
