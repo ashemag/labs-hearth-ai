@@ -177,7 +177,7 @@ interface ProfilePanelProps {
     handleRemoveFromList: (listId: number, contactId: number) => void;
     handleNoteInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     handleEditNoteInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    handleNoteKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, contactId: number) => void;
+    handleNoteKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
     handleEditNoteKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, noteId: number, contactId: number) => void;
     insertMention: (contact: Contact) => void;
     insertEditMention: (contact: Contact) => void;
@@ -814,7 +814,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                 handleNoteInputChange(e);
                                                 setAddingNoteFor(contact.id);
                                             }}
-                                            onKeyDown={(e) => handleNoteKeyDown(e, contact.id)}
+                                            onKeyDown={handleNoteKeyDown}
                                             onFocus={() => setAddingNoteFor(contact.id)}
                                             onBlur={() => {
                                                 setTimeout(() => {

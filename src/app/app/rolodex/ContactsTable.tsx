@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import Image from "next/image";
 import type { Contact, RolodexList } from "./types";
 import { formatTimeAgo } from "./types";
@@ -15,14 +15,12 @@ interface ContactsTableProps {
     searchQuery: string;
     showHiddenContacts: boolean;
     hiddenListIds: Set<number>;
-    setSelectedContactId: (id: number | null) => void;
-    setContextMenu: (menu: { x: number; y: number; contactId: number } | null) => void;
     handleRowClick: (contactId: number, e: React.MouseEvent) => void;
     handleContextMenu: (contactId: number, e: React.MouseEvent) => void;
     renderNoteWithMentions: (noteText: string) => React.ReactNode;
 }
 
-export default function ContactsTable({
+function ContactsTable({
     contacts,
     lists,
     selectedContacts,
@@ -31,8 +29,6 @@ export default function ContactsTable({
     searchQuery,
     showHiddenContacts,
     hiddenListIds,
-    setSelectedContactId,
-    setContextMenu,
     handleRowClick,
     handleContextMenu,
     renderNoteWithMentions,
@@ -242,3 +238,5 @@ export default function ContactsTable({
         </div>
     );
 }
+
+export default memo(ContactsTable);

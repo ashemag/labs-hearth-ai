@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+type ListMemberRow = {
+    people_id: number;
+};
+
+type ListRow = {
+    id: number;
+    name: string;
+    color: string;
+    emoji: string | null;
+    pinned: boolean | null;
+    created_at: string;
+    rolodex_list_members?: ListMemberRow[] | null;
+};
+
 // GET - Fetch all lists with member counts
 export async function GET() {
     const supabase = await createClient();
@@ -34,7 +48,7 @@ export async function GET() {
         }
 
         // Transform to include member count
-        const transformedLists = (lists || []).map((list: any) => ({
+        const transformedLists = ((lists || []) as ListRow[]).map((list) => ({
             id: list.id,
             name: list.name,
             color: list.color,
@@ -42,7 +56,7 @@ export async function GET() {
             pinned: list.pinned ?? true,
             created_at: list.created_at,
             member_count: list.rolodex_list_members?.length || 0,
-            member_ids: (list.rolodex_list_members || []).map((m: any) => m.people_id),
+            member_ids: (list.rolodex_list_members || []).map((member) => member.people_id),
         }));
 
         return NextResponse.json({ lists: transformedLists });
@@ -64,10 +78,34 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { name, color } = body;
+        const { name, color, people_ids } = body;
 
         if (!name?.trim()) {
             return NextResponse.json({ error: "Name is required" }, { status: 400 });
+        }
+
+        const requestedPeopleIds = Array.isArray(people_ids)
+            ? Array.from(new Set(
+                people_ids
+                    .map((id) => Number(id))
+                    .filter((id) => Number.isInteger(id) && id > 0)
+            ))
+            : [];
+        let memberIds: number[] = [];
+
+        if (requestedPeopleIds.length > 0) {
+            const { data: ownedPeople, error: peopleError } = await supabase
+                .from("people")
+                .select("id")
+                .eq("user_id", user.id)
+                .in("id", requestedPeopleIds);
+
+            if (peopleError) {
+                console.error("Error validating list members:", peopleError);
+                return NextResponse.json({ error: "Failed to validate list members" }, { status: 500 });
+            }
+
+            memberIds = (ownedPeople || []).map((person) => person.id);
         }
 
         const { data, error } = await supabase
@@ -85,12 +123,27 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Failed to create list" }, { status: 500 });
         }
 
+        if (memberIds.length > 0) {
+            const { error: membersError } = await supabase
+                .from("rolodex_list_members")
+                .insert(memberIds.map((peopleId) => ({
+                    user_id: user.id,
+                    list_id: data.id,
+                    people_id: peopleId,
+                })));
+
+            if (membersError) {
+                console.error("Error adding initial list members:", membersError);
+                return NextResponse.json({ error: "Failed to add contacts to list" }, { status: 500 });
+            }
+        }
+
         return NextResponse.json({
             list: {
                 ...data,
                 pinned: data.pinned ?? true,
-                member_count: 0,
-                member_ids: [],
+                member_count: memberIds.length,
+                member_ids: memberIds,
             }
         });
     } catch (error) {
@@ -182,5 +235,3 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
-
-

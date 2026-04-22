@@ -1,6 +1,6 @@
 import Image from "next/image";
-import { Search, Loader2, Command } from "lucide-react";
-import { useRef, useEffect } from "react";
+import { Search, Loader2, Command, Plus, Check } from "lucide-react";
+import { useRef, useEffect, useMemo, useState } from "react";
 import type { Contact } from "./types";
 
 export interface SemanticSearchResult {
@@ -19,8 +19,11 @@ interface CommandSearchModalProps {
     commandSearchResults: Contact[];
     semanticSearchResults: SemanticSearchResult[];
     semanticSearchLoading: boolean;
+    searchResultCount: number;
+    creatingSearchList: boolean;
     contacts: Contact[];
     onSelect: (contactId: number) => void;
+    onCreateListFromResults: (name: string) => Promise<void>;
     onClose: () => void;
 }
 
@@ -32,18 +35,41 @@ export default function CommandSearchModal({
     commandSearchResults,
     semanticSearchResults,
     semanticSearchLoading,
+    searchResultCount,
+    creatingSearchList,
     contacts,
     onSelect,
+    onCreateListFromResults,
     onClose,
 }: CommandSearchModalProps) {
     const inputRef = useRef<HTMLInputElement>(null);
+    const [showListNameInput, setShowListNameInput] = useState(false);
+    const [listName, setListName] = useState("");
 
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
     const isSemanticMode = commandSearchQuery.toLowerCase().startsWith("q:");
+    const trimmedQuery = commandSearchQuery.trim();
+    const defaultListName = useMemo(() => {
+        if (!trimmedQuery) return "";
+        return trimmedQuery.length > 36 ? `${trimmedQuery.slice(0, 36).trim()}...` : trimmedQuery;
+    }, [trimmedQuery]);
     const resultsLength = isSemanticMode ? semanticSearchResults.length : commandSearchResults.length;
+    const canCreateList = !isSemanticMode && trimmedQuery.length > 0 && searchResultCount > 0;
+
+    useEffect(() => {
+        setShowListNameInput(false);
+        setListName(defaultListName);
+    }, [defaultListName]);
+
+    const createList = async () => {
+        const name = listName.trim() || defaultListName;
+        if (!name || creatingSearchList) return;
+
+        await onCreateListFromResults(name);
+    };
 
     return (
         <div
@@ -259,21 +285,70 @@ export default function CommandSearchModal({
 
                 {/* Footer hint */}
                 <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                            <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&uarr;</kbd>
-                            <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&darr;</kbd>
-                            <span className="ml-1">navigate</span>
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&crarr;</kbd>
-                            <span className="ml-1">select</span>
-                        </span>
-                    </div>
-                    <span className="flex items-center gap-1">
-                        <Command className="h-3 w-3" />
-                        <span>K to search</span>
-                    </span>
+                    {showListNameInput && canCreateList ? (
+                        <div className="flex w-full items-center gap-2">
+                            <input
+                                value={listName}
+                                onChange={(e) => setListName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        createList();
+                                    }
+                                    if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        setShowListNameInput(false);
+                                    }
+                                }}
+                                placeholder="List name"
+                                autoFocus
+                                className="h-8 min-w-0 flex-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-gray-300"
+                            />
+                            <button
+                                onClick={createList}
+                                disabled={creatingSearchList || !listName.trim()}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-gray-900 dark:bg-white px-2.5 text-xs font-medium text-white dark:text-gray-900 disabled:opacity-50"
+                            >
+                                {creatingSearchList ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                )}
+                                Create
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="flex items-center gap-3">
+                                {canCreateList ? (
+                                    <button
+                                        onClick={() => {
+                                            setListName(defaultListName);
+                                            setShowListNameInput(true);
+                                        }}
+                                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-gray-700 hover:bg-white hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" />
+                                        <span>Save {searchResultCount} as list</span>
+                                    </button>
+                                ) : (
+                                    <span className="flex items-center gap-1">
+                                        <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&uarr;</kbd>
+                                        <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&darr;</kbd>
+                                        <span className="ml-1">navigate</span>
+                                    </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                    <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&crarr;</kbd>
+                                    <span className="ml-1">select</span>
+                                </span>
+                            </div>
+                            <span className="flex items-center gap-1">
+                                <Command className="h-3 w-3" />
+                                <span>K to search</span>
+                            </span>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

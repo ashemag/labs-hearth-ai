@@ -143,7 +143,6 @@ export default function RolodexPage() {
     const [boostNewSource, setBoostNewSource] = useState("");
     const [boostNewContext, setBoostNewContext] = useState("");
     const [boostAddLoading, setBoostAddLoading] = useState(false);
-    const [boostImageFile, setBoostImageFile] = useState<File | null>(null);
     const [boostImagePreview, setBoostImagePreview] = useState<string | null>(null);
     const [boostDragOver, setBoostDragOver] = useState(false);
     const [boostExtracting, setBoostExtracting] = useState(false);
@@ -184,7 +183,9 @@ export default function RolodexPage() {
     // Command+K search state
     const [showCommandSearch, setShowCommandSearch] = useState(false);
     const [commandSearchQuery, setCommandSearchQuery] = useState("");
+    const deferredCommandSearchQuery = useDeferredValue(commandSearchQuery);
     const [commandSearchIndex, setCommandSearchIndex] = useState(0);
+    const [creatingSearchList, setCreatingSearchList] = useState(false);
     // Semantic search state (for q: prefix queries)
     const [semanticSearchResults, setSemanticSearchResults] = useState<Array<{
         id: number;
@@ -669,31 +670,20 @@ export default function RolodexPage() {
         ]));
     }, [contacts]);
 
-    // Count manual notes added this week (excluding auto-generated ones and 🌐 notes)
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const notesThisWeekDetails = contacts.flatMap(contact =>
-        contact.notes
-            .filter(note =>
-                new Date(note.created_at) > weekAgo &&
-                note.source_type !== "website_analysis" &&
-                !note.note.includes("🌐")
-            )
-            .map(note => ({ contact: contact.name, note: note.note, created_at: note.created_at, source_type: note.source_type }))
-    );
-    console.log("Notes this week:", notesThisWeekDetails);
-    const notesThisWeek = notesThisWeekDetails.length;
-
-    const commandSearchResults = useMemo(() => {
-        if (!commandSearchQuery.trim()) {
-            return sortedContacts.slice(0, 8);
+    const commandSearchMatches = useMemo(() => {
+        if (!deferredCommandSearchQuery.trim()) {
+            return sortedContacts;
         }
 
         return sortedContacts.filter((contact) => {
             const index = contactSearchIndexes.get(contact.id);
-            return index ? contactMatchesSearchIndex(index, commandSearchQuery) : false;
-        }).slice(0, 8);
-    }, [commandSearchQuery, contactSearchIndexes, sortedContacts]);
+            return index ? contactMatchesSearchIndex(index, deferredCommandSearchQuery) : false;
+        });
+    }, [deferredCommandSearchQuery, contactSearchIndexes, sortedContacts]);
+
+    const commandSearchResults = useMemo(() => {
+        return commandSearchMatches.slice(0, 8);
+    }, [commandSearchMatches]);
 
     // Handle command search selection
     const handleCommandSearchSelect = (contactId: number) => {
@@ -710,6 +700,38 @@ export default function RolodexPage() {
             element?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 50);
     };
+
+    const handleCreateListFromCommandSearch = useCallback(async (name: string) => {
+        const memberIds = commandSearchMatches.map((contact) => contact.id);
+        if (!name.trim() || memberIds.length === 0) return;
+
+        setCreatingSearchList(true);
+        try {
+            const res = await fetch("/api/rolodex/lists", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: name.trim(), people_ids: memberIds }),
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.list) {
+                throw new Error(data.error || "Failed to create list");
+            }
+
+            setLists((prev) => [...prev, data.list].sort((a, b) => a.name.localeCompare(b.name)));
+            setActiveList(data.list.id);
+            setShowCommandSearch(false);
+            setCommandSearchQuery("");
+            setCommandSearchIndex(0);
+            toast(`Created "${data.list.name}" with ${memberIds.length} contact${memberIds.length === 1 ? "" : "s"}`);
+        } catch (error) {
+            console.error("Error creating list from search:", error);
+            toast.error("Couldn't create list from search");
+        } finally {
+            setCreatingSearchList(false);
+        }
+    }, [commandSearchMatches]);
 
     const handleAddContact = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1042,7 +1064,6 @@ export default function RolodexPage() {
     const handleBoostImageFile = async (file: File) => {
         const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
         if (!allowedTypes.includes(file.type) || file.size > 5 * 1024 * 1024) return;
-        setBoostImageFile(file);
         const reader = new FileReader();
         reader.onload = (e) => setBoostImagePreview(e.target?.result as string);
         reader.readAsDataURL(file);
@@ -1081,7 +1102,6 @@ export default function RolodexPage() {
         setBoostNewCompliment("");
         setBoostNewSource("");
         setBoostNewContext("");
-        setBoostImageFile(null);
         setBoostImagePreview(null);
         setBoostExtracting(false);
         setShowBoostAddForm(false);
@@ -1280,7 +1300,7 @@ export default function RolodexPage() {
         }, 0);
     };
 
-    const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, contactId: number) => {
+    const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         if (mentionQuery !== null && mentionSuggestions.length > 0) {
             if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -1401,20 +1421,24 @@ export default function RolodexPage() {
         setEditPendingMentions(mentions);
     };
 
-    // Parse and render note text with mentions
-    const renderNoteWithMentions = (noteText: string) => {
-        // First, handle @[Name](id) format, then handle @Name format by looking up contacts
-        // Build a combined regex that matches both patterns
-        // @[Name](id) or @Name (where Name is a known contact)
-
-        const contactNames = contacts.map(c => c.name).sort((a, b) => b.length - a.length); // Sort by length desc to match longer names first
-        const escapedNames = contactNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-
-        // Match @[Name](id) OR @KnownName
-        const mentionRegex = escapedNames
+    const mentionSearchData = useMemo(() => {
+        const nameToId = new Map(contacts.map((contact) => [contact.name, contact.id]));
+        const escapedNames = contacts
+            .map(c => c.name)
+            .sort((a, b) => b.length - a.length)
+            .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('|');
+        const regex = escapedNames
             ? new RegExp(`@\\[([^\\]]+)\\]\\((\\d+)\\)|@(${escapedNames})(?![\\w])`, 'g')
             : /@\[([^\]]+)\]\((\d+)\)/g;
 
+        return { nameToId, regex };
+    }, [contacts]);
+
+    // Parse and render note text with mentions
+    const renderNoteWithMentions = useCallback((noteText: string) => {
+        const mentionRegex = mentionSearchData.regex;
+        mentionRegex.lastIndex = 0;
         const parts: React.ReactNode[] = [];
         let lastIndex = 0;
         let match;
@@ -1435,8 +1459,7 @@ export default function RolodexPage() {
             } else if (match[3]) {
                 // @Name format - look up the contact
                 mentionName = match[3];
-                const foundContact = contacts.find(c => c.name === mentionName);
-                mentionId = foundContact?.id || null;
+                mentionId = mentionSearchData.nameToId.get(mentionName) || null;
             } else {
                 continue;
             }
@@ -1467,55 +1490,7 @@ export default function RolodexPage() {
         }
 
         return parts.length > 0 ? parts : noteText;
-    };
-
-    // Render input text with styled mentions (for the input overlay)
-    const renderInputWithMentions = (text: string) => {
-        if (!text) return null;
-
-        // Match both @[Name](id) format and @Name format
-        const mentionRegex = /@\[([^\]]+)\]\((\d+)\)|@(\w[\w\s]*?)(?=\s|$|@)/g;
-        const parts: React.ReactNode[] = [];
-        let lastIndex = 0;
-        let match;
-
-        while ((match = mentionRegex.exec(text)) !== null) {
-            // Add text before the mention
-            if (match.index > lastIndex) {
-                parts.push(
-                    <span key={`text-${lastIndex}`} className="text-gray-900 dark:text-white">
-                        {text.slice(lastIndex, match.index)}
-                    </span>
-                );
-            }
-
-            // Check which pattern matched
-            const mentionName = match[1] || match[3]; // match[1] for @[Name](id), match[3] for @Name
-
-            parts.push(
-                <span
-                    key={`mention-${match.index}`}
-                    className="text-gray-700 dark:text-gray-400 font-medium"
-                >
-                    @{mentionName}
-                </span>
-            );
-
-            // For @[Name](id) format, skip the whole thing; for @Name, skip @Name
-            lastIndex = match.index + match[0].length;
-        }
-
-        // Add remaining text
-        if (lastIndex < text.length) {
-            parts.push(
-                <span key={`text-${lastIndex}`} className="text-gray-900 dark:text-white">
-                    {text.slice(lastIndex)}
-                </span>
-            );
-        }
-
-        return parts.length > 0 ? parts : <span className="text-gray-900 dark:text-white">{text}</span>;
-    };
+    }, [mentionSearchData]);
 
     // Todo functions
     const handleAddTodo = async () => {
@@ -1683,7 +1658,7 @@ export default function RolodexPage() {
     };
 
     // Filter todos based on name and due date filters (but NOT by completed status)
-    const filteredTodos = todos.filter((todo) => {
+    const filteredTodos = useMemo(() => todos.filter((todo) => {
         // Name filter
         if (todoNameFilter && todo.contactId !== todoNameFilter.id) {
             return false;
@@ -1734,13 +1709,13 @@ export default function RolodexPage() {
         }
 
         return true;
-    });
+    }), [todoDueDateFilter, todoNameFilter, todos]);
 
     // Split filtered todos into active and completed
-    const activeTodos = filteredTodos.filter((todo) => !todo.completed);
-    const completedTodos = filteredTodos.filter((todo) => todo.completed);
+    const activeTodos = useMemo(() => filteredTodos.filter((todo) => !todo.completed), [filteredTodos]);
+    const completedTodos = useMemo(() => filteredTodos.filter((todo) => todo.completed), [filteredTodos]);
 
-    const handleRowClick = (contactId: number, e: React.MouseEvent) => {
+    const handleRowClick = useCallback((contactId: number, e: React.MouseEvent) => {
         // Multi-select with Cmd/Ctrl or Shift
         if (e.metaKey || e.ctrlKey) {
             e.preventDefault();
@@ -1770,9 +1745,9 @@ export default function RolodexPage() {
             // Normal click - open profile panel (or switch to different contact)
             setSelectedContactId(contactId);
         }
-    };
+    }, [contacts, selectedContacts]);
 
-    const handleContextMenu = (contactId: number, e: React.MouseEvent) => {
+    const handleContextMenu = useCallback((contactId: number, e: React.MouseEvent) => {
         e.preventDefault();
 
         // If right-clicking on an unselected contact, select it
@@ -1790,7 +1765,7 @@ export default function RolodexPage() {
             y,
             contactId,
         });
-    };
+    }, [selectedContacts]);
 
     const handleCreateList = async () => {
         if (!newListName.trim()) return;
@@ -2458,8 +2433,11 @@ export default function RolodexPage() {
                     commandSearchResults={commandSearchResults}
                     semanticSearchResults={semanticSearchResults}
                     semanticSearchLoading={semanticSearchLoading}
+                    searchResultCount={commandSearchMatches.length}
+                    creatingSearchList={creatingSearchList}
                     contacts={contacts}
                     onSelect={handleCommandSearchSelect}
+                    onCreateListFromResults={handleCreateListFromCommandSearch}
                     onClose={() => {
                         setShowCommandSearch(false);
                         setCommandSearchQuery("");
@@ -2506,6 +2484,32 @@ export default function RolodexPage() {
                             Merge contacts
                         </button>
                     )}
+                    {selectedContacts.size >= 1 && typeof activeList === "number" && (() => {
+                        const currentList = lists.find((list) => list.id === activeList);
+                        if (!currentList) return null;
+
+                        const selectedIds = Array.from(selectedContacts);
+                        const removableIds = selectedIds.filter((id) => currentList.member_ids.includes(id));
+                        if (removableIds.length === 0) return null;
+
+                        return (
+                            <button
+                                onClick={() => {
+                                    removableIds.forEach((id) => handleRemoveFromList(currentList.id, id));
+                                    setContextMenu(null);
+                                    setShowListSubmenu(false);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            >
+                                <X className="h-4 w-4" />
+                                <span className="truncate">
+                                    {removableIds.length === 1
+                                        ? `Remove from ${currentList.name}`
+                                        : `Remove ${removableIds.length} from ${currentList.name}`}
+                                </span>
+                            </button>
+                        );
+                    })()}
                     {/* Add to list - submenu (flyout on desktop, inline on mobile) */}
                     {selectedContacts.size >= 1 && lists.length > 0 && (
                         <>
@@ -2899,7 +2903,7 @@ export default function RolodexPage() {
                                         </div>
                                     )}
                                     <button
-                                        onClick={() => { setBoostImageFile(null); setBoostImagePreview(null); }}
+                                        onClick={() => setBoostImagePreview(null)}
                                         className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                                     >
                                         <X className="h-3 w-3" />
@@ -3525,8 +3529,6 @@ export default function RolodexPage() {
                                         searchQuery={deferredSearchQuery}
                                         showHiddenContacts={showHiddenContacts}
                                         hiddenListIds={hiddenListIds}
-                                        setSelectedContactId={setSelectedContactId}
-                                        setContextMenu={setContextMenu}
                                         handleRowClick={handleRowClick}
                                         handleContextMenu={handleContextMenu}
                                         renderNoteWithMentions={renderNoteWithMentions}
