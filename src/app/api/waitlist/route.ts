@@ -1,8 +1,9 @@
 import axios from "axios";
 import { NextResponse } from "next/server";
 import { notifyError, notifySlack } from "@/lib/slack/notify";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-function formatWaitlistSlackMessage(values: {
+type WaitlistValues = {
   name?: string;
   email?: string;
   twitterUrl?: string;
@@ -10,7 +11,9 @@ function formatWaitlistSlackMessage(values: {
   why?: string;
   role?: string;
   company?: string;
-}) {
+};
+
+function formatWaitlistSlackMessage(values: WaitlistValues) {
   const lines = [
     "📥 *New waitlist signup*",
     values.name ? `Name: ${values.name}` : null,
@@ -25,9 +28,46 @@ function formatWaitlistSlackMessage(values: {
   return lines.filter(Boolean).join("\n");
 }
 
+function normalizeUrlBase(value: string) {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+function getWaitlistEndpoint() {
+  const apiUrl = process.env.API_URL?.trim();
+  const endpoint = process.env.WAITLIST_ENDPOINT?.trim();
+
+  if (!apiUrl || !endpoint) {
+    return null;
+  }
+
+  const base = normalizeUrlBase(apiUrl);
+  const path = endpoint.replace(/^\/+/, "");
+  try {
+    return new URL(path, base.endsWith("/") ? base : `${base}/`).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function saveWaitlistFallback(values: WaitlistValues) {
+  const email = values.email?.trim().toLowerCase();
+  if (!email) {
+    throw new Error("Email is required");
+  }
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("waitlist").insert({ email });
+
+  if (error && error.code !== "23505") {
+    throw new Error(error.message);
+  }
+
+  return { message: "You're on the waitlist." };
+}
+
 export async function POST(request: Request) {
   try {
-    const values = await request.json();
+    const values = (await request.json()) as WaitlistValues;
     const processedValues = {
       name: values.name,
       email: values.email,
@@ -38,9 +78,14 @@ export async function POST(request: Request) {
       company: values.company,
      
     };
-    const { data } = await axios.post(`${process.env.API_URL}/${process.env.WAITLIST_ENDPOINT}`, processedValues, {
-      headers: { "X-API-Key": process.env.CLOUDRUN_API_TOKEN },
-    });
+    const waitlistEndpoint = getWaitlistEndpoint();
+    const data = waitlistEndpoint
+      ? (
+          await axios.post(waitlistEndpoint, processedValues, {
+            headers: { "X-API-Key": process.env.CLOUDRUN_API_TOKEN },
+          })
+        ).data
+      : await saveWaitlistFallback(values);
 
     notifySlack(formatWaitlistSlackMessage(values)).catch(() => {});
     

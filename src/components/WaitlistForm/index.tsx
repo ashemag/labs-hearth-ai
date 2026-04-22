@@ -15,12 +15,20 @@ const WaitlistForm = () => {
   const handleSubmit: HandleSubmit<WaitlistFormFields> = async (values) => {
     setError(false);
     setLoading(true);
-    const res = await fetch(`/api/waitlist`, { method: "POST", body: JSON.stringify(values) });
-    setLoading(false);
-    if (!res.ok) setError(true);
-    const { data } = await res.json();
+    const res = await fetch(`/api/waitlist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const payload = (await res.json().catch(() => null)) as { data?: { message?: string } } | null;
 
-    if (res.ok) setSuccess(data.message);
+    setLoading(false);
+    if (!res.ok) {
+      setError(true);
+      return;
+    }
+
+    setSuccess(payload?.data?.message ?? "You're on the waitlist.");
   };
 
   return (
