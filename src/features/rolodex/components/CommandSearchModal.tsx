@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { Search, Loader2, Command, Plus, Check } from "lucide-react";
 import { useRef, useEffect, useMemo, useState } from "react";
-import type { Contact } from "./types";
+import type { Contact } from "../types";
 
 export interface SemanticSearchResult {
     id: number;

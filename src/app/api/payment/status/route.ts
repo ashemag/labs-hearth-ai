@@ -1,32 +1,18 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { withUser } from "@/server/api/route";
 
-export async function GET() {
-    try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+export const dynamic = "force-dynamic";
 
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+export const GET = withUser(async (_req, { supabase, user }) => {
+    const { data: payment } = await supabase
+        .from("user_payments")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "completed")
+        .single();
 
-        // Check if user has a completed payment
-        const { data: payment } = await supabase
-            .from("user_payments")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("status", "completed")
-            .single();
-
-        return NextResponse.json({
-            hasPaid: !!payment,
-            payment: payment || null,
-        });
-    } catch (error: unknown) {
-        console.error("Error checking payment status:", error);
-        const message = error instanceof Error ? error.message : "Failed to check payment status";
-        return NextResponse.json({ error: message }, { status: 500 });
-    }
-}
-
-
+    return NextResponse.json({
+        hasPaid: !!payment,
+        payment: payment || null,
+    });
+});

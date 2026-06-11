@@ -3,13 +3,6 @@ import { Bars3Icon } from "@heroicons/react/24/outline";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect } from "react";
 
-const navItemsMobile = [
-  // { name: "Early Access", to: "/early-access", id: 0 },
-  // { name: "Blog", to: "/blog", id: 3 },
-  // { name: "Security", to: "/security", id: 5 },
-  // { name: "Privacy Policy", to: "privacy-policy", id: 6 },
-];
-
 const MobileNavigation = ({ open, cycleOpen }: { open: boolean; cycleOpen: () => void }) => {
   useEffect(() => {
     if (open) {

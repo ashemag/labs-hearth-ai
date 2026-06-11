@@ -17,7 +17,7 @@ const AutoNotificationComponent: React.FC<AutoNotificationComponentProps> = ({ o
     return () => {
       clearTimeout(completionTimer);
     };
-  }, []);
+  }, [onComplete]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.8 }}>

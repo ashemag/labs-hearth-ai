@@ -4,9 +4,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createOAuthState } from "@/lib/oauth-state";
-
-const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
+import { buildSlackOAuthUrl } from "@/server/slack/workspaces";
 
 export async function GET(req: NextRequest) {
   // Get the current user
@@ -18,36 +16,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 
-  console.log(`🔗 [SLACK CONNECT] Initiating OAuth for user: ${user.id}`);
+  console.log(`[SLACK CONNECT] Initiating OAuth for user: ${user.id}`);
+  const slackUrl = buildSlackOAuthUrl({ userId: user.id, origin: new URL(req.url).origin });
 
-  const state = createOAuthState(user.id, "slack");
-
-  // Build Slack OAuth URL
-  const scopes = [
-    "app_mentions:read",
-    "channels:history",
-    "channels:read",
-    "chat:write",
-    "commands",
-    "files:write",
-    "groups:history",
-    "groups:read",
-    "im:write",
-    "reactions:read",
-    "reactions:write",
-    "files:read",
-  ].join(",");
-
-  const userScopes = ["im:history"].join(",");
-
-  const slackUrl = new URL("https://slack.com/oauth/v2/authorize");
-  slackUrl.searchParams.set("client_id", SLACK_CLIENT_ID);
-  slackUrl.searchParams.set("scope", scopes);
-  slackUrl.searchParams.set("user_scope", userScopes);
-  slackUrl.searchParams.set("redirect_uri", `${new URL(req.url).origin}/api/slack/oauth/callback`);
-  slackUrl.searchParams.set("state", state);
-
-  console.log(`🔗 [SLACK CONNECT] Redirecting to Slack OAuth`);
+  console.log("[SLACK CONNECT] Redirecting to Slack OAuth");
   return NextResponse.redirect(slackUrl.toString());
 }
-

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { Compass, X, AtSign, Loader2, Search, ExternalLink, Plus, Check } from "lucide-react";
-import type { Contact, DiscoveryResult } from "./types";
+import type { Contact, DiscoveryResult } from "../types";
 
 interface DiscoveryPanelProps {
     discoveryUsername: string;

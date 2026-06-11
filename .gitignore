@@ -37,6 +37,7 @@ next-env.d.ts
 .env
 
 contentful/
+contentful-export-error-log-*.json
 
 # iOS
 ios/Hearth/Hearth.xcodeproj/project.xcworkspace/

@@ -3,7 +3,6 @@
 import { Inter, Homemade_Apple } from "next/font/google";
 
 import GoogleAnalytics from "@/components/GoogleAnalytics";
-import Footer from "@/components/common/Footer";
 import { AnimationControlProvider } from "@/context/animationControlContext";
 import clsx from "clsx";
 import { ReactNode } from "react";

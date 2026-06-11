@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -16,13 +16,11 @@ import {
     Mail,
     ChevronDown,
     UserPlus,
-    Bot,
     Eye,
     EyeOff,
     Trash2,
     Sparkles,
     Calendar,
-    RefreshCw,
     Plus,
     Camera,
     User,
@@ -89,7 +87,7 @@ interface CalendarMatchSuggestion {
     suggested_name?: string;
 }
 
-export default function SettingsPage() {
+function SettingsPageContent() {
     const [unmatched, setUnmatched] = useState<UnmatchedHandle[]>([]);
     const [contacts, setContacts] = useState<RolodexContact[]>([]);
     const [loading, setLoading] = useState(true);
@@ -146,7 +144,6 @@ export default function SettingsPage() {
     // Google Calendar state
     const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
     const [calendarLoading, setCalendarLoading] = useState(true);
-    const [calendarSyncing, setCalendarSyncing] = useState<number | null>(null);
     const [calendarConnecting, setCalendarConnecting] = useState(false);
     const [unmatchedCalendar, setUnmatchedCalendar] = useState<UnmatchedCalendarAttendee[]>([]);
     const [activeCalendarMatch, setActiveCalendarMatch] = useState<string | null>(null);
@@ -286,32 +283,6 @@ export default function SettingsPage() {
             }
         } catch (err) {
             console.error("Failed to disconnect Google:", err);
-        }
-    };
-
-    const handleSyncCalendar = async (accountId: number) => {
-        setCalendarSyncing(accountId);
-        try {
-            const res = await fetch("/api/google-calendar/sync", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ accountId }),
-            });
-            const data = await res.json();
-            if (data.retry) {
-                // Sync token expired, retry
-                await handleSyncCalendar(accountId);
-                return;
-            }
-            if (res.ok) {
-                // Refresh accounts to update last_sync_at
-                fetchCalendarData();
-            }
-        } catch (err) {
-            console.error("Failed to sync calendar:", err);
-        } finally {
-            setCalendarSyncing(null);
         }
     };
 
@@ -1827,3 +1798,11 @@ export default function SettingsPage() {
             </div>
         );
     }
+
+export default function SettingsPage() {
+    return (
+        <Suspense fallback={null}>
+            <SettingsPageContent />
+        </Suspense>
+    );
+}

@@ -5,12 +5,13 @@ import first_row from "/public/product/first_row.svg";
 import second_row from "/public/product/second_row.svg";
 import third_row from "/public/product/third_row.svg";
 
+const images = [first_row, second_row, third_row];
+
 interface ContactRowsComponentProps {
   onComplete: () => void;
 }
 
 const ContactRowsComponent: React.FC<ContactRowsComponentProps> = ({ onComplete }) => {
-  const images = [first_row, second_row, third_row];
   const variants = {
     hidden: { y: -50, opacity: 0 },
     visible: (i: number) => ({

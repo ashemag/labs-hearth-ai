@@ -17,10 +17,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   // Handle any POST requests (might be used for some Slack interactions)
   console.log("📥 [INBOUND SLACK] Received POST request");
   return NextResponse.json({ ok: true });
 }
-
 

@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Github, Instagram, Linkedin, Twitter, Youtube } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 const phrases = [
@@ -280,9 +281,11 @@ export default function AutoTypingSearch() {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <img
+                    <Image
                       src={person.avatar}
                       alt={person.name}
+                      width={64}
+                      height={64}
                       style={{
                         width: "64px",
                         height: "64px",
@@ -309,9 +312,11 @@ export default function AutoTypingSearch() {
                           <>
                             <span>•</span>
                             {person.company.logo && (
-                              <img
+                              <Image
                                 src={person.company.logo}
                                 alt={person.company.name}
+                                width={14}
+                                height={14}
                                 style={{ width: "14px", height: "14px", objectFit: "contain" }}
                               />
                             )}

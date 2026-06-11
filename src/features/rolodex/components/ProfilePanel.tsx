@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import Image from "next/image";
 import {
     Loader2,
@@ -29,8 +28,8 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
-import type { Contact, Note, Compliment, RolodexList } from "./types";
-import { parseLinkedInNote, formatTimeAgo } from "./types";
+import type { Contact, Note, Compliment, RolodexList } from "../types";
+import { parseLinkedInNote, formatTimeAgo } from "../types";
 
 interface ProfilePanelProps {
     // Data props
@@ -201,7 +200,6 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         allLocations,
         contactMessages,
         profilePanelExpanded,
-        setProfilePanelExpanded,
         profilePanelTab,
         setProfilePanelTab,
         profileMenuOpen,
@@ -239,31 +237,13 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         mentionQuery,
         mentionPosition,
         mentionIndex,
-        setMentionIndex,
-        pendingMentions,
         editMentionQuery,
         editMentionPosition,
         editMentionIndex,
-        setEditMentionIndex,
-        editPendingMentions,
         noteInputRef,
         editNoteInputRef,
         mentionSuggestions,
         editMentionSuggestions,
-        newCompliment,
-        setNewCompliment,
-        newComplimentContext,
-        setNewComplimentContext,
-        showComplimentInput,
-        setShowComplimentInput,
-        addingComplimentFor,
-        editingCompliment,
-        setEditingCompliment,
-        editComplimentText,
-        setEditComplimentText,
-        editComplimentContext,
-        setEditComplimentContext,
-        editComplimentLoading,
         addingLinkFor,
         setAddingLinkFor,
         linkInput,
@@ -294,9 +274,6 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         handleEditNote,
         handleDeleteNote,
         handleUpdateNoteDate,
-        handleAddCompliment,
-        handleEditCompliment,
-        handleDeleteCompliment,
         handleAddLink,
         handleAddContactInfo,
         handleDeleteContactInfo,
@@ -923,7 +900,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                     <div className="absolute left-[7px] top-3 bottom-3 w-px bg-gray-200 dark:bg-gray-700/50" />
                                                 )}
                                                 <div className="space-y-0.5">
-                                                    {timeline.map((item, idx) => {
+                                                    {timeline.map((item) => {
                                                         if (item.type === "message") {
                                                             const msg = item.data;
                                                             return (

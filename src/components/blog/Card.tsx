@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import Image from "next/image";
 import Link from "next/link";
 import { FC } from "react";
 import { BlogPostEntry, parseContentImage } from "../../../contentful";
@@ -12,13 +13,13 @@ const BlogPostCard: FC<{ post: BlogPostEntry }> = ({ post }) => {
       <div className="bg-ww-accent relative h-[183px] bg-opacity-20 md:w-80">
         {image && (
           <Link href={link}>
-            <img
+            <Image
               src={image.src}
               width={image.width}
               height={image.height}
-              alt={image.alt}
-              loading="eager"
-              srcSet={`${image.src}?w=300 1x, ${image.src} 2x`}
+              alt={image.alt || (post.fields.title as string) || ""}
+              priority
+              unoptimized
               className="absolute h-full w-full object-cover"
             />
           </Link>

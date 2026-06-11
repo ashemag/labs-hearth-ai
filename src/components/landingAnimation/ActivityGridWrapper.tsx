@@ -7,7 +7,6 @@ export default function ActivityGridWrapper() {
 
   // Heights based on calculations
   const desktopHeight = "278px";
-  const mobileHeight = "258px";
 
   // Use the maximum height to prevent content shift before determining device type
   const placeholderHeight = desktopHeight;

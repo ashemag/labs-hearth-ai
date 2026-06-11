@@ -1,7 +1,7 @@
 import { Loader2, Plus, Check, Sparkles, Users, Compass, MoreHorizontal, Pin, PinOff, Eye, EyeOff } from "lucide-react";
 import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
-import type { Contact, RolodexList } from "./types";
+import type { Contact, RolodexList } from "../types";
 
 interface ListsSidebarProps {
     contacts: Contact[];
@@ -71,11 +71,11 @@ export default function ListsSidebar({
     handleToggleListPin,
 }: ListsSidebarProps) {
     return (
-        <div className="w-44 flex-shrink-0 space-y-1">
+        <div className="w-56 flex-shrink-0 space-y-1.5">
             {/* Main filters */}
             <button
                 onClick={() => setActiveList("curated")}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "curated"
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${activeList === "curated"
                     ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
@@ -86,7 +86,7 @@ export default function ListsSidebar({
             </button>
             <button
                 onClick={() => setActiveList("all")}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === "all"
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${activeList === "all"
                     ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
@@ -98,7 +98,7 @@ export default function ListsSidebar({
 
             {/* Divider */}
             {lists.filter(l => l.pinned).length > 0 && (
-                <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
+                <div className="border-t border-gray-200 dark:border-gray-700 my-3" />
             )}
 
             {/* Pinned lists */}
@@ -110,7 +110,7 @@ export default function ListsSidebar({
                             e.preventDefault();
                             setListContextMenu({ x: e.clientX, y: e.clientY, listId: list.id });
                         }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeList === list.id
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${activeList === list.id
                             ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
                             : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                             }`}
@@ -178,7 +178,7 @@ export default function ListsSidebar({
             ))}
 
             {/* Divider before actions */}
-            <div className="border-t border-gray-200 dark:border-gray-700 my-2" />
+            <div className="border-t border-gray-200 dark:border-gray-700 my-3" />
 
             {/* New List */}
             {showNewListInput ? (
@@ -226,7 +226,7 @@ export default function ListsSidebar({
             ) : (
                 <button
                     onClick={() => setShowNewListInput(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors"
                 >
                     <Plus className="h-4 w-4" />
                     <span>New List</span>
@@ -236,7 +236,7 @@ export default function ListsSidebar({
             {/* New Contact */}
             <button
                 onClick={() => setShowAddModal(true)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition-colors"
             >
                 <Plus className="h-4 w-4" />
                 <span>New Contact</span>
@@ -265,7 +265,7 @@ export default function ListsSidebar({
                         }
                     }
                 }}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${showDiscovery
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${showDiscovery
                     ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                     : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                     }`}
@@ -279,7 +279,7 @@ export default function ListsSidebar({
                 <div className="relative" ref={listsDropdownRef}>
                     <button
                         onClick={() => setShowListsDropdown(!showListsDropdown)}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${showListsDropdown
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm rounded-xl transition-colors ${showListsDropdown
                             ? "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                             : hiddenListIds.size > 0
                                 ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"

@@ -2,9 +2,9 @@
 // Handles Slack interactive message menu options
 export const runtime = "nodejs";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   console.log("📥 [SLACK OPTIONS] Received options request");
 
   // TODO: Implement message menu options if needed
@@ -12,5 +12,4 @@ export async function POST(req: NextRequest) {
   
   return NextResponse.json({ options: [] });
 }
-
 

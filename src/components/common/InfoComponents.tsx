@@ -2,6 +2,7 @@
 
 import { ArticleData } from "@/types";
 import clsx from "clsx";
+import NextImage from "next/image";
 import { ReactNode } from "react";
 
 export const InfoTitle = ({ children, id }: { children: string | ReactNode; id?: string }) => (
@@ -24,7 +25,7 @@ export const Text = ({ children }: { children: ReactNode }) => <p className="lea
 
 export const Image = ({ src }: { src: string }) => (
   <div className="flex justify-center py-8">
-    <img className="md:h-64" src={src} />
+    <NextImage className="h-auto md:h-64 w-auto" src={src} width={512} height={256} alt="" unoptimized />
   </div>
 );
 
@@ -51,7 +52,7 @@ export const InfoLink = ({ href, children }: { href: string; children: ReactNode
 export const Template = ({ children, articleData }: { children: ReactNode; articleData: ArticleData }) => {
   const Title = () => (
     <div className="flex items-center">
-      <img src={articleData.icon} alt="arvatar_icon" className={"h-8 pr-2"} />
+      <NextImage src={articleData.icon} alt="avatar icon" width={32} height={32} className="h-8 w-auto pr-2" unoptimized />
       <h1 className="text-[30px] lg:text-[40px] font-semibold m-[10px] text-[#4b4b5e] leading-18 md:leading-24">
         {articleData.title}
       </h1>

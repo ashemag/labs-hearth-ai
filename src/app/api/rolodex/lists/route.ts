@@ -1,237 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-type ListMemberRow = {
-    people_id: number;
-};
-
-type ListRow = {
-    id: number;
-    name: string;
-    color: string;
-    emoji: string | null;
-    pinned: boolean | null;
-    created_at: string;
-    rolodex_list_members?: ListMemberRow[] | null;
-};
+import { NextResponse } from "next/server";
+import {
+    optionalNullableString,
+    readJsonObject,
+    requiredNumber,
+    requiredString,
+    withUser,
+} from "@/server/api/route";
+import {
+    createRolodexList,
+    deleteRolodexList,
+    listRolodexLists,
+    uniquePositiveIds,
+    updateRolodexList,
+} from "@/server/rolodex/lists";
 
 // GET - Fetch all lists with member counts
-export async function GET() {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const { data: lists, error } = await supabase
-            .from("rolodex_lists")
-            .select(`
-                id,
-                name,
-                color,
-                emoji,
-                pinned,
-                created_at,
-                rolodex_list_members (
-                    people_id
-                )
-            `)
-            .eq("user_id", user.id)
-            .order("name", { ascending: true });
-
-        if (error) {
-            console.error("Error fetching lists:", error);
-            return NextResponse.json({ error: "Failed to fetch lists" }, { status: 500 });
-        }
-
-        // Transform to include member count
-        const transformedLists = ((lists || []) as ListRow[]).map((list) => ({
-            id: list.id,
-            name: list.name,
-            color: list.color,
-            emoji: list.emoji || null,
-            pinned: list.pinned ?? true,
-            created_at: list.created_at,
-            member_count: list.rolodex_list_members?.length || 0,
-            member_ids: (list.rolodex_list_members || []).map((member) => member.people_id),
-        }));
-
-        return NextResponse.json({ lists: transformedLists });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+export const GET = withUser(async (_req, { supabase, user }) => {
+    const lists = await listRolodexLists(supabase, user.id);
+    return NextResponse.json({ lists });
+});
 
 // POST - Create a new list
-export async function POST(req: NextRequest) {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const POST = withUser(async (req, { supabase, user }) => {
+    const body = await readJsonObject(req);
+    const name = requiredString(body.name, "Name");
+    const color = optionalNullableString(body.color) || undefined;
+    const peopleIds = uniquePositiveIds(body.people_ids);
 
-    try {
-        const body = await req.json();
-        const { name, color, people_ids } = body;
+    const list = await createRolodexList(supabase, user.id, { name, color, peopleIds });
+    return NextResponse.json({ list });
+});
 
-        if (!name?.trim()) {
-            return NextResponse.json({ error: "Name is required" }, { status: 400 });
-        }
+// PATCH - Update a list
+export const PATCH = withUser(async (req, { supabase, user }) => {
+    const body = await readJsonObject(req);
+    const id = requiredNumber(body.id, "List ID");
+    const name = body.name === undefined ? undefined : requiredString(body.name, "Name");
+    const color = optionalNullableString(body.color) || undefined;
+    const emoji = optionalNullableString(body.emoji);
+    const pinned = typeof body.pinned === "boolean" ? body.pinned : undefined;
 
-        const requestedPeopleIds = Array.isArray(people_ids)
-            ? Array.from(new Set(
-                people_ids
-                    .map((id) => Number(id))
-                    .filter((id) => Number.isInteger(id) && id > 0)
-            ))
-            : [];
-        let memberIds: number[] = [];
-
-        if (requestedPeopleIds.length > 0) {
-            const { data: ownedPeople, error: peopleError } = await supabase
-                .from("people")
-                .select("id")
-                .eq("user_id", user.id)
-                .in("id", requestedPeopleIds);
-
-            if (peopleError) {
-                console.error("Error validating list members:", peopleError);
-                return NextResponse.json({ error: "Failed to validate list members" }, { status: 500 });
-            }
-
-            memberIds = (ownedPeople || []).map((person) => person.id);
-        }
-
-        const { data, error } = await supabase
-            .from("rolodex_lists")
-            .insert({ 
-                user_id: user.id,
-                name: name.trim(), 
-                color: color || "#7BDFF2" 
-            })
-            .select()
-            .single();
-
-        if (error) {
-            console.error("Error creating list:", error);
-            return NextResponse.json({ error: "Failed to create list" }, { status: 500 });
-        }
-
-        if (memberIds.length > 0) {
-            const { error: membersError } = await supabase
-                .from("rolodex_list_members")
-                .insert(memberIds.map((peopleId) => ({
-                    user_id: user.id,
-                    list_id: data.id,
-                    people_id: peopleId,
-                })));
-
-            if (membersError) {
-                console.error("Error adding initial list members:", membersError);
-                return NextResponse.json({ error: "Failed to add contacts to list" }, { status: 500 });
-            }
-        }
-
-        return NextResponse.json({
-            list: {
-                ...data,
-                pinned: data.pinned ?? true,
-                member_count: memberIds.length,
-                member_ids: memberIds,
-            }
-        });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
-
-// PATCH - Update a list (toggle pinned, rename, etc.)
-export async function PATCH(req: NextRequest) {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const body = await req.json();
-        const { id, pinned, name, color, emoji } = body;
-
-        if (!id) {
-            return NextResponse.json({ error: "List ID is required" }, { status: 400 });
-        }
-
-        const updates: Record<string, unknown> = {};
-        if (typeof pinned === "boolean") updates.pinned = pinned;
-        if (name?.trim()) updates.name = name.trim();
-        if (color) updates.color = color;
-        if (typeof emoji === "string") updates.emoji = emoji || null;
-
-        if (Object.keys(updates).length === 0) {
-            return NextResponse.json({ error: "No updates provided" }, { status: 400 });
-        }
-
-        const { data, error } = await supabase
-            .from("rolodex_lists")
-            .update(updates)
-            .eq("id", id)
-            .eq("user_id", user.id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error("Error updating list:", error);
-            return NextResponse.json({ error: "Failed to update list" }, { status: 500 });
-        }
-
-        return NextResponse.json({ list: data });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+    const list = await updateRolodexList(supabase, user.id, { id, pinned, name, color, emoji });
+    return NextResponse.json({ list });
+});
 
 // DELETE - Delete a list
-export async function DELETE(req: NextRequest) {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const DELETE = withUser(async (req, { supabase, user }) => {
+    const { searchParams } = new URL(req.url);
+    const listId = requiredNumber(searchParams.get("id"), "List ID");
 
-    try {
-        const { searchParams } = new URL(req.url);
-        const listId = searchParams.get("id");
-
-        if (!listId) {
-            return NextResponse.json({ error: "List ID is required" }, { status: 400 });
-        }
-
-        const { error } = await supabase
-            .from("rolodex_lists")
-            .delete()
-            .eq("id", parseInt(listId))
-            .eq("user_id", user.id);
-
-        if (error) {
-            console.error("Error deleting list:", error);
-            return NextResponse.json({ error: "Failed to delete list" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+    await deleteRolodexList(supabase, user.id, listId);
+    return NextResponse.json({ success: true });
+});

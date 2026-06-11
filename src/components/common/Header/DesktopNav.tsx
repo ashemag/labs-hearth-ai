@@ -17,7 +17,7 @@ const DesktopNavigation = () => {
     <div className="flex items-center justify-center w-full h-full pt-1 space-x-6">
       <nav>
         <ul className="flex items-center space-x-2 font-thin">
-          {navigationLinks.map(({ name, to, id }) => (
+          {navigationLinks.map(({ name, to }) => (
             <li key={name}>
               <Link
                 className={clsx(

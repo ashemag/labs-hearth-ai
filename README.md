@@ -1,34 +1,46 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Hearth Labs
 
-## Getting Started
+Next.js app and companion clients for Hearth Labs.
 
-First, run the development server:
+## Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The web app runs at [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Useful checks:
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+```bash
+npm run build
+npm run lint
+```
 
-## Learn More
+`npm run build` currently skips linting through `next.config.js` while existing lint debt is cleaned up.
 
-To learn more about Next.js, take a look at the following resources:
+## Repo Layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```txt
+src/app/                 Next.js app routes and API route entrypoints
+src/features/            Product feature modules and feature-owned UI
+src/server/              Server-side route helpers and domain services
+src/lib/                 Shared clients, integrations, and low-level utilities
+src/components/          Shared UI and marketing components
+supabase/migrations/     Database schema migrations
+chrome-extension/        Chrome extension client
+electron-imessage/       Electron iMessage helper
+ios/                     iOS client files
+scripts/                 One-off migration and maintenance scripts
+public/                  Static assets
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Structural Conventions
 
-## Deploy on Vercel
+Keep `src/app` thin. Route files should wire request/response behavior and delegate product logic to `src/features` or `src/server`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+For authenticated API routes, prefer `withUser` from `src/server/api/route.ts`. It centralizes Supabase user lookup, JSON error handling, and common request validation helpers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details!
+For Rolodex UI, use `src/features/rolodex` as the feature boundary. The `/app/rolodex` route imports that feature through `src/features/rolodex/index.ts`.
+
+Generated Contentful export error logs are ignored via `.gitignore`; do not commit timestamped export artifacts.

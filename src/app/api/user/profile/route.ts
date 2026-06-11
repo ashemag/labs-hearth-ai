@@ -1,158 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { buildPrivateMediaUrl, normalizePrivateMediaUrl } from "@/lib/storage-urls";
+import { readJsonObject, withUser } from "@/server/api/route";
+import { getUserProfile, updateUserProfile, uploadUserAvatar } from "@/server/user/profile";
 
-// GET - Fetch user profile
-export async function GET() {
-    const supabase = await createClient();
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const { data: profile, error } = await supabase
-            .from("user_profiles")
-            .select("*")
-            .eq("id", user.id)
-            .single();
-
-        if (error && error.code !== "PGRST116") {
-            // PGRST116 = no rows returned, which is fine for new users
-            console.error("Error fetching profile:", error);
-            return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
-        }
-
-        return NextResponse.json({
-            profile: profile ? {
-                ...profile,
-                avatar_url: normalizePrivateMediaUrl(profile.avatar_url, "user-avatars"),
-            } : null
-        });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+export const GET = withUser(async (_req, { supabase, user }) => {
+    return NextResponse.json(await getUserProfile(supabase, user.id));
+});
 
 // POST - Upload profile image
-export async function POST(req: NextRequest) {
-    const supabase = await createClient();
+export const POST = withUser(async (req: NextRequest, { supabase, user }) => {
+    const formData = await req.formData();
+    const file = formData.get("file") as File | null;
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const formData = await req.formData();
-        const file = formData.get("file") as File | null;
-
-        if (!file) {
-            return NextResponse.json({ error: "No file provided" }, { status: 400 });
-        }
-
-        // Validate file type
-        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-        if (!allowedTypes.includes(file.type)) {
-            return NextResponse.json({ error: "Invalid file type. Please upload a JPEG, PNG, WebP, or GIF." }, { status: 400 });
-        }
-
-        // Validate file size (max 5MB)
-        const maxSize = 5 * 1024 * 1024;
-        if (file.size > maxSize) {
-            return NextResponse.json({ error: "File too large. Maximum size is 5MB." }, { status: 400 });
-        }
-
-        // Generate unique filename
-        const ext = file.name.split(".").pop() || "jpg";
-        const filename = `${user.id}/avatar.${ext}`;
-
-        // Convert file to buffer
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-            .from("user-avatars")
-            .upload(filename, buffer, {
-                contentType: file.type,
-                upsert: true,
-            });
-
-        if (uploadError) {
-            console.error("Error uploading file:", uploadError);
-            return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
-        }
-
-        const avatarUrl = buildPrivateMediaUrl("user-avatars", filename);
-
-        // Upsert user profile with new avatar URL
-        const { error: upsertError } = await supabase
-            .from("user_profiles")
-            .upsert({
-                id: user.id,
-                avatar_url: avatarUrl,
-                updated_at: new Date().toISOString(),
-            }, {
-                onConflict: "id",
-            });
-
-        if (upsertError) {
-            console.error("Error updating profile:", upsertError);
-            return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
-        }
-
-        return NextResponse.json({ avatarUrl });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+    return NextResponse.json(await uploadUserAvatar(supabase, user.id, file));
+});
 
 // PATCH - Update profile data (display name, etc.)
-export async function PATCH(req: NextRequest) {
-    const supabase = await createClient();
+export const PATCH = withUser(async (req: NextRequest, { supabase, user }) => {
+    const body = await readJsonObject(req);
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const body = await req.json();
-        const { display_name, linked_emails } = body;
-
-        const updateData: Record<string, unknown> = {
-            id: user.id,
-            updated_at: new Date().toISOString(),
-        };
-        if (display_name !== undefined) updateData.display_name = display_name;
-        if (linked_emails !== undefined) {
-            // Normalize and dedupe
-            updateData.linked_emails = [...new Set(
-                (linked_emails as string[]).map((e: string) => e.toLowerCase().trim()).filter(Boolean)
-            )];
-        }
-
-        const { error: upsertError } = await supabase
-            .from("user_profiles")
-            .upsert(updateData, {
-                onConflict: "id",
-            });
-
-        if (upsertError) {
-            console.error("Error updating profile:", upsertError);
-            return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+    return NextResponse.json(await updateUserProfile(supabase, user.id, body));
+});

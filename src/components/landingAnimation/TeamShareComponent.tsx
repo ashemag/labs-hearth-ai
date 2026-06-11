@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import React, { useEffect, useState } from "react";
 
 interface Teammate {
@@ -54,7 +55,7 @@ const TeamShareComponent: React.FC<AutoShareProps> = ({ teammates, typingSpeed =
 
       return () => clearTimeout(postTypingTimeout);
     }
-  }, [typingIndex, typingText, typingSpeed, teammates, inputValue]);
+  }, [typingIndex, typingText, typingSpeed, teammates, inputValue, onComplete]);
 
   return (
     <motion.div
@@ -100,7 +101,7 @@ const TeamShareComponent: React.FC<AutoShareProps> = ({ teammates, typingSpeed =
                       "pointer-events-none flex items-center px-4 py-2 text-sm text-brand-purple-darker hover:bg-gray-100"
                     )}
                   >
-                    <img className="mr-2 h-10 w-10 rounded-full" src={teammate.photoUrl} />
+                    <Image className="mr-2 h-10 w-10 rounded-full" src={teammate.photoUrl} width={40} height={40} alt={teammate.name} unoptimized />
 
                     <div className="flex flex-col items-start">
                       <p>{teammate.name}</p>

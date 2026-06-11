@@ -10,7 +10,7 @@ import {
     PanelRightClose,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
-import type { Todo, Contact } from "./types";
+import type { Todo, Contact } from "../types";
 
 interface TodoSheetProps {
     showTodoSheet: boolean;

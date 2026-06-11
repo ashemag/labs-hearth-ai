@@ -52,7 +52,7 @@ export default function TestFlowPage() {
 
         <p className="text-gray-500 mb-8">
           This will create a test account and sign you in automatically.
-          You&apos;ll go through the payment page like a new user would.
+          You&apos;ll go through onboarding and payment like a new user would.
         </p>
 
         {error && (

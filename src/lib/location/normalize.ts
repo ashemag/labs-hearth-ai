@@ -283,7 +283,7 @@ export function normalizeLocation(location: string | null | undefined): string |
     }
     
     // Split by common separators
-    const parts = normalized.split(/[,;\/]+/).map(p => p.trim()).filter(Boolean);
+    const parts = normalized.split(/[,;/]+/).map(p => p.trim()).filter(Boolean);
     
     if (parts.length === 0) return null;
     
@@ -321,7 +321,6 @@ export function normalizeLocation(location: string | null | undefined): string |
         let part = parts[i];
         const partLower = part.toLowerCase();
         const nextPart = parts[i + 1];
-        const nextPartUpper = nextPart?.toUpperCase();
         
         // Check for city abbreviation (only for single-word parts)
         if (!part.includes(' ') && CITY_NORMALIZATIONS[partLower]) {

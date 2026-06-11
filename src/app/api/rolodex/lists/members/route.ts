@@ -1,84 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
+import { ApiError, readJsonObject, requiredNumber, withUser } from "@/server/api/route";
+import { addListMember, deleteListMember } from "@/server/rolodex/list-members";
 
 // POST - Add a contact to a list
-export async function POST(req: NextRequest) {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const POST = withUser(async (req, { supabase, user }) => {
+    const body = await readJsonObject(req);
+    const listId = requiredNumber(body.list_id, "list_id");
+    const peopleId = requiredNumber(body.people_id, "people_id");
 
     try {
-        const body = await req.json();
-        const { list_id, people_id } = body;
-
-        if (!list_id || !people_id) {
-            return NextResponse.json({ error: "list_id and people_id are required" }, { status: 400 });
-        }
-
-        const { error } = await supabase
-            .from("rolodex_list_members")
-            .insert({ 
-                user_id: user.id,
-                list_id, 
-                people_id 
-            });
-
-        if (error) {
-            if (error.code === "23505") {
-                // Already a member
-                return NextResponse.json({ success: true, already_member: true });
-            }
-            console.error("Error adding to list:", error);
-            return NextResponse.json({ error: "Failed to add contact to list" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
+        await addListMember(supabase, user.id, { listId, peopleId });
     } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+        if (error instanceof ApiError && error.status === 409) {
+            return NextResponse.json({ success: true, already_member: true });
+        }
+        throw error;
     }
-}
+
+    return NextResponse.json({ success: true });
+});
 
 // DELETE - Remove a contact from a list
-export async function DELETE(req: NextRequest) {
-    const supabase = await createClient();
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+export const DELETE = withUser(async (req, { supabase, user }) => {
+    const { searchParams } = new URL(req.url);
+    const listId = requiredNumber(searchParams.get("list_id"), "list_id");
+    const peopleId = requiredNumber(searchParams.get("people_id"), "people_id");
 
-    try {
-        const { searchParams } = new URL(req.url);
-        const listId = searchParams.get("list_id");
-        const peopleId = searchParams.get("people_id");
-
-        if (!listId || !peopleId) {
-            return NextResponse.json({ error: "list_id and people_id are required" }, { status: 400 });
-        }
-
-        const { error } = await supabase
-            .from("rolodex_list_members")
-            .delete()
-            .eq("list_id", parseInt(listId))
-            .eq("people_id", parseInt(peopleId))
-            .eq("user_id", user.id);
-
-        if (error) {
-            console.error("Error removing from list:", error);
-            return NextResponse.json({ error: "Failed to remove contact from list" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
-
-
+    await deleteListMember(supabase, user.id, { listId, peopleId });
+    return NextResponse.json({ success: true });
+});

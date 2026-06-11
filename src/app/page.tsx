@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Landing from "@/components/Landing";
-import RolodexPage from "@/app/app/rolodex/page";
+import { RolodexPage } from "@/features/rolodex";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -29,9 +29,9 @@ export default async function Home() {
         .eq("status", "completed")
         .single();
 
-      // If no payment, redirect to payment page
+      // If no payment, start with the product onboarding step.
       if (!payment) {
-        redirect("/payment");
+        redirect("/onboarding");
       }
 
       return <RolodexPage />;

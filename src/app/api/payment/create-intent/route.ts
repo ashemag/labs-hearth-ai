@@ -1,61 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import Stripe from "stripe";
+import { ApiError, withUser } from "@/server/api/route";
+import { createDesignPartnerPaymentIntent } from "@/server/payment/checkout";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-export async function POST() {
+export const POST = withUser(async (_req, { supabase, user }) => {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // Check if user already has a completed payment
-        const { data: existingPayment } = await supabase
-            .from("user_payments")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("status", "completed")
-            .single();
-
-        if (existingPayment) {
-            return NextResponse.json({ error: "Already paid", alreadyPaid: true }, { status: 400 });
-        }
-
-        // Create a PaymentIntent for $100.00
-        const paymentIntent = await stripe.paymentIntents.create({
-            amount: 10000, // Amount in cents ($100.00)
-            currency: "usd",
-            automatic_payment_methods: {
-                enabled: true,
-            },
-            metadata: {
-                user_id: user.id,
-                email: user.email || "",
-                product: "Hearth AI Beta - Early Design Partner",
-            },
-        });
-
-        // Store pending payment record
-        await supabase.from("user_payments").insert({
-            user_id: user.id,
-            email: user.email || "",
-            stripe_payment_intent_id: paymentIntent.id,
-            amount_cents: 10000,
-            status: "pending",
-        });
-
-        return NextResponse.json({
-            clientSecret: paymentIntent.client_secret,
-        });
+        return NextResponse.json(await createDesignPartnerPaymentIntent(supabase, user));
     } catch (error: unknown) {
+        if (error instanceof ApiError) {
+            return NextResponse.json(error.body || { error: error.message }, { status: error.status });
+        }
+
         console.error("Error creating payment intent:", error);
         const message = error instanceof Error ? error.message : "Failed to create payment intent";
         return NextResponse.json({ error: message }, { status: 500 });
     }
-}
-
-
+});

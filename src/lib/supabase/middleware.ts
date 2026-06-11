@@ -98,7 +98,7 @@ export async function updateSession(request: NextRequest) {
             if (request.nextUrl.pathname === "/sign-in" ||
                 request.nextUrl.pathname === "/sign-up") {
                 const url = request.nextUrl.clone();
-                url.pathname = hasPaid ? "/app/rolodex" : "/payment";
+                url.pathname = hasPaid ? "/app/rolodex" : "/onboarding";
                 return NextResponse.redirect(url);
             }
 
@@ -112,7 +112,7 @@ export async function updateSession(request: NextRequest) {
             // If trying to access app without payment, redirect to payment
             if (request.nextUrl.pathname.startsWith("/app") && !hasPaid) {
                 const url = request.nextUrl.clone();
-                url.pathname = "/payment";
+                url.pathname = "/onboarding";
                 return NextResponse.redirect(url);
             }
 
@@ -126,6 +126,12 @@ export async function updateSession(request: NextRequest) {
                 url.pathname = "/app/rolodex";
                 return NextResponse.redirect(url);
             }
+
+            if (request.nextUrl.pathname === "/onboarding" && hasPaid) {
+                const url = request.nextUrl.clone();
+                url.pathname = "/app/rolodex";
+                return NextResponse.redirect(url);
+            }
         }
     } else {
         // Not authenticated - protect app routes
@@ -134,6 +140,7 @@ export async function updateSession(request: NextRequest) {
         }
 
         if (request.nextUrl.pathname.startsWith("/app") ||
+            request.nextUrl.pathname === "/onboarding" ||
             request.nextUrl.pathname === "/payment") {
             const url = request.nextUrl.clone();
             url.pathname = "/sign-in";

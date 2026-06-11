@@ -8,6 +8,8 @@ interface AppHomeProps {
 }
 
 export default function AppHome({ user }: AppHomeProps) {
+  void user;
+
   const supabase = createClient();
 
   const handleSignOut = async () => {
@@ -29,4 +31,3 @@ export default function AppHome({ user }: AppHomeProps) {
     </div>
   );
 }
-

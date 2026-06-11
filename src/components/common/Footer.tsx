@@ -1,15 +1,8 @@
 "use client";
-import clsx from "clsx";
+import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const Footer = () => {
-  const pathname = usePathname();
-  const isHomePage = pathname === "/";
-
-  const footerLinks = [
-  ];
-
   const currentYear = new Date().getFullYear();
 
   return (
@@ -31,14 +24,14 @@ const Footer = () => {
               target="_blank"
               className="hover:opacity-100 opacity-80 h-6 w-6"
             >
-              <img src="/icons/linkedIn.svg" draggable={false} alt="LinkedIn" />
+              <Image src="/icons/linkedIn.svg" width={24} height={24} draggable={false} alt="LinkedIn" />
             </Link>
             <Link
               href="https://twitter.com/hearthai_co"
               target="_blank"
               className="opacity-80 hover:opacity-100 h-6 w-6"
             >
-              <img src="/icons/twitter.svg" draggable={false} alt="Twitter" />
+              <Image src="/icons/twitter.svg" width={24} height={24} draggable={false} alt="Twitter" />
             </Link>
           </div>
         </div>

@@ -1,218 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
-
-// Extract mention IDs from note text
-// Supports @[Name](id) format
-function extractMentionIds(noteText: string): number[] {
-    const mentionRegex = /@\[([^\]]+)\]\((\d+)\)/g;
-    const ids: number[] = [];
-    let match;
-
-    while ((match = mentionRegex.exec(noteText)) !== null) {
-        const id = parseInt(match[2], 10);
-        if (!isNaN(id) && !ids.includes(id)) {
-            ids.push(id);
-        }
-    }
-
-    return ids;
-}
-
-// Save mentions to the database
-async function saveMentions(
-    supabase: Awaited<ReturnType<typeof createClient>>,
-    userId: string,
-    noteId: number,
-    mentionedPeopleIds: number[]
-) {
-    if (mentionedPeopleIds.length === 0) return;
-
-    const mentionRecords = mentionedPeopleIds.map(peopleId => ({
-        user_id: userId,
-        note_id: noteId,
-        mentioned_people_id: peopleId,
-    }));
-
-    const { error } = await supabase
-        .from("people_note_mentions")
-        .insert(mentionRecords);
-
-    if (error) {
-        console.error("Error saving mentions:", error);
-        // Don't fail the whole request if mentions fail to save
-    }
-}
+import { NextResponse } from "next/server";
+import {
+    optionalString,
+    readJsonObject,
+    requiredNumber,
+    requiredString,
+    withUser,
+} from "@/server/api/route";
+import { createNote, deleteNote, updateNote } from "@/server/rolodex/notes";
 
 // POST - Add a note to a person
-export async function POST(req: NextRequest) {
-    const supabase = await createClient();
+export const POST = withUser(async (req, { supabase, user }) => {
+    const body = await readJsonObject(req);
+    const peopleId = requiredNumber(body.people_id, "people_id");
+    const noteText = requiredString(body.note, "note");
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const note = await createNote(supabase, user.id, { peopleId, note: noteText });
+    return NextResponse.json({ note });
+});
 
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+// PATCH - Update an existing note
+export const PATCH = withUser(async (req, { supabase, user }) => {
+    const body = await readJsonObject(req);
+    const noteId = requiredNumber(body.note_id, "note_id");
+    const noteText = optionalString(body.note);
+    const createdAt = optionalString(body.created_at);
 
-    try {
-        const body = await req.json();
-        const { people_id, note } = body;
-
-        if (!people_id || !note) {
-            return NextResponse.json({ error: "people_id and note are required" }, { status: 400 });
-        }
-
-        // Generate embedding for the note
-        let embedding: string | null = null;
-        try {
-            const embeddingVector = await generateEmbedding(note);
-            embedding = formatEmbeddingForSupabase(embeddingVector);
-        } catch (embeddingError) {
-            console.error("Error generating embedding:", embeddingError);
-            // Continue without embedding - we can backfill later
-        }
-
-        const { data, error } = await supabase
-            .from("people_notes")
-            .insert({
-                user_id: user.id,
-                people_id,
-                note,
-                source_type: "rolodex",
-                embedding,
-            })
-            .select()
-            .single();
-
-        if (error) {
-            console.error("Error adding note:", error);
-            return NextResponse.json({ error: "Failed to save note" }, { status: 500 });
-        }
-
-        // Extract and save mentions
-        const mentionIds = extractMentionIds(note);
-        if (mentionIds.length > 0) {
-            await saveMentions(supabase, user.id, data.id, mentionIds);
-            console.log(`✓ Saved ${mentionIds.length} mention(s) for note ${data.id}`);
-        }
-
-        console.log(`✓ Note ${data.id} created${embedding ? " with embedding" : " (no embedding)"}`);
-        return NextResponse.json({ note: data });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
-
-// PATCH - Update an existing note (text and/or date)
-export async function PATCH(req: NextRequest) {
-    const supabase = await createClient();
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const body = await req.json();
-        const { note_id, note, created_at } = body;
-
-        if (!note_id) {
-            return NextResponse.json({ error: "note_id is required" }, { status: 400 });
-        }
-
-        // Build update object - only include fields that are provided
-        const updateData: { note?: string; created_at?: string; embedding?: string } = {};
-        if (note?.trim()) {
-            updateData.note = note.trim();
-
-            // Regenerate embedding for updated note text
-            try {
-                const embeddingVector = await generateEmbedding(updateData.note!);
-                updateData.embedding = formatEmbeddingForSupabase(embeddingVector);
-            } catch (embeddingError) {
-                console.error("Error generating embedding for update:", embeddingError);
-                // Continue without updating embedding
-            }
-        }
-        if (created_at) {
-            updateData.created_at = created_at;
-        }
-
-        if (Object.keys(updateData).length === 0) {
-            return NextResponse.json({ error: "No fields to update" }, { status: 400 });
-        }
-
-        const { data, error } = await supabase
-            .from("people_notes")
-            .update(updateData)
-            .eq("id", note_id)
-            .eq("user_id", user.id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error("Error updating note:", error);
-            return NextResponse.json({ error: "Failed to update note" }, { status: 500 });
-        }
-
-        // Update mentions only if note text was updated
-        if (updateData.note) {
-            await supabase
-                .from("people_note_mentions")
-                .delete()
-                .eq("note_id", note_id)
-                .eq("user_id", user.id);
-
-            const mentionIds = extractMentionIds(updateData.note);
-            if (mentionIds.length > 0) {
-                await saveMentions(supabase, user.id, note_id, mentionIds);
-                console.log(`✓ Updated ${mentionIds.length} mention(s) for note ${note_id}`);
-            }
-        }
-
-        return NextResponse.json({ note: data });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
+    const note = await updateNote(supabase, user.id, { noteId, note: noteText, createdAt });
+    return NextResponse.json({ note });
+});
 
 // DELETE - Remove a note
-export async function DELETE(req: NextRequest) {
-    const supabase = await createClient();
+export const DELETE = withUser(async (req, { supabase, user }) => {
+    const { searchParams } = new URL(req.url);
+    const noteId = requiredNumber(searchParams.get("id"), "Note ID");
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    try {
-        const { searchParams } = new URL(req.url);
-        const noteId = searchParams.get("id");
-
-        if (!noteId) {
-            return NextResponse.json({ error: "Note ID is required" }, { status: 400 });
-        }
-
-        const { error } = await supabase
-            .from("people_notes")
-            .delete()
-            .eq("id", parseInt(noteId))
-            .eq("user_id", user.id);
-
-        if (error) {
-            console.error("Error deleting note:", error);
-            return NextResponse.json({ error: "Failed to delete note" }, { status: 500 });
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error("Error:", error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
-}
-
-
+    await deleteNote(supabase, user.id, noteId);
+    return NextResponse.json({ success: true });
+});

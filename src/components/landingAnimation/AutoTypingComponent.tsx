@@ -21,15 +21,15 @@ const AutoTypingComponent: React.FC<AutoTypingComponentProps> = ({ placeholderTe
 
   useEffect(() => {
     const currentText = placeholderTexts[textIndex];
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     if (charIndex < currentText.length) {
-      const timeoutId = setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setText(currentText.slice(0, charIndex + 1));
         setCharIndex(charIndex + 1);
       }, typingSpeed);
-      return () => clearTimeout(timeoutId);
     } else if (textIndex < placeholderTexts.length - 1) {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setIsTypingComplete(false);
         setCharIndex(0);
         setTextIndex(textIndex + 1);
@@ -37,13 +37,17 @@ const AutoTypingComponent: React.FC<AutoTypingComponentProps> = ({ placeholderTe
     } else if (!isTypingComplete) {
       setIsTypingComplete(true);
       if (isLastText) {
-        setTimeout(() => setChangeStyle(true), 500); // Delay for style change
+        timeoutId = setTimeout(() => setChangeStyle(true), 500); // Delay for style change
       }
       // Delay before calling onComplete
       const completionDelay = 1500; // Adjust this value as needed
-      setTimeout(onComplete, completionDelay);
+      timeoutId = setTimeout(onComplete, completionDelay);
     }
-  }, [charIndex, placeholderTexts, typingSpeed, isTypingComplete]);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [charIndex, placeholderTexts, typingSpeed, isTypingComplete, isLastText, onComplete, textIndex]);
 
   return (
     <motion.div

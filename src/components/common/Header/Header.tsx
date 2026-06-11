@@ -1,9 +1,9 @@
 "use client";
 import clsx from "clsx";
 import { useCycle } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import DesktopNavigation from "./DesktopNav";
-import MobileNavigation from "./MobileNav";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 
 const Header = () => {
@@ -19,7 +19,7 @@ const Header = () => {
     >
       <div className="hover:opacity-60">
         <Link href="/" onClick={() => open && cycleOpen()} className="flex shrink-0">
-          <img src="/brand/logo_square_new.png" draggable={false} className="h-[40px] w-[40px] p-1" alt="hearth logo" />
+          <Image src="/brand/logo_square_new.png" width={40} height={40} draggable={false} className="h-[40px] w-[40px] p-1" alt="hearth logo" />
         </Link>
       </div>
       <div className="hidden cursor-pointer md:block ml-auto mr-4">

@@ -1,6 +1,7 @@
 // app/api/slack/oauth/callback/route.ts
 // Handles OAuth callback when someone clicks "Add to Slack" (multi-workspace)
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
