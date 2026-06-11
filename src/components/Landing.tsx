@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import AuthHandler from "@/components/AuthHandler";
+import LandingBackgroundFX from "@/components/LandingBackgroundFX";
 
 export default function Landing() {
   const [signingIn, setSigningIn] = useState(false);
@@ -30,9 +31,18 @@ export default function Landing() {
   };
 
   return (
-    <div className="relative w-screen min-h-screen flex flex-col items-center justify-center bg-white">
+    <div
+      className="relative w-screen min-h-screen flex flex-col items-center justify-center overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(120% 120% at 50% 42%, #ffffff 0%, #f5f5f3 100%)",
+      }}
+    >
       {/* Handle auth redirects from magic links */}
       <AuthHandler />
+
+      {/* Carved-in animated network graph background */}
+      <LandingBackgroundFX />
 
       {/* Sign In Button - Top Right */}
       <div className="absolute top-4 right-4 sm:top-6 sm:right-8 z-10">
@@ -53,10 +63,10 @@ export default function Landing() {
           />
           {/* Circle to cover the original orange dot - matches white background */}
           <div
-            className="absolute w-[14px] h-[14px] rounded-full bg-white"
+            className="absolute w-[18px] h-[18px] rounded-full bg-white"
             style={{
-              left: '13px',
-              top: '22px',
+              left: '11px',
+              top: '20px',
             }}
           />
           {/* Pulsing orange dot on top */}
