@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createClient } from "@/lib/supabase/server";
 import { encrypt } from "@/lib/crypto";
-import { v4 as uuidv4 } from "uuid";
 import { verifyOAuthState } from "@/lib/oauth-state";
+import { createCalendarWatch } from "@/server/google-calendar/watches";
+import { syncGoogleCalendarAccount } from "@/server/google-calendar/sync";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || "https://labs.hearth.ai/api/google-calendar/callback";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
 interface GoogleTokenResponse {
     access_token: string;
     refresh_token?: string;
@@ -23,16 +22,36 @@ interface GoogleUserInfo {
     picture?: string;
 }
 
+async function finishCalendarConnectionInBackground(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+    accountId: number,
+    email: string
+) {
+    try {
+        await createCalendarWatch(supabase, userId, { accountId });
+    } catch (watchErr) {
+        console.warn("Webhook setup failed after Google Calendar connect (will use manual sync):", watchErr);
+    }
+
+    try {
+        await syncGoogleCalendarAccount(supabase, userId, { accountId });
+    } catch (syncErr) {
+        console.warn(`Initial Google Calendar sync failed for ${email}:`, syncErr);
+    }
+}
+
 // GET - Handle OAuth callback from Google
 export async function GET(req: NextRequest) {
-    const { searchParams } = new URL(req.url);
+    const requestUrl = new URL(req.url);
+    const { searchParams } = requestUrl;
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     const error = searchParams.get("error");
+    const redirectUri = `${requestUrl.origin}/api/google-calendar/callback`;
 
     // Redirect URL for after processing
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://labs.hearth.ai";
-    const settingsUrl = `${appUrl}/app/settings?tab=calendar`;
+    const settingsUrl = `${requestUrl.origin}/app/settings?tab=calendar`;
 
     if (error) {
         console.error("Google OAuth error:", error);
@@ -68,7 +87,7 @@ export async function GET(req: NextRequest) {
                 code,
                 client_id: GOOGLE_CLIENT_ID,
                 client_secret: GOOGLE_CLIENT_SECRET,
-                redirect_uri: GOOGLE_REDIRECT_URI,
+                redirect_uri: redirectUri,
                 grant_type: "authorization_code",
             }),
         });
@@ -106,7 +125,7 @@ export async function GET(req: NextRequest) {
         const refreshTokenEncrypted = encrypt(tokens.refresh_token);
 
         // Upsert OAuth record
-        const { error: upsertError } = await supabase
+        const { data: oauthRecord, error: upsertError } = await supabase
             .from("user_google_oauth")
             .upsert({
                 user_id: user.id,
@@ -115,75 +134,31 @@ export async function GET(req: NextRequest) {
                 access_token_encrypted: accessTokenEncrypted,
                 refresh_token_encrypted: refreshTokenEncrypted,
                 token_expiry: tokenExpiry.toISOString(),
+                sync_cursor: null,
+                last_sync_at: null,
                 updated_at: new Date().toISOString(),
             }, {
                 onConflict: "user_id,google_email",
-            });
+            })
+            .select("id")
+            .single();
 
         if (upsertError) {
             console.error("Failed to save OAuth tokens:", upsertError);
             return NextResponse.redirect(`${settingsUrl}&error=save_failed`);
         }
 
-        // Get the OAuth record ID for setting up the watch
-        const { data: oauthRecord } = await supabase
-            .from("user_google_oauth")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("google_email", userInfo.email)
-            .single();
-
-        // Set up webhook for real-time updates
         if (oauthRecord) {
-            try {
-                const channelId = uuidv4();
-                const webhookUrl = `${APP_URL}/api/google-calendar/webhook`;
-
-                const watchResponse = await fetch(
-                    "https://www.googleapis.com/calendar/v3/calendars/primary/events/watch",
-                    {
-                        method: "POST",
-                        headers: {
-                            Authorization: `Bearer ${tokens.access_token}`,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            id: channelId,
-                            type: "web_hook",
-                            address: webhookUrl,
-                        }),
-                    }
-                );
-
-                if (watchResponse.ok) {
-                    const watchData = await watchResponse.json();
-
-                    // Store the watch subscription
-                    await supabase
-                        .from("google_calendar_watches")
-                        .insert({
-                            google_oauth_id: oauthRecord.id,
-                            user_id: user.id,
-                            channel_id: channelId,
-                            resource_id: watchData.resourceId,
-                            calendar_id: "primary",
-                            expiration: new Date(parseInt(watchData.expiration)).toISOString(),
-                        });
-
-                    console.log(`✓ Calendar webhook set up, expires: ${watchData.expiration}`);
-                } else {
-                    // Webhook setup failed - this is OK, we can still sync manually
-                    // Common reason: domain not verified in Google Cloud Console
-                    const errorData = await watchResponse.json();
-                    console.warn("Webhook setup failed (will use manual sync):", errorData);
-                }
-            } catch (watchErr) {
-                console.warn("Webhook setup error (will use manual sync):", watchErr);
-            }
+            waitUntil(finishCalendarConnectionInBackground(
+                supabase,
+                user.id,
+                oauthRecord.id,
+                userInfo.email
+            ));
         }
 
-        console.log(`✓ Google Calendar connected for ${userInfo.email}`);
-        return NextResponse.redirect(`${settingsUrl}&success=connected`);
+        console.log(`✓ Google Calendar connected for ${userInfo.email}; finishing setup in background`);
+        return NextResponse.redirect(`${settingsUrl}&success=connected&sync=background`);
 
     } catch (err) {
         console.error("OAuth callback error:", err);

@@ -1,15 +1,10 @@
 "use client";
 
-import { Player } from "@remotion/player";
 import { ArrowRight, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HearthLogo from "@/components/HearthLogo";
 import { createClient } from "@/lib/supabase/client";
-import {
-    ModernRolodexVideo,
-    ONBOARDING_VIDEO_DURATION,
-} from "@/features/onboarding/ModernRolodexVideo";
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -52,22 +47,15 @@ export default function OnboardingPage() {
                         <div className="absolute -inset-6 rounded-[28px] bg-[radial-gradient(closest-side,rgba(167,113,95,0.06),transparent)]" />
                         <div className="relative overflow-hidden rounded-2xl bg-white p-1.5 shadow-[0_40px_120px_-28px_rgba(75,78,108,0.38)] ring-1 ring-brand-purple-lighter">
                             <div className="overflow-hidden rounded-[10px]">
-                                <Player
-                                    component={ModernRolodexVideo}
-                                    durationInFrames={ONBOARDING_VIDEO_DURATION}
-                                    compositionWidth={1280}
-                                    compositionHeight={720}
-                                    fps={30}
+                                {/* Pre-rendered with Remotion — regenerate via `npm run video:onboarding` */}
+                                <video
+                                    src="/onboarding-tour.mp4"
                                     autoPlay
                                     loop
                                     muted
-                                    clickToPlay={false}
-                                    acknowledgeRemotionLicense
-                                    style={{
-                                        width: "100%",
-                                        aspectRatio: "16 / 9",
-                                        display: "block",
-                                    }}
+                                    playsInline
+                                    preload="auto"
+                                    className="block aspect-video w-full"
                                 />
                             </div>
                         </div>

@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import {
     AbsoluteFill,
     Easing,
     Img,
     interpolate,
     spring,
+    staticFile,
     useCurrentFrame,
     useVideoConfig,
 } from "remotion";
+import { loadFont } from "@remotion/google-fonts/Inter";
+
+const LOGO = staticFile("brand/logo_square_new.png");
 
 // Tailwind gray scale + brand accents, matching the real rolodex components
 const G = {
@@ -36,8 +40,12 @@ const CONTRIB = [
     "#a7715f",
 ];
 
-const FONT =
-    "var(--font-inter), -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif";
+const { fontFamily: interFont } = loadFont("normal", {
+    weights: ["400", "500", "600"],
+    subsets: ["latin"],
+});
+
+const FONT = `${interFont}, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif`;
 
 export const ONBOARDING_VIDEO_DURATION = 600;
 
@@ -199,7 +207,7 @@ function HeaderBar() {
                 background: "#fff",
             }}
         >
-            <Img src="/brand/logo_square_new.png" style={{ width: 34, height: 34 }} />
+            <Img src={LOGO} style={{ width: 34, height: 34 }} />
             <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
                 <Icon path={clipboardPath} size={19} />
                 <Icon path={sparklesPath} size={19} />
@@ -711,7 +719,7 @@ function ProfilePanelMock() {
                     <Icon path={sparklesPath} size={13} color={G[500]} /> SUMMARY
                 </div>
                 <div style={{ fontSize: 14.5, lineHeight: 1.55, color: G[600] }}>
-                    Climate-tech founder you met in March. She intro'd you to Jon and is
+                    Climate-tech founder you met in March. She intro&apos;d you to Jon and is
                     raising this fall — worth a check-in.
                 </div>
             </div>
@@ -841,7 +849,7 @@ function ReminderCard() {
                     Follow up with Maya Chen
                 </div>
                 <div style={{ fontSize: 13, color: G[500], marginTop: 3 }}>
-                    It's been 3 weeks — say hello
+                    It&apos;s been 3 weeks — say hello
                 </div>
             </div>
             <div
@@ -959,7 +967,7 @@ function ClosingFrame() {
                 opacity: reveal,
             }}
         >
-            <Img src="/brand/logo_square_new.png" style={{ width: 72, height: 72 }} />
+            <Img src={LOGO} style={{ width: 72, height: 72 }} />
             <div
                 style={{
                     marginTop: 24,

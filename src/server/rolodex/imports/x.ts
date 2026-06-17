@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeLocation } from "@/lib/location/normalize";
 import { generateEmbedding, formatEmbeddingForSupabase } from "@/lib/embeddings";
 import { downloadAndStoreContactProfileImage } from "@/lib/profile-image-import";
+import { sanitizeXBio } from "@/server/rolodex/x-profile";
 
 interface XProfileData {
     profileUrl: string;
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
         
         // Normalize location for consistency
         const location = normalizeLocation(rawLocation);
+        const sanitizedBio = sanitizeXBio(bio, location || rawLocation);
 
         if (!username?.trim()) {
             return NextResponse.json({ error: "Username is required" }, { status: 400 });
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
                     .update({
                         username: cleanUsername,
                         display_name: name || undefined,
-                        bio: bio || undefined,
+                        ...(typeof bio === "string" ? { bio: sanitizedBio } : {}),
                         location: location || undefined,
                         website_url: website || undefined,
                         profile_image_url: uploadedImageUrl || undefined,
@@ -130,7 +132,7 @@ export async function POST(req: NextRequest) {
                         x_user_id: tempXUserId,
                         username: cleanUsername,
                         display_name: name || null,
-                        bio: bio || null,
+                        bio: sanitizedBio,
                         location: location || null,
                         website_url: website || null,
                         profile_image_url: uploadedImageUrl || null,
@@ -146,8 +148,8 @@ export async function POST(req: NextRequest) {
 
             const updates: Record<string, string | undefined> = {};
 
-            if (!contact?.custom_bio && bio) {
-                updates.custom_bio = bio;
+            if (!contact?.custom_bio && sanitizedBio) {
+                updates.custom_bio = sanitizedBio;
             }
             if (!contact?.custom_location && location) {
                 updates.custom_location = location;
@@ -213,7 +215,7 @@ export async function POST(req: NextRequest) {
                 .insert({
                     user_id: user.id,
                     name: displayName,
-                    custom_bio: bio || null,
+                    custom_bio: sanitizedBio,
                     custom_location: location || null,
                     custom_profile_image_url: uploadedImageUrl || null,
                     website_url: website || null,
@@ -254,7 +256,7 @@ export async function POST(req: NextRequest) {
                     x_user_id: tempXUserId,
                     username: cleanUsername,
                     display_name: name || null,
-                    bio: bio || null,
+                    bio: sanitizedBio,
                     location: location || null,
                     website_url: website || null,
                     profile_image_url: uploadedImageUrl || null,

@@ -8,7 +8,7 @@
 // =============================================================================
 "use client";
 
-import { useState, useCallback, useRef, useMemo, useDeferredValue } from "react";
+import { useState, useCallback, useRef, useMemo, useDeferredValue, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -35,12 +35,13 @@ import {
     Palette,
     Settings,
     ImagePlus,
+    ThumbsDown,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
 import ChatWidget from "@/components/ChatWidget";
-import type { Contact, RolodexList, ContextMenuState, DiscoveryResult } from "./types";
+import type { Contact, RolodexList, ContextMenuState, DiscoveryResult, Note } from "./types";
 import CommandSearchModal from "./components/CommandSearchModal";
 import AddContactModal from "./components/AddContactModal";
 import DiscoveryPanel from "./components/DiscoveryPanel";
@@ -85,8 +86,6 @@ export default function RolodexPage() {
     const [addName, setAddName] = useState("");
     const [addLoading, setAddLoading] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
-    const [newNote, setNewNote] = useState("");
-    const [addingNoteFor, setAddingNoteFor] = useState<number | null>(null);
     const [savingNote, setSavingNote] = useState(false);
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -133,12 +132,8 @@ export default function RolodexPage() {
     const [editComplimentText, setEditComplimentText] = useState("");
     const [editComplimentContext, setEditComplimentContext] = useState("");
     const [editComplimentLoading, setEditComplimentLoading] = useState(false);
-    const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-    const [mentionPosition, setMentionPosition] = useState<{ top: number; left: number } | null>(null);
-    const [mentionIndex, setMentionIndex] = useState(0);
     const [searchQuery, setSearchQuery] = useState("");
     const deferredSearchQuery = useDeferredValue(searchQuery);
-    const [pendingMentions, setPendingMentions] = useState<Map<string, number>>(new Map());
     // Edit note mention state
     const [editPendingMentions, setEditPendingMentions] = useState<Map<string, number>>(new Map());
     const [editMentionQuery, setEditMentionQuery] = useState<string | null>(null);
@@ -209,6 +204,17 @@ export default function RolodexPage() {
     const [hoveringAvatarFor, setHoveringAvatarFor] = useState<number | null>(null);
     // Hidden contacts state
     const [showHiddenContacts, setShowHiddenContacts] = useState(false);
+    const [showLastNote, setShowLastNote] = useState(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("rolodex-table-show-last-note") !== "false";
+        }
+        return true;
+    });
+    const userAvatarUrls = useMemo(
+        () => [user?.customAvatarUrl, user?.avatarUrl].filter(Boolean) as string[],
+        [user?.avatarUrl, user?.customAvatarUrl]
+    );
+    const [userAvatarUrlIndex, setUserAvatarUrlIndex] = useState(0);
     const [togglingHiddenFor, setTogglingHiddenFor] = useState<number | null>(null);
     // Contact profile panel state
     const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
@@ -254,6 +260,14 @@ export default function RolodexPage() {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const noteInputRef = useRef<HTMLTextAreaElement>(null);
     const editNoteInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        localStorage.setItem("rolodex-table-show-last-note", String(showLastNote));
+    }, [showLastNote]);
+
+    useEffect(() => {
+        setUserAvatarUrlIndex(0);
+    }, [userAvatarUrls]);
 
     useRolodexPageEffects({
         selectedContactId,
@@ -312,21 +326,40 @@ export default function RolodexPage() {
         }
     };
 
-    const handleAddNote = async (contactId: number) => {
-        if (!newNote.trim()) return;
+    const handleAddNote = async (
+        contactId: number,
+        noteDraft: string,
+        draftMentions: Map<string, number>
+    ) => {
+        if (!noteDraft.trim()) return false;
         // Prevent double submission
-        if (savingNote) return;
+        if (savingNote) return false;
 
         setSavingNote(true);
 
         // Convert @Name to @[Name](id) format using pending mentions
-        let noteToSave = newNote.trim();
-        pendingMentions.forEach((id, name) => {
+        let noteToSave = noteDraft.trim();
+        draftMentions.forEach((id, name) => {
             // Replace @Name with @[Name](id) - match the name anywhere after @
             const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const mentionPattern = new RegExp(`@${escapedName}(?![\\w])`, 'g');
             noteToSave = noteToSave.replace(mentionPattern, `@[${name}](${id})`);
         });
+
+        const optimisticNote: Note = {
+            id: -Date.now(),
+            note: noteToSave,
+            created_at: new Date().toISOString(),
+            source_type: "rolodex",
+        };
+
+        setContacts((prev) =>
+            prev.map((c) =>
+                c.id === contactId
+                    ? { ...c, notes: [optimisticNote, ...c.notes] }
+                    : c
+            )
+        );
 
         try {
             const res = await fetch("/api/rolodex/notes", {
@@ -340,28 +373,44 @@ export default function RolodexPage() {
 
             if (!res.ok) {
                 console.error("Error adding note:", data.error);
-                return;
+                setContacts((prev) =>
+                    prev.map((c) =>
+                        c.id === contactId
+                            ? { ...c, notes: c.notes.filter((note) => note.id !== optimisticNote.id) }
+                            : c
+                    )
+                );
+                toast.error(data.error || "Couldn't save note");
+                return false;
             }
 
-            // Update local state
+            // Replace the optimistic row with the saved database row.
             setContacts((prev) =>
                 prev.map((c) =>
                     c.id === contactId
-                        ? { ...c, notes: [data.note, ...c.notes] }
+                        ? {
+                            ...c,
+                            notes: c.notes.map((note) =>
+                                note.id === optimisticNote.id ? data.note : note
+                            ),
+                        }
                         : c
                 )
             );
-            setNewNote("");
-            setPendingMentions(new Map());
-            setAddingNoteFor(null);
-            // Reset textarea height
-            if (noteInputRef.current) {
-                noteInputRef.current.style.height = 'auto';
-            }
             // Refresh contributions grid
             setContributionsRefreshKey(prev => prev + 1);
+            return true;
         } catch (error) {
             console.error("Error adding note:", error);
+            setContacts((prev) =>
+                prev.map((c) =>
+                    c.id === contactId
+                        ? { ...c, notes: c.notes.filter((note) => note.id !== optimisticNote.id) }
+                        : c
+                )
+            );
+            toast.error("Couldn't save note. Please try again.");
+            return false;
         } finally {
             setSavingNote(false);
         }
@@ -762,12 +811,19 @@ export default function RolodexPage() {
         }
     };
 
-    // Mention system
-    const mentionSuggestions = mentionQuery !== null
-        ? contacts.filter((c) =>
-            c.name.toLowerCase().includes(mentionQuery.toLowerCase())
-        ).slice(0, 5)
-        : [];
+    const handleMarkNegative = async (contactId: number) => {
+        const contact = contacts.find((c) => c.id === contactId);
+
+        await handleToggleHidden(contactId, true);
+
+        toast(`${contact?.name || "Contact"} hidden as negative`, {
+            duration: 5000,
+            action: {
+                label: "Undo",
+                onClick: () => handleToggleHidden(contactId, false),
+            },
+        });
+    };
 
     // Edit mention suggestions
     const editMentionSuggestions = editMentionQuery !== null
@@ -775,91 +831,6 @@ export default function RolodexPage() {
             c.name.toLowerCase().includes(editMentionQuery.toLowerCase())
         ).slice(0, 5)
         : [];
-
-    const handleNoteInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const value = e.target.value;
-        setNewNote(value);
-
-        // Check for @ mentions
-        const cursorPos = e.target.selectionStart || 0;
-        const textBeforeCursor = value.slice(0, cursorPos);
-        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
-
-        if (mentionMatch) {
-            setMentionQuery(mentionMatch[1]);
-            setMentionIndex(0);
-
-            // Position the dropdown
-            if (noteInputRef.current) {
-                const rect = noteInputRef.current.getBoundingClientRect();
-                setMentionPosition({
-                    top: rect.bottom + 4,
-                    left: rect.left,
-                });
-            }
-        } else {
-            setMentionQuery(null);
-            setMentionPosition(null);
-        }
-    };
-
-    const insertMention = (contact: Contact) => {
-        if (!noteInputRef.current) return;
-
-        const cursorPos = noteInputRef.current.selectionStart || 0;
-        const textBeforeCursor = newNote.slice(0, cursorPos);
-        const textAfterCursor = newNote.slice(cursorPos);
-
-        // Find where the @ starts
-        const mentionStartMatch = textBeforeCursor.match(/@(\w*)$/);
-        if (!mentionStartMatch) return;
-
-        const mentionStart = cursorPos - mentionStartMatch[0].length;
-        const beforeMention = newNote.slice(0, mentionStart);
-        // Show clean @Name in input
-        const displayText = `@${contact.name}`;
-
-        const newValue = beforeMention + displayText + " " + textAfterCursor;
-        setNewNote(newValue);
-
-        // Track the mention for conversion when saving
-        setPendingMentions((prev) => {
-            const updated = new Map(prev);
-            updated.set(contact.name, contact.id);
-            return updated;
-        });
-
-        setMentionQuery(null);
-        setMentionPosition(null);
-
-        // Focus back on input
-        setTimeout(() => {
-            if (noteInputRef.current) {
-                noteInputRef.current.focus();
-                const newCursorPos = beforeMention.length + displayText.length + 1;
-                noteInputRef.current.setSelectionRange(newCursorPos, newCursorPos);
-            }
-        }, 0);
-    };
-
-    const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        if (mentionQuery !== null && mentionSuggestions.length > 0) {
-            if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setMentionIndex((prev) => Math.min(prev + 1, mentionSuggestions.length - 1));
-            } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setMentionIndex((prev) => Math.max(prev - 1, 0));
-            } else if (e.key === "Enter" || e.key === "Tab") {
-                e.preventDefault();
-                insertMention(mentionSuggestions[mentionIndex]);
-            } else if (e.key === "Escape") {
-                setMentionQuery(null);
-                setMentionPosition(null);
-            }
-        }
-        // Note: Enter to submit is now handled in the textarea's onKeyDown
-    };
 
     // Edit note mention handlers
     const handleEditNoteInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1567,9 +1538,24 @@ export default function RolodexPage() {
             // Update local state
             setContacts(prev => prev.map(c =>
                 c.id === contactId
-                    ? { ...c, contact_info: [...(c.contact_info || []), data.contact_info] }
+                    ? {
+                        ...c,
+                        contact_info: [...(c.contact_info || []), data.contact_info],
+                        last_touchpoint: data.last_touchpoint || c.last_touchpoint,
+                        calendar_events: Array.isArray(data.calendar_events)
+                            ? data.calendar_events
+                            : c.calendar_events,
+                    }
                     : c
             ));
+
+            if (data.calendar_linked_count > 0) {
+                toast.success(
+                    `Matched ${data.calendar_linked_count} calendar event${data.calendar_linked_count === 1 ? "" : "s"}`
+                );
+            } else if (data.calendar_sync_failed) {
+                toast.error("Calendar sync failed. Reconnect Google Calendar in settings.");
+            }
 
             setAddingContactInfoFor(null);
             setContactInfoValue("");
@@ -1732,10 +1718,26 @@ export default function RolodexPage() {
         }
     };
 
-    if (authLoading || !authenticated || loading) {
+    if (authLoading || (authenticated && loading)) {
         return (
             <div className="h-screen bg-white dark:bg-black flex items-center justify-center">
                 <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            </div>
+        );
+    }
+
+    if (!authenticated) {
+        return (
+            <div className="h-screen bg-white dark:bg-black flex flex-col items-center justify-center gap-4 px-6 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Your session expired.
+                </p>
+                <Link
+                    href="/sign-in"
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                >
+                    Sign in again
+                </Link>
             </div>
         );
     }
@@ -1768,7 +1770,7 @@ export default function RolodexPage() {
             {/* Context Menu */}
             {contextMenu && (
                 <div
-                    className="fixed z-50 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px]"
+                    className="fixed z-50 max-h-[min(520px,calc(100vh-24px))] min-w-[184px] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -1783,7 +1785,7 @@ export default function RolodexPage() {
                                 }
                                 setContextMenu(null);
                             }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                         >
                             <CheckCircle2 className="h-4 w-4" />
                             Add To Do
@@ -1793,7 +1795,7 @@ export default function RolodexPage() {
                         <button
                             onClick={handleMerge}
                             disabled={merging}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                         >
                             {merging ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1818,7 +1820,7 @@ export default function RolodexPage() {
                                     setContextMenu(null);
                                     setShowListSubmenu(false);
                                 }}
-                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                             >
                                 <X className="h-4 w-4" />
                                 <span className="truncate">
@@ -1829,62 +1831,21 @@ export default function RolodexPage() {
                             </button>
                         );
                     })()}
-                    {/* Add to list - submenu (flyout on desktop, inline on mobile) */}
+                    {/* Add to list - inline expandable section */}
                     {selectedContacts.size >= 1 && lists.length > 0 && (
                         <>
                             {selectedContacts.size === 2 && <div className="border-t border-gray-100 dark:border-gray-800 my-1" />}
                             <div className="relative group/list">
                                 <button
                                     onClick={() => setShowListSubmenu(!showListSubmenu)}
-                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                                 >
                                     <Plus className="h-4 w-4" />
                                     <span className="flex-1">Add to list</span>
-                                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform md:transition-none ${showListSubmenu ? "rotate-90 md:rotate-0" : ""}`} />
+                                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${showListSubmenu ? "rotate-90" : ""}`} />
                                 </button>
-                                {/* Invisible bridge so cursor can travel to submenu (desktop only) */}
-                                <div className="hidden md:invisible md:group-hover/list:visible md:block absolute left-full top-0 w-2 h-full" />
-                                {/* Desktop: flyout submenu on hover */}
-                                <div className="hidden md:invisible md:group-hover/list:visible md:block absolute left-full top-0 -mt-1 ml-1.5 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px] max-h-64 overflow-y-auto">
-                                    {lists.map((list) => {
-                                        const selectedIds = Array.from(selectedContacts);
-                                        const allInList = selectedIds.every((id) => list.member_ids.includes(id));
-                                        const someInList = selectedIds.some((id) => list.member_ids.includes(id));
-
-                                        return (
-                                            <button
-                                                key={list.id}
-                                                onClick={() => {
-                                                    selectedIds.forEach((id) => {
-                                                        if (allInList) {
-                                                            handleRemoveFromList(list.id, id);
-                                                        } else if (!list.member_ids.includes(id)) {
-                                                            handleAddToList(list.id, id);
-                                                        }
-                                                    });
-                                                    setContextMenu(null);
-                                                    setShowListSubmenu(false);
-                                                }}
-                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
-                                            >
-                                                {list.emoji ? (
-                                                    <span className="text-sm flex-shrink-0">{list.emoji}</span>
-                                                ) : (
-                                                    <div
-                                                        className="w-3 h-3 rounded-full flex-shrink-0"
-                                                        style={{ backgroundColor: list.color }}
-                                                    />
-                                                )}
-                                                <span className="flex-1 truncate">{list.name}</span>
-                                                {allInList && <Check className="h-3.5 w-3.5 text-green-500" />}
-                                                {someInList && !allInList && <span className="text-xs text-gray-400">partial</span>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {/* Mobile: inline list on click */}
                                 {showListSubmenu && (
-                                    <div className="md:hidden max-h-48 overflow-y-auto">
+                                    <div className="max-h-40 overflow-y-auto border-t border-gray-100 py-1 dark:border-gray-800">
                                         {lists.map((list) => {
                                             const selectedIds = Array.from(selectedContacts);
                                             const allInList = selectedIds.every((id) => list.member_ids.includes(id));
@@ -1904,7 +1865,7 @@ export default function RolodexPage() {
                                                         setContextMenu(null);
                                                         setShowListSubmenu(false);
                                                     }}
-                                                    className="w-full pl-10 pr-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                                    className="flex w-full items-center gap-2 py-1.5 pl-9 pr-3 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                                                 >
                                                     {list.emoji ? (
                                                         <span className="text-sm flex-shrink-0">{list.emoji}</span>
@@ -1926,7 +1887,7 @@ export default function RolodexPage() {
                         </>
                     )}
 
-                    {/* Hide/Unhide option */}
+                    {/* Negative/Hide option */}
                     {selectedContacts.size === 1 && (
                         <>
                             <div className="border-t border-gray-100 dark:border-gray-800 my-1" />
@@ -1936,18 +1897,28 @@ export default function RolodexPage() {
                                 const isHidden = contact?.hidden || false;
                                 return (
                                     <button
-                                        onClick={() => handleToggleHidden(contactId, !isHidden)}
+                                        onClick={() => {
+                                            if (isHidden) {
+                                                handleToggleHidden(contactId, false);
+                                            } else {
+                                                handleMarkNegative(contactId);
+                                            }
+                                        }}
                                         disabled={togglingHiddenFor === contactId}
-                                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                                            isHidden
+                                                ? "text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                                                : "text-gray-600 hover:bg-warm-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                                        }`}
                                     >
                                         {togglingHiddenFor === contactId ? (
                                             <Loader2 className="h-4 w-4 animate-spin" />
                                         ) : isHidden ? (
                                             <Eye className="h-4 w-4" />
                                         ) : (
-                                            <EyeOff className="h-4 w-4" />
+                                            <ThumbsDown className="h-4 w-4" />
                                         )}
-                                        {isHidden ? "Unhide contact" : "Hide contact"}
+                                        {isHidden ? "Unhide contact" : "Negative - auto-hide"}
                                     </button>
                                 );
                             })()}
@@ -1967,7 +1938,7 @@ export default function RolodexPage() {
                                     }
                                     setContextMenu(null);
                                 }}
-                                className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                             >
                                 <Trash2 className="h-4 w-4" />
                                 Delete contact
@@ -2445,10 +2416,6 @@ export default function RolodexPage() {
                 editLocationLoading={editLocationLoading}
                 locationSuggestionIndex={locationSuggestionIndex}
                 setLocationSuggestionIndex={setLocationSuggestionIndex}
-                newNote={newNote}
-                setNewNote={setNewNote}
-                addingNoteFor={addingNoteFor}
-                setAddingNoteFor={setAddingNoteFor}
                 savingNote={savingNote}
                 editingNote={editingNote}
                 setEditingNote={setEditingNote}
@@ -2458,11 +2425,6 @@ export default function RolodexPage() {
                 editingNoteDate={editingNoteDate}
                 setEditingNoteDate={setEditingNoteDate}
                 editNoteDateLoading={editNoteDateLoading}
-                mentionQuery={mentionQuery}
-                mentionPosition={mentionPosition}
-                mentionIndex={mentionIndex}
-                setMentionIndex={setMentionIndex}
-                pendingMentions={pendingMentions}
                 editMentionQuery={editMentionQuery}
                 editMentionPosition={editMentionPosition}
                 editMentionIndex={editMentionIndex}
@@ -2470,7 +2432,6 @@ export default function RolodexPage() {
                 editPendingMentions={editPendingMentions}
                 noteInputRef={noteInputRef}
                 editNoteInputRef={editNoteInputRef}
-                mentionSuggestions={mentionSuggestions}
                 editMentionSuggestions={editMentionSuggestions}
                 newCompliment={newCompliment}
                 setNewCompliment={setNewCompliment}
@@ -2531,19 +2492,13 @@ export default function RolodexPage() {
                 handleDeleteContactInfo={handleDeleteContactInfo}
                 handleAddToList={handleAddToList}
                 handleRemoveFromList={handleRemoveFromList}
-                handleNoteInputChange={handleNoteInputChange}
                 handleEditNoteInputChange={handleEditNoteInputChange}
-                handleNoteKeyDown={handleNoteKeyDown}
                 handleEditNoteKeyDown={handleEditNoteKeyDown}
-                insertMention={insertMention}
                 insertEditMention={insertEditMention}
                 toggleMessagesForContact={toggleMessagesForContact}
                 renderNoteWithMentions={renderNoteWithMentions}
                 initializeEditMentions={initializeEditMentions}
                 setContacts={setContacts}
-                setMentionQuery={setMentionQuery}
-                setMentionPosition={setMentionPosition}
-                setPendingMentions={setPendingMentions}
                 setEditMentionQuery={setEditMentionQuery}
                 setEditMentionPosition={setEditMentionPosition}
                 setEditPendingMentions={setEditPendingMentions}
@@ -2644,42 +2599,37 @@ export default function RolodexPage() {
                         {/* Todo Button */}
                         <button
                             onClick={() => setShowTodoSheet(true)}
-                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
+                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out"
                         >
                             <ClipboardList className="h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
-                                To Do
-                            </span>
                         </button>
 
                         {/* Confidence Boost Button */}
                         <button
                             onClick={() => setShowBoostSheet(true)}
-                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out hover:pr-14"
+                            className="group relative flex items-center h-9 px-2 overflow-hidden transition-all duration-300 ease-out"
                         >
                             <Sparkles className="h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform duration-300 group-hover:scale-110" />
-                            <span className="absolute left-8 opacity-0 translate-x-2 text-sm font-medium text-gray-600 dark:text-gray-300 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0 whitespace-nowrap">
-                                Boost
-                            </span>
                         </button>
 
                         {/* User Avatar with Dropdown */}
                         <div className="relative" ref={userMenuRef}>
                             <button
                                 onClick={() => setShowUserMenu(!showUserMenu)}
-                                className="relative group"
+                                className="relative group focus:outline-none"
                             >
-                                {(user?.customAvatarUrl || user?.avatarUrl) ? (
+                                {userAvatarUrls[userAvatarUrlIndex] ? (
                                     <Image
-                                        src={user.customAvatarUrl || user.avatarUrl || ""}
+                                        src={userAvatarUrls[userAvatarUrlIndex]}
                                         alt={user?.fullName || "Profile"}
                                         width={32}
                                         height={32}
                                         unoptimized
-                                        className="rounded-full ring-2 ring-white dark:ring-gray-800 shadow-sm object-cover"
+                                        onError={() => setUserAvatarUrlIndex((index) => index + 1)}
+                                        className="h-8 w-8 rounded-full object-cover shadow-sm"
                                     />
                                 ) : (
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center ring-2 ring-white dark:ring-gray-800 shadow-sm">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-sm">
                                         <span className="text-white text-sm font-semibold">
                                             {user?.email?.charAt(0).toUpperCase() || "?"}
                                         </span>
@@ -2702,14 +2652,18 @@ export default function RolodexPage() {
 
                                     {/* Settings */}
                                     <div className="px-2 py-1">
-                                        <Link
-                                            href="/app/settings"
-                                            onClick={() => setShowUserMenu(false)}
-                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowUserMenu(false);
+                                                window.location.assign("/app/settings");
+                                            }}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                                         >
                                             <Settings className="h-4 w-4" />
                                             Settings
-                                        </Link>
+                                        </button>
                                     </div>
 
                                     {/* Sign Out */}
@@ -2778,9 +2732,9 @@ export default function RolodexPage() {
                             />
 
                             {/* Main Content Area - Filter + Table */}
-                            <div className="flex-1 min-w-0 max-w-4xl">
+                            <div className="flex-1 min-w-0 max-w-4xl pl-6">
                                 {/* Filter Bar */}
-                                <div className="mb-5 flex items-center gap-3">
+                                <div className="mb-3 flex items-center gap-4">
                                     {/* Search Button - opens command menu */}
                                     <Button
                                         variant="outline"
@@ -2799,6 +2753,22 @@ export default function RolodexPage() {
                                             <Command className="h-2.5 w-2.5" />K
                                         </kbd>
                                     </Button>
+
+                                    <button
+                                        onClick={() => setShowLastNote((value) => !value)}
+                                        className={`flex h-11 items-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-medium transition-colors ${showLastNote
+                                            ? "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                                            : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                                            }`}
+                                        title={showLastNote ? "Hide last note" : "Show last note"}
+                                    >
+                                        {showLastNote ? (
+                                            <Eye className="h-3.5 w-3.5" />
+                                        ) : (
+                                            <EyeOff className="h-3.5 w-3.5" />
+                                        )}
+                                        <span className="text-xs">Last note</span>
+                                    </button>
 
                                     {/* Hidden contacts toggle */}
                                     {contacts.some(c => c.hidden) && (
@@ -2850,6 +2820,7 @@ export default function RolodexPage() {
                                         activeList={activeList}
                                         searchQuery={deferredSearchQuery}
                                         showHiddenContacts={showHiddenContacts}
+                                        showLastNote={showLastNote}
                                         hiddenListIds={hiddenListIds}
                                         handleRowClick={handleRowClick}
                                         handleContextMenu={handleContextMenu}

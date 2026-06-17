@@ -71,7 +71,7 @@ export default function ListsSidebar({
     handleToggleListPin,
 }: ListsSidebarProps) {
     return (
-        <div className="w-56 flex-shrink-0 space-y-1.5">
+        <div className="w-56 flex-shrink-0 space-y-1.5 pr-3">
             {/* Main filters */}
             <button
                 onClick={() => setActiveList("curated")}

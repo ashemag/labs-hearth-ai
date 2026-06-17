@@ -22,6 +22,7 @@ export default function ChatWidget({ sidePanelOpen = false }: ChatWidgetProps) {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +38,21 @@ export default function ChatWidget({ sidePanelOpen = false }: ChatWidgetProps) {
         if (open && inputRef.current) {
             inputRef.current.focus();
         }
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target;
+            if (!(target instanceof Node)) return;
+            if (panelRef.current?.contains(target)) return;
+
+            setOpen(false);
+        };
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
     }, [open]);
 
     const sendMessage = async () => {
@@ -106,7 +122,7 @@ export default function ChatWidget({ sidePanelOpen = false }: ChatWidgetProps) {
             {open && (
                 <div className={`fixed bottom-6 z-40 w-96 h-[32rem] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl shadow-gray-300/50 dark:shadow-black/50 border border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200 ${
                     sidePanelOpen ? "right-[26rem]" : "right-6"
-                }`}>
+                }`} ref={panelRef}>
                     {/* Header */}
                     <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-2">

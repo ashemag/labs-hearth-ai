@@ -3,7 +3,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import type { Contact, RolodexList } from "../types";
-import { formatTimeAgo } from "../types";
 import { contactMatchesSearchIndex, createContactSearchIndex } from "../search";
 
 interface ContactsTableProps {
@@ -14,6 +13,7 @@ interface ContactsTableProps {
     activeList: number | "all" | "curated";
     searchQuery: string;
     showHiddenContacts: boolean;
+    showLastNote: boolean;
     hiddenListIds: Set<number>;
     handleRowClick: (contactId: number, e: React.MouseEvent) => void;
     handleContextMenu: (contactId: number, e: React.MouseEvent) => void;
@@ -69,6 +69,7 @@ function ContactsTable({
     activeList,
     searchQuery,
     showHiddenContacts,
+    showLastNote,
     hiddenListIds,
     handleRowClick,
     handleContextMenu,
@@ -141,7 +142,6 @@ function ContactsTable({
                         // Table avatars render at 40px, so prefer thumbnail URLs here.
                         const profileImageUrl = contact.custom_profile_image_url || xp?.profile_image_url || li?.profile_image_url || null;
                         const bio = contact.custom_bio || xp?.bio || li?.headline;
-                        const description = bio || lastNote?.note;
                         const location = contact.custom_location || xp?.location || li?.location;
                         const memberLists = lists.filter((list) => list.member_ids.includes(contact.id));
 
@@ -149,12 +149,12 @@ function ContactsTable({
                             <div key={contact.id} data-contact-id={contact.id}>
                                 <div
                                     className={`group flex cursor-pointer items-center gap-4 px-5 py-4 transition-colors select-none ${isSelected
-                                        ? "bg-gray-50 dark:bg-gray-800/30"
+                                        ? "bg-warm-200/80 hover:bg-[#faf8f5] dark:bg-gray-800/50 dark:hover:bg-gray-800/60"
                                         : selectedContactId === contact.id
-                                            ? "bg-gray-50 dark:bg-gray-800/20"
+                                            ? "bg-warm-200/70 hover:bg-[#faf8f5] dark:bg-gray-800/40 dark:hover:bg-gray-800/60"
                                             : contact.hidden
-                                                ? "bg-gray-50/50 opacity-60 dark:bg-gray-900/20"
-                                                : "hover:bg-gray-50/80 dark:hover:bg-gray-900/40"
+                                                ? "bg-warm-50/50 opacity-60 hover:bg-[#faf8f5] dark:bg-gray-900/20 dark:hover:bg-gray-800/40"
+                                                : "hover:bg-[#faf8f5] dark:hover:bg-gray-800/40"
                                         }`}
                                     onClick={(e) => handleRowClick(contact.id, e)}
                                     onMouseDown={(e) => e.stopPropagation()}
@@ -173,46 +173,44 @@ function ContactsTable({
                                                 {contact.name}
                                             </p>
                                             {xp && (
-                                                <p className="truncate text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                    @{xp.username}
+                                                <p className="ml-1.5 truncate text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    &nbsp;@{xp.username}
                                                 </p>
                                             )}
                                         </div>
-                                        {description && (
+                                        {bio && (
                                             <p className="mt-1 line-clamp-1 text-sm text-gray-600 dark:text-gray-400">
-                                                {bio ? description : renderNoteWithMentions(description)}
+                                                {bio}
                                             </p>
                                         )}
-                                        {(location || lastNote) && (
-                                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+                                        {(location || memberLists.length > 0) && (
+                                            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
                                                 {location && <span className="truncate">{location}</span>}
-                                                {lastNote && (
-                                                    <span className="truncate">
-                                                        {formatTimeAgo(lastNote.created_at)}
+                                                {memberLists.slice(0, 2).map((list) => (
+                                                    <span
+                                                        key={list.id}
+                                                        className="inline-flex max-w-[112px] items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                                        style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}18`, color: list.color }}
+                                                    >
+                                                        <span className="truncate">{list.emoji ? `${list.emoji} ` : ""}{list.name}</span>
+                                                    </span>
+                                                ))}
+                                                {memberLists.length > 2 && (
+                                                    <span className="text-[11px] font-medium text-gray-400">
+                                                        +{memberLists.length - 2}
                                                     </span>
                                                 )}
                                             </div>
                                         )}
                                     </div>
 
-                                    <div className="hidden max-w-[180px] shrink-0 items-center justify-end gap-1.5 md:flex md:flex-wrap">
-                                        {memberLists
-                                            .slice(0, 2)
-                                            .map((list) => (
-                                                <span
-                                                    key={list.id}
-                                                    className="inline-flex max-w-[92px] items-center truncate rounded-full px-2 py-1 text-[11px] font-medium"
-                                                    style={list.emoji ? { backgroundColor: "#f3f4f6", color: "#6b7280" } : { backgroundColor: `${list.color}18`, color: list.color }}
-                                                >
-                                                    <span className="truncate">{list.emoji ? `${list.emoji} ` : ""}{list.name}</span>
-                                                </span>
-                                            ))}
-                                        {memberLists.length > 2 && (
-                                            <span className="text-xs font-medium text-gray-400">
-                                                +{memberLists.length - 2}
-                                            </span>
-                                        )}
-                                    </div>
+                                    {showLastNote && lastNote?.note && (
+                                        <div className="hidden w-56 shrink-0 text-right md:block">
+                                            <p className="line-clamp-2 text-xs leading-5 text-gray-400 dark:text-gray-500">
+                                                {renderNoteWithMentions(lastNote.note)}
+                                            </p>
+                                        </div>
+                                    )}
 
                                     <div className="flex w-3 shrink-0 justify-end">
                                         {selectedContactId === contact.id && (

@@ -51,6 +51,17 @@ export interface Touchpoint {
     created_at: string;
 }
 
+export interface CalendarEvent {
+    id: number;
+    event_title: string | null;
+    event_start: string;
+    event_end: string | null;
+    event_location: string | null;
+    attendee_email: string;
+    attendee_name: string | null;
+    created_at: string;
+}
+
 export interface ContactInfo {
     id: number;
     type: 'phone' | 'email';
@@ -78,6 +89,7 @@ export interface Contact {
     linkedin_profile: LinkedInProfile | null;
     notes: Note[];
     touchpoints: Touchpoint[];
+    calendar_events: CalendarEvent[];
     websites: Website[];
     compliments: Compliment[];
     contact_info: ContactInfo[];

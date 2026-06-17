@@ -43,6 +43,16 @@ export interface RolodexContact {
         id: number;
         created_at: string;
     }[];
+    calendar_events: {
+        id: number;
+        event_title: string | null;
+        event_start: string;
+        event_end: string | null;
+        event_location: string | null;
+        attendee_email: string;
+        attendee_name: string | null;
+        created_at: string;
+    }[];
     websites: {
         id: number;
         url: string;
@@ -92,6 +102,16 @@ interface PersonRecord {
     }[];
     people_notes?: { id: number; note: string; created_at: string; source_type: string | null }[];
     people_touchpoints?: { id: number; created_at: string }[];
+    people_calendar_events?: {
+        id: number;
+        event_title: string | null;
+        event_start: string;
+        event_end: string | null;
+        event_location: string | null;
+        attendee_email: string;
+        attendee_name: string | null;
+        created_at: string;
+    }[];
     people_websites?: { id: number; url: string; created_at: string }[];
     people_compliments?: {
         id: number;
@@ -118,6 +138,7 @@ function emptyContact(person: { id: number; name: string; created_at: string }):
         linkedin_profile: null,
         notes: [],
         touchpoints: [],
+        calendar_events: [],
         websites: [],
         compliments: [],
         contact_info: [],
@@ -151,6 +172,9 @@ function toContact(person: PersonRecord): RolodexContact {
         ),
         touchpoints: (person.people_touchpoints || []).sort((a, b) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ),
+        calendar_events: (person.people_calendar_events || []).sort((a, b) =>
+            new Date(b.event_start).getTime() - new Date(a.event_start).getTime()
         ),
         websites: (person.people_websites || []).sort((a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -214,6 +238,16 @@ export async function listContacts(
             ),
             people_touchpoints (
                 id,
+                created_at
+            ),
+            people_calendar_events (
+                id,
+                event_title,
+                event_start,
+                event_end,
+                event_location,
+                attendee_email,
+                attendee_name,
                 created_at
             ),
             people_websites (

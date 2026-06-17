@@ -1,12 +1,26 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import {
     optionalString,
     readJsonObject,
     requiredNumber,
     requiredString,
     withUser,
+    type ServerSupabaseClient,
 } from "@/server/api/route";
-import { createNote, deleteNote, updateNote } from "@/server/rolodex/notes";
+import { createNote, deleteNote, updateNote, updateNoteEmbedding } from "@/server/rolodex/notes";
+
+function scheduleNoteEmbedding(
+    supabase: ServerSupabaseClient,
+    userId: string,
+    note: { id: number; note: string }
+) {
+    waitUntil(
+        updateNoteEmbedding(supabase, userId, note.id, note.note).catch((error) => {
+            console.error("Error scheduling note embedding:", error);
+        })
+    );
+}
 
 // POST - Add a note to a person
 export const POST = withUser(async (req, { supabase, user }) => {
@@ -15,6 +29,7 @@ export const POST = withUser(async (req, { supabase, user }) => {
     const noteText = requiredString(body.note, "note");
 
     const note = await createNote(supabase, user.id, { peopleId, note: noteText });
+    scheduleNoteEmbedding(supabase, user.id, note);
     return NextResponse.json({ note });
 });
 
@@ -26,6 +41,9 @@ export const PATCH = withUser(async (req, { supabase, user }) => {
     const createdAt = optionalString(body.created_at);
 
     const note = await updateNote(supabase, user.id, { noteId, note: noteText, createdAt });
+    if (noteText?.trim()) {
+        scheduleNoteEmbedding(supabase, user.id, note);
+    }
     return NextResponse.json({ note });
 });
 

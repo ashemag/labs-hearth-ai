@@ -3,6 +3,7 @@ import { fetchLinkedInProfile, extractLinkedInUsername } from "@/lib/linkedin";
 import { normalizeLocation } from "@/lib/location/normalize";
 import { downloadAndStoreContactProfileImage } from "@/lib/profile-image-import";
 import { ApiError, badRequest, serverError, type ServerSupabaseClient } from "@/server/api/route";
+import { sanitizeXBio } from "@/server/rolodex/x-profile";
 
 const nitterInstances = [
     "nitter.poast.org",
@@ -283,7 +284,7 @@ export async function linkXProfile(
     const profilePayload = {
         username: cleanHandle.toLowerCase(),
         display_name: profileData.display_name || cleanHandle,
-        bio: profileData.bio || null,
+        bio: sanitizeXBio(profileData.bio, profileData.location),
         profile_image_url: profileData.profile_image_url || null,
         location: normalizeLocation(profileData.location),
         website_url: profileData.website_url || null,

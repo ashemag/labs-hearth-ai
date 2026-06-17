@@ -2,28 +2,33 @@ import { createOAuthState } from "@/lib/oauth-state";
 import { badRequest, serverError, type ServerSupabaseClient } from "@/server/api/route";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI || "https://labs.hearth.ai/api/google-calendar/callback";
-
 const scopes = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
 ].join(" ");
 
-export function buildGoogleAuthUrl(userId: string) {
+export function buildGoogleAuthUrl(
+    userId: string,
+    options: { loginHint?: string; redirectUri: string }
+) {
     if (!googleClientId) {
         serverError("Google OAuth not configured");
     }
 
     const params = new URLSearchParams({
         client_id: googleClientId,
-        redirect_uri: googleRedirectUri,
+        redirect_uri: options.redirectUri,
         response_type: "code",
         scope: scopes,
         access_type: "offline",
         prompt: "consent",
         state: createOAuthState(userId, "google"),
     });
+
+    if (options.loginHint) {
+        params.set("login_hint", options.loginHint);
+    }
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }

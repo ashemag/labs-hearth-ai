@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Search, Loader2, Command, Plus, Check } from "lucide-react";
+import { Search, Loader2, Plus, Check } from "lucide-react";
 import { useRef, useEffect, useMemo, useState } from "react";
 import type { Contact } from "../types";
 
@@ -45,6 +45,9 @@ export default function CommandSearchModal({
     const inputRef = useRef<HTMLInputElement>(null);
     const [showListNameInput, setShowListNameInput] = useState(false);
     const [listName, setListName] = useState("");
+    const contactsById = useMemo(() => {
+        return new Map(contacts.map((contact) => [contact.id, contact]));
+    }, [contacts]);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -73,18 +76,27 @@ export default function CommandSearchModal({
 
     return (
         <div
-            className="fixed inset-0 z-[100] bg-black/50 flex items-start justify-center pt-[15vh]"
+            className="fixed inset-0 z-[9998] bg-black/45"
             onClick={onClose}
         >
             <div
-                className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Search contacts"
+                className="fixed left-1/2 top-1/2 z-[9999] flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+                style={{
+                    transform: "translate(-50%, -50%)",
+                    width: "min(560px, calc(100vw - 32px))",
+                    height: "min(460px, calc(100vh - 96px))",
+                }}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Search Input */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex h-14 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-700 dark:bg-gray-900">
                     <Search className="h-5 w-5 text-gray-400 flex-shrink-0" />
                     <input
                         ref={inputRef}
+                        autoFocus
                         type="text"
                         value={commandSearchQuery}
                         onChange={(e) => {
@@ -122,7 +134,7 @@ export default function CommandSearchModal({
                 </div>
 
                 {/* Results */}
-                <div className="max-h-80 overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                     {(() => {
                         const semanticQuery = commandSearchQuery.slice(2).trim();
 
@@ -157,7 +169,7 @@ export default function CommandSearchModal({
                                 <div className="py-2">
                                     {semanticSearchResults.map((result, index) => {
                                         const isSelected = index === commandSearchIndex;
-                                        const contact = contacts.find(c => c.id === result.people_id);
+                                        const contact = contactsById.get(result.people_id);
                                         const xp = contact?.x_profile;
                                         const li = contact?.linkedin_profile;
                                         const profileImageUrl = contact?.custom_profile_image_url || xp?.profile_image_url?.replace("_normal", "_bigger") || li?.profile_image_url;
@@ -284,7 +296,7 @@ export default function CommandSearchModal({
                 </div>
 
                 {/* Footer hint */}
-                <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
                     {showListNameInput && canCreateList ? (
                         <div className="flex w-full items-center gap-2">
                             <input
@@ -319,7 +331,7 @@ export default function CommandSearchModal({
                         </div>
                     ) : (
                         <>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
                                 {canCreateList ? (
                                     <button
                                         onClick={() => {
@@ -331,21 +343,20 @@ export default function CommandSearchModal({
                                         <Plus className="h-3.5 w-3.5" />
                                         <span>Save {searchResultCount} as list</span>
                                     </button>
-                                ) : (
-                                    <span className="flex items-center gap-1">
-                                        <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&uarr;</kbd>
-                                        <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&darr;</kbd>
-                                        <span className="ml-1">navigate</span>
-                                    </span>
-                                )}
+                                ) : null}
+                                <span className="flex items-center gap-1">
+                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&uarr;</kbd>
+                                    <kbd className="px-1 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&darr;</kbd>
+                                    <span className="ml-1">navigate</span>
+                                </span>
                                 <span className="flex items-center gap-1">
                                     <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">&crarr;</kbd>
                                     <span className="ml-1">select</span>
                                 </span>
                             </div>
                             <span className="flex items-center gap-1">
-                                <Command className="h-3 w-3" />
-                                <span>K to search</span>
+                                <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 font-mono">esc</kbd>
+                                <span className="ml-1">close</span>
                             </span>
                         </>
                     )}

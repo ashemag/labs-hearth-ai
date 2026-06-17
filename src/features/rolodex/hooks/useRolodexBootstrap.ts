@@ -21,8 +21,21 @@ export function useRolodexBootstrap() {
     useEffect(() => {
         async function fetchUser() {
             const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
+            try {
+                const { data: { user }, error } = await supabase.auth.getUser();
+
+                if (error || !user) {
+                    if (error) {
+                        console.warn("Supabase auth session invalid:", error.message);
+                    }
+
+                    await supabase.auth.signOut();
+                    setAuthenticated(false);
+                    setLoading(false);
+                    window.location.replace("/sign-in");
+                    return;
+                }
+
                 let customAvatarUrl: string | null = null;
                 try {
                     const profileRes = await fetch("/api/user/profile", { credentials: "include" });
@@ -42,8 +55,15 @@ export function useRolodexBootstrap() {
                     customAvatarUrl,
                 });
                 setAuthenticated(true);
+            } catch (error) {
+                console.error("Error checking auth session:", error);
+                await supabase.auth.signOut();
+                setAuthenticated(false);
+                setLoading(false);
+                window.location.replace("/sign-in");
+            } finally {
+                setAuthLoading(false);
             }
-            setAuthLoading(false);
         }
         fetchUser();
     }, []);
@@ -221,6 +241,14 @@ export function useRolodexBootstrap() {
                 { event: "*", schema: "public", table: "people_contact_info", filter: `user_id=eq.${user.id}` },
                 (payload) => {
                     console.log("[Realtime] people_contact_info change:", payload);
+                    fetchContacts();
+                }
+            )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "people_calendar_events", filter: `user_id=eq.${user.id}` },
+                (payload) => {
+                    console.log("[Realtime] people_calendar_events change:", payload);
                     fetchContacts();
                 }
             )

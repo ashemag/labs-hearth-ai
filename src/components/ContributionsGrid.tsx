@@ -20,6 +20,18 @@ interface ApiResponse {
     touchpoints: TouchpointData[];
 }
 
+type ContributionMode = "all" | "calendar";
+
+const CONTRIBUTION_MODE_STORAGE_KEY = "rolodex-contribution-grid-mode";
+
+function readStoredContributionMode(): ContributionMode {
+    if (typeof window === "undefined") return "all";
+
+    return localStorage.getItem(CONTRIBUTION_MODE_STORAGE_KEY) === "calendar"
+        ? "calendar"
+        : "all";
+}
+
 // Get intensity level (0-10) based on count
 function getIntensity(count: number): number {
     return Math.min(count, 10); // Cap at 10
@@ -64,6 +76,16 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
     const [loading, setLoading] = useState(true);
     const [isDark, setIsDark] = useState(false);
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
+    const [contributionMode, setContributionMode] = useState<ContributionMode>(readStoredContributionMode);
+
+    const filteredTouchpoints = useMemo(
+        () => contributionMode === "calendar"
+            ? touchpoints.filter((tp) => tp.type === "calendar")
+            : touchpoints,
+        [contributionMode, touchpoints]
+    );
+    const emptyLabel = contributionMode === "calendar" ? "No calendar activity" : "No activity";
+    const countLabel = contributionMode === "calendar" ? "calendar touchpoint" : "touchpoint";
 
     // Detect dark mode
     useEffect(() => {
@@ -74,6 +96,10 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         mediaQuery.addEventListener("change", handler);
         return () => mediaQuery.removeEventListener("change", handler);
     }, []);
+
+    useEffect(() => {
+        localStorage.setItem(CONTRIBUTION_MODE_STORAGE_KEY, contributionMode);
+    }, [contributionMode]);
 
     const fetchContributions = useCallback(async () => {
         try {
@@ -119,6 +145,15 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                 },
                 () => fetchContributions()
             )
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "people_calendar_events",
+                },
+                () => fetchContributions()
+            )
             .subscribe();
 
         return () => {
@@ -131,7 +166,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
     const contributionMap = useMemo(() => {
         const byDate: Record<string, Set<number>> = {};
 
-        touchpoints.forEach((tp) => {
+        filteredTouchpoints.forEach((tp) => {
             // people_id can be positive (linked contact) or negative (unlinked, hash-based)
             // Skip only if people_id is null/undefined (shouldn't happen after API fix)
             if (tp.people_id === null || tp.people_id === undefined) return;
@@ -151,7 +186,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
             map.set(date, peopleSet.size);
         });
         return map;
-    }, [touchpoints]);
+    }, [filteredTouchpoints]);
 
     // Get breakdown for selected date
     const selectedDateBreakdown = useMemo(() => {
@@ -159,7 +194,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
 
         const breakdown = new Map<number, DayBreakdown>();
 
-        touchpoints.forEach((tp) => {
+        filteredTouchpoints.forEach((tp) => {
             if (tp.people_id === null || tp.people_id === undefined) return;
             const localDate = toLocalDateString(new Date(tp.timestamp));
             if (localDate !== selectedDate) return;
@@ -177,7 +212,7 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         return Array.from(breakdown.values()).sort((a, b) =>
             a.contact_name.localeCompare(b.contact_name)
         );
-    }, [selectedDate, touchpoints]);
+    }, [selectedDate, filteredTouchpoints]);
 
     // Generate the grid data for the last 52 weeks (364 days)
     const gridData = useMemo(() => {
@@ -219,6 +254,12 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         return weeks;
     }, [contributionMap]);
 
+    useEffect(() => {
+        if (selectedDate && !contributionMap.has(selectedDate)) {
+            setSelectedDate(null);
+        }
+    }, [contributionMap, selectedDate]);
+
     const handleDateClick = (date: string, count: number) => {
         if (count === 0) {
             setSelectedDate(null);
@@ -229,6 +270,33 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
 
     return (
         <div className={`mb-5 pt-1 transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}>
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    Activity
+                </div>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-800 dark:bg-gray-900/70">
+                    {([
+                        ["all", "All"],
+                        ["calendar", "Calendar"],
+                    ] as const).map(([mode, label]) => {
+                        const active = contributionMode === mode;
+                        return (
+                            <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setContributionMode(mode)}
+                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                                    active
+                                        ? "bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-white"
+                                        : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
             <div className="flex gap-4 items-start overflow-x-auto">
                 {/* Grid */}
                 <TooltipProvider delayDuration={100}>
@@ -258,10 +326,10 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
                                             >
                                                 <div className="font-medium">
                                                     {day.count === 0
-                                                        ? "No activity"
+                                                        ? emptyLabel
                                                         : day.count === 1
-                                                        ? "1 touchpoint"
-                                                        : `${day.count} touchpoints`}
+                                                        ? `1 ${countLabel}`
+                                                        : `${day.count} ${countLabel}s`}
                                                 </div>
                                                 <div className="text-gray-400">{formatDate(day.date)}</div>
                                             </TooltipContent>
@@ -297,4 +365,3 @@ export default function ContributionsGrid({ refreshKey = 0 }: ContributionsGridP
         </div>
     );
 }
-

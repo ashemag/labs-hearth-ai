@@ -26,6 +26,8 @@ import {
     User,
     ArrowRight,
     Wand2,
+    AlertTriangle,
+    RefreshCw,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { smartCropImageToSquare } from "@/lib/smart-image-crop";
@@ -60,6 +62,8 @@ interface GoogleAccount {
     google_name: string | null;
     last_sync_at: string | null;
     created_at: string;
+    connection_status?: "connected" | "needs_reconnect";
+    status_message?: string;
 }
 
 interface CalendarWatch {
@@ -92,6 +96,11 @@ function SettingsPageContent() {
     const [contacts, setContacts] = useState<RolodexContact[]>([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<{ email?: string; fullName?: string; avatarUrl?: string | null; customAvatarUrl?: string | null } | null>(null);
+    const userAvatarUrls = useMemo(
+        () => [user?.customAvatarUrl, user?.avatarUrl].filter(Boolean) as string[],
+        [user?.avatarUrl, user?.customAvatarUrl]
+    );
+    const [userAvatarUrlIndex, setUserAvatarUrlIndex] = useState(0);
 
     // Profile/Avatar state
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -145,6 +154,7 @@ function SettingsPageContent() {
     const [googleAccounts, setGoogleAccounts] = useState<GoogleAccount[]>([]);
     const [calendarLoading, setCalendarLoading] = useState(true);
     const [calendarConnecting, setCalendarConnecting] = useState(false);
+    const [calendarConnectingAccountId, setCalendarConnectingAccountId] = useState<number | null>(null);
     const [unmatchedCalendar, setUnmatchedCalendar] = useState<UnmatchedCalendarAttendee[]>([]);
     const [activeCalendarMatch, setActiveCalendarMatch] = useState<string | null>(null);
     const [calendarMatchSearch, setCalendarMatchSearch] = useState("");
@@ -160,8 +170,6 @@ function SettingsPageContent() {
     const [suggestionsLoading, setSuggestionsLoading] = useState(false);
     const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
     const [acceptingEmail, setAcceptingEmail] = useState<string | null>(null);
-
-    const autoSuggestRef = useRef(false);
 
     const dropdownRef = useRef<HTMLDivElement>(null);
     const calendarDropdownRef = useRef<HTMLDivElement>(null);
@@ -241,10 +249,6 @@ function SettingsPageContent() {
             }
             if (unmatchedData.unmatched) {
                 setUnmatchedCalendar(unmatchedData.unmatched);
-                // Auto-trigger AI matching if there are unmatched attendees
-                if (unmatchedData.unmatched.length > 0) {
-                    autoSuggestRef.current = true;
-                }
             }
             if (watchesData.watches) setCalendarWatches(watchesData.watches);
         } catch (err) {
@@ -254,20 +258,26 @@ function SettingsPageContent() {
         }
     }, []);
 
-    const handleConnectGoogle = async () => {
+    const handleConnectGoogle = async (account?: GoogleAccount) => {
         setCalendarConnecting(true);
+        setCalendarConnectingAccountId(account?.id ?? null);
         try {
-            const res = await fetch("/api/google-calendar/auth", { credentials: "include" });
+            const authUrl = account?.google_email
+                ? `/api/google-calendar/auth?email=${encodeURIComponent(account.google_email)}`
+                : "/api/google-calendar/auth";
+            const res = await fetch(authUrl, { credentials: "include" });
             const data = await res.json();
             if (data.authUrl) {
                 window.location.href = data.authUrl;
             } else {
                 console.error("No auth URL returned:", data);
                 setCalendarConnecting(false);
+                setCalendarConnectingAccountId(null);
             }
         } catch (err) {
             console.error("Failed to initiate Google auth:", err);
             setCalendarConnecting(false);
+            setCalendarConnectingAccountId(null);
         }
     };
 
@@ -594,6 +604,10 @@ function SettingsPageContent() {
         return () => document.removeEventListener("mousedown", handleClick);
     }, []);
 
+    useEffect(() => {
+        setUserAvatarUrlIndex(0);
+    }, [userAvatarUrls]);
+
     // Focus search when dropdown opens
     useEffect(() => {
         if (activeMatch && searchInputRef.current) {
@@ -607,15 +621,6 @@ function SettingsPageContent() {
             createInputRef.current.focus();
         }
     }, [creatingFor]);
-
-    // Auto-trigger AI suggestions when calendar data loads with unmatched attendees
-    useEffect(() => {
-        if (!calendarLoading && autoSuggestRef.current) {
-            autoSuggestRef.current = false;
-            handleSuggestMatches();
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [calendarLoading]);
 
     const handleLink = async (handleId: string, peopleId: number) => {
         if (matchLoading) return; // Prevent double-click
@@ -746,6 +751,12 @@ function SettingsPageContent() {
             : sorted;
     }, [matchSearch, contacts]);
 
+    const disconnectedCalendarAccounts = useMemo(
+        () => googleAccounts.filter(account => account.connection_status === "needs_reconnect"),
+        [googleAccounts]
+    );
+    const calendarSetupInBackground = searchParams.get("sync") === "background";
+
     return (
         <div className="min-h-screen bg-white dark:bg-black">
             {/* Header */}
@@ -834,13 +845,14 @@ function SettingsPageContent() {
                                             {/* Avatar Preview */}
                                             <div className="relative group">
                                                 <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                                    {(user?.customAvatarUrl || user?.avatarUrl) ? (
+                                                    {userAvatarUrls[userAvatarUrlIndex] ? (
                                                         <Image
-                                                            src={user.customAvatarUrl || user.avatarUrl || ""}
+                                                            src={userAvatarUrls[userAvatarUrlIndex]}
                                                             alt={user?.fullName || "Profile"}
                                                             width={96}
                                                             height={96}
                                                             unoptimized
+                                                            onError={() => setUserAvatarUrlIndex((index) => index + 1)}
                                                             className="w-full h-full object-cover"
                                                         />
                                                     ) : (
@@ -1338,6 +1350,20 @@ function SettingsPageContent() {
                                     </p>
                                 </div>
 
+                                {calendarSetupInBackground && (
+                                    <div className="mb-6 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+                                        <Loader2 className="mt-0.5 h-4 w-4 flex-shrink-0 animate-spin text-gray-500 dark:text-gray-400" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                Calendar connected
+                                            </p>
+                                            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                We&apos;re setting up the calendar sync in the background. New events will appear as soon as that finishes.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {calendarLoading ? (
                                     <div className="flex items-center justify-center py-16">
                                         <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -1346,9 +1372,34 @@ function SettingsPageContent() {
                                     <div className="space-y-8">
                                         {/* Connected Accounts */}
                                         <div>
-                                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                                                Connected Accounts
-                                            </h3>
+                                            <div className="flex items-center justify-between gap-3 mb-3">
+                                                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                    Connected Accounts
+                                                </h3>
+                                                {googleAccounts.length > 0 && (
+                                                    <button
+                                                        onClick={() => handleConnectGoogle()}
+                                                        disabled={calendarConnecting}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                        Add account
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {disconnectedCalendarAccounts.length > 0 && (
+                                                <div className="mb-3 flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+                                                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                                                            Calendar needs to be reconnected
+                                                        </p>
+                                                        <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300/80">
+                                                            Google is rejecting the saved authorization, so new events will not appear until you reconnect.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
                                             {googleAccounts.length === 0 ? (
                                                 <div className="border border-dashed border-gray-200 dark:border-gray-800 rounded-xl p-6 text-center">
                                                     <Calendar className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
@@ -1356,7 +1407,7 @@ function SettingsPageContent() {
                                                         No Google accounts connected
                                                     </p>
                                                     <button
-                                                        onClick={handleConnectGoogle}
+                                                        onClick={() => handleConnectGoogle()}
                                                         disabled={calendarConnecting}
                                                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gray-900 dark:bg-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
                                                     >
@@ -1371,55 +1422,86 @@ function SettingsPageContent() {
                                             ) : (
                                                 <div className="space-y-2">
                                                     {googleAccounts.map((account) => {
-                                                        const hasActiveWatch = calendarWatches.some(
+                                                        const needsReconnect = account.connection_status === "needs_reconnect";
+                                                        const hasActiveWatch = !needsReconnect && calendarWatches.some(
                                                             w => w.google_oauth_id === account.id && new Date(w.expiration) > new Date()
                                                         );
+                                                        const isConnectingThisAccount = calendarConnectingAccountId === account.id;
                                                         return (
                                                         <div
                                                             key={account.id}
-                                                            className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl"
+                                                            className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
+                                                                needsReconnect
+                                                                    ? "border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20"
+                                                                    : "border-transparent bg-gray-50 dark:bg-gray-900/50"
+                                                            }`}
                                                         >
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-9 h-9 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
-                                                                    <Mail className="h-4 w-4 text-gray-500" />
+                                                            <div className="flex min-w-0 items-start gap-3">
+                                                                <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border ${
+                                                                    needsReconnect
+                                                                        ? "border-amber-200 bg-white text-amber-600 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-400"
+                                                                        : "border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800"
+                                                                }`}>
+                                                                    {needsReconnect ? <AlertTriangle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                                                                 </div>
-                                                                <div>
+                                                                <div className="min-w-0">
                                                                     <div className="flex items-center gap-2">
-                                                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                        <p className={`truncate text-sm font-medium ${
+                                                                            needsReconnect
+                                                                                ? "text-amber-950 dark:text-amber-100"
+                                                                                : "text-gray-900 dark:text-white"
+                                                                        }`}>
                                                                             {account.google_email}
                                                                         </p>
+                                                                        {needsReconnect && (
+                                                                            <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                                                                Needs reconnect
+                                                                            </span>
+                                                                        )}
                                                                         {hasActiveWatch && (
-                                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
+                                                                            <span className="inline-flex flex-shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded-full">
                                                                                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                                                                                 Live
                                                                             </span>
                                                                         )}
                                                                     </div>
                                                                     <p className="text-xs text-gray-400 dark:text-gray-500">
-                                                                        {account.last_sync_at
+                                                                        {needsReconnect
+                                                                            ? account.status_message || "Reconnect to sync new events"
+                                                                            : account.last_sync_at
                                                                             ? `Synced ${new Date(account.last_sync_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
                                                                             : "Waiting for first sync"}
                                                                     </p>
                                                                 </div>
                                                             </div>
-                                                            <button
-                                                                onClick={() => handleDisconnectGoogle(account.id)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                                                                title="Disconnect"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
+                                                            <div className="flex flex-shrink-0 items-center gap-1.5">
+                                                                <button
+                                                                    onClick={() => handleConnectGoogle(account)}
+                                                                    disabled={calendarConnecting}
+                                                                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                                                                        needsReconnect
+                                                                            ? "bg-amber-700 text-white hover:bg-amber-800 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+                                                                            : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
+                                                                    }`}
+                                                                >
+                                                                    {isConnectingThisAccount ? (
+                                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    ) : (
+                                                                        <RefreshCw className="h-3.5 w-3.5" />
+                                                                    )}
+                                                                    Reconnect
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDisconnectGoogle(account.id)}
+                                                                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                                                                    title="Disconnect"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         );
                                                     })}
-                                                    <button
-                                                        onClick={handleConnectGoogle}
-                                                        disabled={calendarConnecting}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                                                    >
-                                                        <Plus className="h-3 w-3" />
-                                                        Add another account
-                                                    </button>
                                                 </div>
                                             )}
                                         </div>

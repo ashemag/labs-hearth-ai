@@ -3,6 +3,8 @@ import { serverError, type ServerSupabaseClient } from "@/server/api/route";
 export async function listContributionTouchpoints(supabase: ServerSupabaseClient, userId: string) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 365);
+    const calendarEndDate = new Date();
+    calendarEndDate.setDate(calendarEndDate.getDate() + 1);
 
     const { data: notes, error: notesError } = await supabase
         .from("people_notes")
@@ -35,7 +37,7 @@ export async function listContributionTouchpoints(supabase: ServerSupabaseClient
         .eq("user_id", userId)
         .not("people_id", "is", null)
         .gte("event_start", startDate.toISOString())
-        .lte("event_start", new Date().toISOString())
+        .lt("event_start", calendarEndDate.toISOString())
         .limit(50000);
 
     if (calendarError) {

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useMemo, useState } from "react";
 import {
     Loader2,
     X,
@@ -28,8 +29,43 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
-import type { Contact, Note, Compliment, RolodexList } from "../types";
+import type { CalendarEvent, Contact, Note, Compliment, RolodexList } from "../types";
 import { parseLinkedInNote, formatTimeAgo } from "../types";
+
+function parseCalendarDate(value: string) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split("-").map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    return new Date(value);
+}
+
+function formatCalendarEventDate(start: string) {
+    const date = parseCalendarDate(start);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.round((dateStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+    const isAllDay = /^\d{4}-\d{2}-\d{2}$/.test(start);
+
+    const dayLabel = diffDays === 0
+        ? "Today"
+        : diffDays === 1
+            ? "Tomorrow"
+            : diffDays === -1
+                ? "Yesterday"
+                : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+
+    if (isAllDay) {
+        return dayLabel;
+    }
+
+    return `${dayLabel} at ${new Intl.DateTimeFormat(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(date)}`;
+}
 
 interface ProfilePanelProps {
     // Data props
@@ -74,10 +110,6 @@ interface ProfilePanelProps {
     setLocationSuggestionIndex: React.Dispatch<React.SetStateAction<number>>;
 
     // Note state
-    newNote: string;
-    setNewNote: (value: string) => void;
-    addingNoteFor: number | null;
-    setAddingNoteFor: (value: number | null) => void;
     savingNote: boolean;
 
     editingNote: { noteId: number; contactId: number } | null;
@@ -90,12 +122,6 @@ interface ProfilePanelProps {
     setEditingNoteDate: (value: { noteId: number; contactId: number; currentDate: Date } | null) => void;
     editNoteDateLoading: boolean;
 
-    mentionQuery: string | null;
-    mentionPosition: { top: number; left: number } | null;
-    mentionIndex: number;
-    setMentionIndex: (value: number) => void;
-    pendingMentions: Map<string, number>;
-
     editMentionQuery: string | null;
     editMentionPosition: { top: number; left: number } | null;
     editMentionIndex: number;
@@ -105,7 +131,6 @@ interface ProfilePanelProps {
     noteInputRef: React.RefObject<HTMLTextAreaElement>;
     editNoteInputRef: React.RefObject<HTMLInputElement>;
 
-    mentionSuggestions: Contact[];
     editMentionSuggestions: Contact[];
 
     // Compliment state
@@ -162,7 +187,7 @@ interface ProfilePanelProps {
     handleUpdateName: (contactId: number) => void;
     handleUpdateBio: (contactId: number) => void;
     handleUpdateLocation: (contactId: number) => void;
-    handleAddNote: (contactId: number) => void;
+    handleAddNote: (contactId: number, noteDraft: string, draftMentions: Map<string, number>) => Promise<boolean>;
     handleEditNote: (noteId: number, contactId: number) => void;
     handleDeleteNote: (noteId: number, contactId: number) => void;
     handleUpdateNoteDate: (noteId: number, contactId: number, date: Date) => void;
@@ -174,19 +199,13 @@ interface ProfilePanelProps {
     handleDeleteContactInfo: (infoId: number, contactId: number) => void;
     handleAddToList: (listId: number, contactId: number) => void;
     handleRemoveFromList: (listId: number, contactId: number) => void;
-    handleNoteInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     handleEditNoteInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    handleNoteKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
     handleEditNoteKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, noteId: number, contactId: number) => void;
-    insertMention: (contact: Contact) => void;
     insertEditMention: (contact: Contact) => void;
     toggleMessagesForContact: (contactId: number) => void;
     renderNoteWithMentions: (noteText: string) => React.ReactNode;
     initializeEditMentions: (noteText: string) => void;
     setContacts: React.Dispatch<React.SetStateAction<Contact[]>>;
-    setMentionQuery: (value: string | null) => void;
-    setMentionPosition: (value: { top: number; left: number } | null) => void;
-    setPendingMentions: (value: Map<string, number>) => void;
     setEditMentionQuery: (value: string | null) => void;
     setEditMentionPosition: (value: { top: number; left: number } | null) => void;
     setEditPendingMentions: (value: Map<string, number>) => void;
@@ -221,10 +240,6 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         editLocationLoading,
         locationSuggestionIndex,
         setLocationSuggestionIndex,
-        newNote,
-        setNewNote,
-        addingNoteFor,
-        setAddingNoteFor,
         savingNote,
         editingNote,
         setEditingNote,
@@ -234,15 +249,11 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         editingNoteDate,
         setEditingNoteDate,
         editNoteDateLoading,
-        mentionQuery,
-        mentionPosition,
-        mentionIndex,
         editMentionQuery,
         editMentionPosition,
         editMentionIndex,
         noteInputRef,
         editNoteInputRef,
-        mentionSuggestions,
         editMentionSuggestions,
         addingLinkFor,
         setAddingLinkFor,
@@ -279,23 +290,135 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         handleDeleteContactInfo,
         handleAddToList,
         handleRemoveFromList,
-        handleNoteInputChange,
         handleEditNoteInputChange,
-        handleNoteKeyDown,
         handleEditNoteKeyDown,
-        insertMention,
         insertEditMention,
         toggleMessagesForContact,
         renderNoteWithMentions,
         initializeEditMentions,
         setContacts,
-        setMentionQuery,
-        setMentionPosition,
-        setPendingMentions,
         setEditMentionQuery,
         setEditMentionPosition,
         setEditPendingMentions,
     } = props;
+
+    const [draftNote, setDraftNote] = useState("");
+    const [addingNoteFor, setAddingNoteFor] = useState<number | null>(null);
+    const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+    const [mentionPosition, setMentionPosition] = useState<{ top: number; left: number } | null>(null);
+    const [mentionIndex, setMentionIndex] = useState(0);
+    const [pendingMentions, setPendingMentions] = useState<Map<string, number>>(new Map());
+
+    const mentionSuggestions = useMemo(() => {
+        if (mentionQuery === null) return [];
+
+        const normalizedQuery = mentionQuery.toLowerCase();
+        return contacts
+            .filter((contact) => contact.name.toLowerCase().includes(normalizedQuery))
+            .slice(0, 5);
+    }, [contacts, mentionQuery]);
+
+    const resetNoteDraft = () => {
+        setDraftNote("");
+        setAddingNoteFor(null);
+        setPendingMentions(new Map());
+        setMentionQuery(null);
+        setMentionPosition(null);
+        setMentionIndex(0);
+        const textarea = noteInputRef.current;
+        if (textarea) {
+            textarea.style.height = "56px";
+        }
+    };
+
+    const handleNoteInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const value = e.target.value;
+        setDraftNote(value);
+
+        const cursorPos = e.target.selectionStart || 0;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+
+        if (!mentionMatch) {
+            setMentionQuery(null);
+            setMentionPosition(null);
+            return;
+        }
+
+        setMentionQuery(mentionMatch[1]);
+        setMentionIndex(0);
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMentionPosition({
+            top: rect.bottom + 4,
+            left: rect.left,
+        });
+    };
+
+    const insertMention = (contact: Contact) => {
+        const textarea = noteInputRef.current;
+        if (!textarea) return;
+
+        const cursorPos = textarea.selectionStart || 0;
+        const textBeforeCursor = draftNote.slice(0, cursorPos);
+        const textAfterCursor = draftNote.slice(cursorPos);
+        const mentionStartMatch = textBeforeCursor.match(/@(\w*)$/);
+        if (!mentionStartMatch) return;
+
+        const mentionStart = cursorPos - mentionStartMatch[0].length;
+        const beforeMention = draftNote.slice(0, mentionStart);
+        const displayText = `@${contact.name}`;
+        const newValue = beforeMention + displayText + " " + textAfterCursor;
+
+        setDraftNote(newValue);
+        setPendingMentions((prev) => {
+            const updated = new Map(prev);
+            updated.set(contact.name, contact.id);
+            return updated;
+        });
+        setMentionQuery(null);
+        setMentionPosition(null);
+
+        setTimeout(() => {
+            textarea.focus();
+            const newCursorPos = beforeMention.length + displayText.length + 1;
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+        }, 0);
+    };
+
+    const handleNoteKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (mentionQuery === null || mentionSuggestions.length === 0) return;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setMentionIndex((prev) => Math.min(prev + 1, mentionSuggestions.length - 1));
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setMentionIndex((prev) => Math.max(prev - 1, 0));
+        } else if (e.key === "Enter" || e.key === "Tab") {
+            e.preventDefault();
+            insertMention(mentionSuggestions[mentionIndex]);
+        } else if (e.key === "Escape") {
+            setMentionQuery(null);
+            setMentionPosition(null);
+        }
+    };
+
+    const saveNoteDraft = async (contactId: number) => {
+        if (!draftNote.trim() || savingNote) return;
+
+        const noteToRestore = draftNote;
+        const mentionsToRestore = new Map(pendingMentions);
+
+        resetNoteDraft();
+        const saved = await handleAddNote(contactId, noteToRestore, mentionsToRestore);
+
+        if (!saved) {
+            setDraftNote(noteToRestore);
+            setPendingMentions(mentionsToRestore);
+            setAddingNoteFor(contactId);
+        }
+    };
 
     return (
         <Sheet
@@ -777,16 +900,16 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                         </button>
                                     </div>
                                 </div>
-                                {/* Add note input - minimal composer */}
-                                <div className="mb-4 relative group/composer">
-                                    <div className={`rounded-xl border transition-all duration-200 ${
-                                        addingNoteFor === contact.id && newNote.trim()
-                                            ? "border-gray-300 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-800"
-                                            : "border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30"
+                                {/* Add note input */}
+                                <div className="relative mb-5">
+                                    <div className={`overflow-hidden rounded-xl border transition-all duration-200 ${
+                                        addingNoteFor === contact.id
+                                            ? "border-gray-300 bg-white shadow-sm dark:border-gray-600 dark:bg-gray-800"
+                                            : "border-gray-100 bg-warm-50/50 hover:border-gray-200 dark:border-gray-800 dark:bg-gray-800/30 dark:hover:border-gray-700"
                                     }`}>
                                         <textarea
                                             ref={noteInputRef}
-                                            value={addingNoteFor === contact.id ? newNote : ""}
+                                            value={addingNoteFor === contact.id ? draftNote : ""}
                                             onChange={(e) => {
                                                 handleNoteInputChange(e);
                                                 setAddingNoteFor(contact.id);
@@ -801,25 +924,31 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                             }}
                                             placeholder="Write a note..."
                                             rows={1}
-                                            className="w-full px-3.5 py-2.5 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none resize-none"
-                                            style={{ minHeight: "38px" }}
+                                            className="block w-full resize-none bg-transparent p-4 text-[15px] leading-6 text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-white dark:placeholder:text-gray-500"
+                                            style={{
+                                                minHeight: draftNote.trim() ? "96px" : "56px",
+                                                resize: "none",
+                                            }}
                                             onInput={(e) => {
                                                 const target = e.target as HTMLTextAreaElement;
-                                                target.style.height = "38px";
-                                                target.style.height = Math.min(target.scrollHeight, 120) + "px";
+                                                target.style.height = target.value.trim() ? "96px" : "56px";
+                                                target.style.height = Math.min(target.scrollHeight, 160) + "px";
                                             }}
                                         />
-                                        {addingNoteFor === contact.id && newNote.trim() && (
-                                            <div className="flex items-center justify-between px-3 pb-2">
-                                                <span className="text-[10px] text-gray-400">@ to mention</span>
-                                                <div className="flex items-center gap-1.5">
-                                                    <button onClick={() => { setNewNote(""); setAddingNoteFor(null); setPendingMentions(new Map()); const ta = noteInputRef.current; if (ta) { ta.style.height = "38px"; } }} className="px-2.5 py-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md transition-colors">
+                                        {addingNoteFor === contact.id && draftNote.trim() && (
+                                            <div className="flex items-center justify-between border-t border-gray-100 p-4 dark:border-gray-700/70">
+                                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">
+                                                    <AtSign className="h-3.5 w-3.5" />
+                                                    mention
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={resetNoteDraft} className="inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300">
                                                         Cancel
                                                     </button>
                                                     <button
-                                                        onClick={() => handleAddNote(contact.id)}
+                                                        onClick={() => saveNoteDraft(contact.id)}
                                                         disabled={savingNote}
-                                                        className="px-3 py-1 bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                                                        className="inline-flex h-9 min-w-[82px] items-center justify-center whitespace-nowrap rounded-lg bg-gray-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
                                                     >
                                                         {savingNote ? "Saving..." : "Save"}
                                                     </button>
@@ -870,12 +999,14 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                         type TimelineItem =
                                             | { type: "note"; data: Note; date: string }
                                             | { type: "touchpoint"; data: { id: number; created_at: string }; date: string }
+                                            | { type: "calendar"; data: CalendarEvent; date: string }
                                             | { type: "message"; data: { id: number; message_text: string; is_from_me: boolean; message_date: string }; date: string }
                                             | { type: "compliment"; data: Compliment; date: string };
 
                                         const timeline: TimelineItem[] = [
                                             ...contact.notes.filter(n => !n.note.includes("LinkedIn Profile Import")).map(n => ({ type: "note" as const, data: n, date: n.created_at })),
                                             ...contact.touchpoints.map(t => ({ type: "touchpoint" as const, data: t, date: t.created_at })),
+                                            ...(contact.calendar_events || []).map(event => ({ type: "calendar" as const, data: event, date: event.event_start })),
                                             ...(contact.compliments || []).map(c => ({ type: "compliment" as const, data: c, date: c.created_at })),
                                         ];
 
@@ -887,7 +1018,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                             })));
                                         }
 
-                                        timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                        timeline.sort((a, b) => parseCalendarDate(b.date).getTime() - parseCalendarDate(a.date).getTime());
 
                                         if (timeline.length === 0) {
                                             return <p className="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">No activity yet</p>;
@@ -932,6 +1063,41 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                                 </div>
                                                             );
                                                         }
+                                                        if (item.type === "calendar") {
+                                                            const event = item.data;
+                                                            const isUpcoming = parseCalendarDate(event.event_start).getTime() > Date.now();
+                                                            return (
+                                                                <div key={`cal-${event.id}`} className="flex gap-3 py-2 pl-0 group/item">
+                                                                    <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
+                                                                        <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${isUpcoming ? "bg-emerald-400 dark:bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1 py-0.5">
+                                                                        <p className="truncate text-[13px] text-gray-700 dark:text-gray-300">
+                                                                            {event.event_title || "Calendar event"}
+                                                                        </p>
+                                                                        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                                                                            <Calendar className="h-3 w-3 shrink-0 text-gray-400 dark:text-gray-500" />
+                                                                            <span className="truncate text-[10px] text-gray-400 dark:text-gray-500">
+                                                                                {formatCalendarEventDate(event.event_start)}
+                                                                            </span>
+                                                                            {event.event_location && (
+                                                                                <>
+                                                                                    <span className="text-[10px] text-gray-300 dark:text-gray-600">&middot;</span>
+                                                                                    <span className="truncate text-[10px] text-gray-400 dark:text-gray-500">
+                                                                                        {event.event_location}
+                                                                                    </span>
+                                                                                </>
+                                                                            )}
+                                                                            {isUpcoming && (
+                                                                                <span className="ml-auto rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                                                    upcoming
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
                                                         if (item.type === "compliment") {
                                                             const compliment = item.data;
                                                             return (
@@ -963,11 +1129,11 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                         const note = item.data as Note;
                                                         const isAutoNote = note.source_type === "website_analysis" || note.source_type === "auto_summary";
                                                         return (
-                                                            <div key={`note-${note.id}`} className="flex gap-3 py-1.5 pl-0 group/item">
-                                                                <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-2 relative z-10">
+                                                            <div key={`note-${note.id}`} className="flex gap-3 py-1 pl-0 group/item">
+                                                                <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
                                                                     <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${isAutoNote ? "bg-violet-400 dark:bg-violet-500" : "bg-gray-300 dark:bg-gray-600"}`} />
                                                                 </div>
-                                                                <div className={`flex-1 min-w-0 relative rounded-lg py-1.5 ${editingNote?.noteId === note.id ? "" : "group"}`}>
+                                                                <div className={`flex-1 min-w-0 relative rounded-lg py-0.5 ${editingNote?.noteId === note.id ? "" : "group"}`}>
                                                                     {editingNote?.noteId === note.id ? (
                                                                         <div className="relative flex items-center gap-2">
                                                                             <input

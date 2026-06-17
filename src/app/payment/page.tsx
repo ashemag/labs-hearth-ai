@@ -10,12 +10,20 @@ import {
     useStripe,
     useElements,
 } from "@stripe/react-stripe-js";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { LiquidMetal } from "@paper-design/shaders-react";
 
 const stripePromise = loadStripe(
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );
+
+interface PromoStatus {
+    signupOrder: number | null;
+    totalUsers: number;
+    eligible: boolean;
+    limit: number;
+    code: string | null;
+}
 
 function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
     const stripe = useStripe();
@@ -123,6 +131,121 @@ function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
     );
 }
 
+function PromoCodePanel({
+    promoStatus,
+    onRedeemed,
+}: {
+    promoStatus: PromoStatus | null;
+    onRedeemed: () => void;
+}) {
+    const [code, setCode] = useState("");
+    const [applying, setApplying] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (promoStatus?.code) {
+            setCode(promoStatus.code);
+        }
+    }, [promoStatus?.code]);
+
+    if (!promoStatus) {
+        return null;
+    }
+
+    const applyPromo = async () => {
+        setApplying(true);
+        setMessage(null);
+        setError(null);
+
+        try {
+            const response = await fetch("/api/payment/promo-code", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                setError(data.error || "Promo code could not be applied.");
+                setApplying(false);
+                return;
+            }
+
+            setMessage("Promo applied. Welcome to Hearth.");
+            setApplying(false);
+            onRedeemed();
+        } catch {
+            setError("Failed to apply promo code.");
+            setApplying(false);
+        }
+    };
+
+    return (
+        <div className="mb-5 rounded-lg border border-gray-200/80 bg-white p-4 shadow-sm">
+            <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-600">
+                        Signup #{promoStatus.signupOrder ?? "—"}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                        first {promoStatus.limit} are free
+                    </p>
+                </div>
+
+                {promoStatus.eligible ? (
+                    <p className="mt-1 text-xs leading-5 text-gray-400">
+                        You made the first {promoStatus.limit}. Apply your code for lifetime access.
+                    </p>
+                ) : (
+                    <p className="mt-1 text-xs leading-5 text-gray-400">
+                        First-{promoStatus.limit} promo access has been claimed.
+                    </p>
+                )}
+
+                <div className="mt-3 flex gap-2">
+                    <input
+                        value={code}
+                        onChange={(event) => setCode(event.target.value.toUpperCase())}
+                        placeholder="Promo code"
+                        className="h-10 min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-600 outline-none transition-colors placeholder:text-gray-300 focus:border-gray-300"
+                    />
+                    <button
+                        type="button"
+                        onClick={applyPromo}
+                        disabled={applying || !code.trim()}
+                        className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                    </button>
+                </div>
+
+                {promoStatus.code && (
+                    <button
+                        type="button"
+                        onClick={() => setCode(promoStatus.code || "")}
+                        className="mt-2 text-xs text-gray-400 underline underline-offset-2 transition-colors hover:text-gray-500"
+                    >
+                        Use {promoStatus.code}
+                    </button>
+                )}
+
+                {message && (
+                    <p className="mt-3 flex items-center gap-2 text-xs text-green-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {message}
+                    </p>
+                )}
+                {error && (
+                    <p className="mt-3 text-xs text-red-600">
+                        {error}
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function SuccessView() {
     const router = useRouter();
 
@@ -182,6 +305,7 @@ function SuccessView() {
 function PaymentContent() {
     const router = useRouter();
     const [clientSecret, setClientSecret] = useState<string | null>(null);
+    const [promoStatus, setPromoStatus] = useState<PromoStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -197,20 +321,26 @@ function PaymentContent() {
             return;
         }
 
-        fetch("/api/payment/create-intent", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-        })
-            .then((res) => res.json())
-            .then((data) => {
-                if (data.alreadyPaid) {
+        Promise.all([
+            fetch("/api/payment/promo-code").then((res) => res.json()),
+            fetch("/api/payment/create-intent", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+            }).then((res) => res.json()),
+        ])
+            .then(([promoData, intentData]) => {
+                if (!promoData.error) {
+                    setPromoStatus(promoData);
+                }
+
+                if (intentData.alreadyPaid) {
                     router.push("/");
                     return;
                 }
-                if (data.error) {
-                    setError(data.error);
+                if (intentData.error) {
+                    setError(intentData.error);
                 } else {
-                    setClientSecret(data.clientSecret);
+                    setClientSecret(intentData.clientSecret);
                 }
                 setLoading(false);
             })
@@ -259,6 +389,10 @@ function PaymentContent() {
     return (
         <>
             <PaymentHeader />
+            <PromoCodePanel
+                promoStatus={promoStatus}
+                onRedeemed={() => setPaymentSuccess(true)}
+            />
             <Elements
                 stripe={stripePromise}
                 options={{

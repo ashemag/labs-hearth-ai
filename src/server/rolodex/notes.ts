@@ -54,8 +54,6 @@ export async function createNote(
     userId: string,
     input: { peopleId: number; note: string }
 ) {
-    const embedding = await embeddingForNote(input.note, "Error generating embedding:");
-
     const { data, error } = await supabase
         .from("people_notes")
         .insert({
@@ -63,7 +61,6 @@ export async function createNote(
             people_id: input.peopleId,
             note: input.note,
             source_type: "rolodex",
-            embedding,
         })
         .select()
         .single();
@@ -79,8 +76,32 @@ export async function createNote(
         console.log(`Saved ${mentionIds.length} mention(s) for note ${data.id}`);
     }
 
-    console.log(`Note ${data.id} created${embedding ? " with embedding" : " (no embedding)"}`);
+    console.log(`Note ${data.id} created`);
     return data;
+}
+
+export async function updateNoteEmbedding(
+    supabase: ServerSupabaseClient,
+    userId: string,
+    noteId: number,
+    note: string
+) {
+    const embedding = await embeddingForNote(note, "Error generating note embedding:");
+
+    if (!embedding) {
+        return;
+    }
+
+    const { error } = await supabase
+        .from("people_notes")
+        .update({ embedding })
+        .eq("id", noteId)
+        .eq("user_id", userId)
+        .eq("note", note);
+
+    if (error) {
+        console.error("Error updating note embedding:", error);
+    }
 }
 
 export async function updateNote(
@@ -88,18 +109,11 @@ export async function updateNote(
     userId: string,
     input: { noteId: number; note?: string; createdAt?: string }
 ) {
-    const updateData: { note?: string; created_at?: string; embedding?: string } = {};
+    const updateData: { note?: string; created_at?: string; embedding?: string | null } = {};
 
     if (input.note?.trim()) {
         updateData.note = input.note.trim();
-        const embedding = await embeddingForNote(
-            updateData.note,
-            "Error generating embedding for update:"
-        );
-
-        if (embedding) {
-            updateData.embedding = embedding;
-        }
+        updateData.embedding = null;
     }
 
     if (input.createdAt) {

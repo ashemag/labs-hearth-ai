@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { Contact, RolodexList } from "../types";
-import { contactMatchesSearchIndex, createContactSearchIndex } from "../search";
+import { createContactSearchIndex, normalizeSearchText } from "../search";
 
 interface SemanticSearchResult {
     id: number;
@@ -30,11 +30,12 @@ export function useRolodexCommandSearch({
 }: UseRolodexCommandSearchInput) {
     const [showCommandSearch, setShowCommandSearch] = useState(false);
     const [commandSearchQuery, setCommandSearchQuery] = useState("");
-    const deferredCommandSearchQuery = useDeferredValue(commandSearchQuery);
     const [commandSearchIndex, setCommandSearchIndex] = useState(0);
     const [creatingSearchList, setCreatingSearchList] = useState(false);
     const [semanticSearchResults, setSemanticSearchResults] = useState<SemanticSearchResult[]>([]);
     const [semanticSearchLoading, setSemanticSearchLoading] = useState(false);
+    const [, startTransition] = useTransition();
+    const semanticSearchCache = useRef(new Map<string, SemanticSearchResult[]>());
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,57 +67,91 @@ export function useRolodexCommandSearch({
             return;
         }
 
+        const cacheKey = query.toLowerCase();
+        const cachedResults = semanticSearchCache.current.get(cacheKey);
+        if (cachedResults) {
+            setSemanticSearchResults(cachedResults);
+            setSemanticSearchLoading(false);
+            return;
+        }
+
+        const controller = new AbortController();
         const timeoutId = setTimeout(async () => {
             setSemanticSearchLoading(true);
             try {
                 const res = await fetch(`/api/rolodex/notes/search?q=${encodeURIComponent(query)}&limit=10&threshold=0.3`, {
                     credentials: "include",
+                    signal: controller.signal,
                 });
                 if (res.ok) {
                     const data = await res.json();
-                    setSemanticSearchResults(data.results || []);
+                    const results = data.results || [];
+                    semanticSearchCache.current.set(cacheKey, results);
+                    setSemanticSearchResults(results);
                 }
             } catch (error) {
-                console.error("Semantic search error:", error);
+                if (!(error instanceof DOMException && error.name === "AbortError")) {
+                    console.error("Semantic search error:", error);
+                }
             } finally {
-                setSemanticSearchLoading(false);
+                if (!controller.signal.aborted) {
+                    setSemanticSearchLoading(false);
+                }
             }
-        }, 300);
+        }, 180);
 
-        return () => clearTimeout(timeoutId);
+        return () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+        };
     }, [commandSearchQuery]);
 
-    const sortedContacts = useMemo(() => [...contacts].sort((a, b) => {
-        const aLastActivity = a.notes[0]?.created_at || a.created_at;
-        const bLastActivity = b.notes[0]?.created_at || b.created_at;
-        return new Date(bLastActivity).getTime() - new Date(aLastActivity).getTime();
-    }), [contacts]);
-
-    const contactSearchIndexes = useMemo(() => {
-        return new Map(contacts.map((contact) => [
-            contact.id,
-            createContactSearchIndex(contact),
-        ]));
+    const searchableContacts = useMemo(() => {
+        return contacts
+            .map((contact) => ({
+                contact,
+                index: createContactSearchIndex(contact),
+                lastActivityTime: new Date(contact.notes[0]?.created_at || contact.created_at).getTime(),
+            }))
+            .sort((a, b) => b.lastActivityTime - a.lastActivityTime);
     }, [contacts]);
 
-    const commandSearchMatches = useMemo(() => {
-        if (!deferredCommandSearchQuery.trim()) {
-            return sortedContacts;
+    const commandSearchState = useMemo(() => {
+        const normalizedQuery = normalizeSearchText(commandSearchQuery);
+        const compactQuery = normalizedQuery.replace(/\s+/g, "");
+        const isSemanticQuery = commandSearchQuery.toLowerCase().startsWith("q:");
+        const results: Contact[] = [];
+        const matchedContactIds: number[] = [];
+
+        if (isSemanticQuery) {
+            return { results, matchedContactIds, count: 0 };
         }
 
-        return sortedContacts.filter((contact) => {
-            const index = contactSearchIndexes.get(contact.id);
-            return index ? contactMatchesSearchIndex(index, deferredCommandSearchQuery) : false;
-        });
-    }, [deferredCommandSearchQuery, contactSearchIndexes, sortedContacts]);
+        for (const { contact, index } of searchableContacts) {
+            const matches = !normalizedQuery ||
+                index.text.includes(normalizedQuery) ||
+                index.compactText.includes(compactQuery);
 
-    const commandSearchResults = useMemo(() => {
-        return commandSearchMatches.slice(0, 8);
-    }, [commandSearchMatches]);
+            if (!matches) continue;
+
+            matchedContactIds.push(contact.id);
+            if (results.length < 8) {
+                results.push(contact);
+            }
+        }
+
+        return {
+            results,
+            matchedContactIds,
+            count: matchedContactIds.length,
+        };
+    }, [commandSearchQuery, searchableContacts]);
+
+    const commandSearchResults = commandSearchState.results;
 
     const handleCommandSearchSelect = useCallback((contactId: number) => {
         setShowCommandSearch(false);
-        setCommandSearchQuery("");
+        startTransition(() => setCommandSearchQuery(""));
         setCommandSearchIndex(0);
         setActiveList("all");
         setSearchQuery("");
@@ -125,10 +160,10 @@ export function useRolodexCommandSearch({
             const element = document.querySelector(`[data-contact-id="${contactId}"]`);
             element?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 50);
-    }, [setActiveList, setSearchQuery, setSelectedContactId]);
+    }, [setActiveList, setSearchQuery, setSelectedContactId, startTransition]);
 
     const handleCreateListFromCommandSearch = useCallback(async (name: string) => {
-        const memberIds = commandSearchMatches.map((contact) => contact.id);
+        const memberIds = commandSearchState.matchedContactIds;
         if (!name.trim() || memberIds.length === 0) return;
 
         setCreatingSearchList(true);
@@ -148,7 +183,7 @@ export function useRolodexCommandSearch({
             setLists((prev) => [...prev, data.list].sort((a, b) => a.name.localeCompare(b.name)));
             setActiveList(data.list.id);
             setShowCommandSearch(false);
-            setCommandSearchQuery("");
+            startTransition(() => setCommandSearchQuery(""));
             setCommandSearchIndex(0);
             toast(`Created "${data.list.name}" with ${memberIds.length} contact${memberIds.length === 1 ? "" : "s"}`);
         } catch (error) {
@@ -157,7 +192,7 @@ export function useRolodexCommandSearch({
         } finally {
             setCreatingSearchList(false);
         }
-    }, [commandSearchMatches, setActiveList, setLists]);
+    }, [commandSearchState.matchedContactIds, setActiveList, setLists, startTransition]);
 
     return {
         showCommandSearch,
@@ -169,7 +204,7 @@ export function useRolodexCommandSearch({
         commandSearchResults,
         semanticSearchResults,
         semanticSearchLoading,
-        commandSearchResultCount: commandSearchMatches.length,
+        commandSearchResultCount: commandSearchState.count,
         creatingSearchList,
         handleCommandSearchSelect,
         handleCreateListFromCommandSearch,
