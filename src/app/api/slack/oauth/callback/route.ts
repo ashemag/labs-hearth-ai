@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyOAuthState } from "@/lib/oauth-state";
+import { getSlackOAuthRedirectUri } from "@/server/slack/workspaces";
 
 const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
 const SLACK_SECRET = process.env.SLACK_SECRET!;
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
         client_id: SLACK_CLIENT_ID,
         client_secret: SLACK_SECRET,
         code: code,
+        redirect_uri: getSlackOAuthRedirectUri(new URL(req.url).origin),
       }),
     });
 

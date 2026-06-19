@@ -52,14 +52,30 @@ async function embeddingForNote(note: string, logLabel: string) {
 export async function createNote(
     supabase: ServerSupabaseClient,
     userId: string,
-    input: { peopleId: number; note: string }
+    input: { peopleId: number; note: string; calendarEventId?: number }
 ) {
+    if (input.calendarEventId) {
+        const { data: calendarEvent, error: calendarEventError } = await supabase
+            .from("people_calendar_events")
+            .select("id")
+            .eq("id", input.calendarEventId)
+            .eq("user_id", userId)
+            .eq("people_id", input.peopleId)
+            .single();
+
+        if (calendarEventError || !calendarEvent) {
+            console.error("Invalid calendar event attachment:", calendarEventError);
+            badRequest("Calendar event not found for this contact");
+        }
+    }
+
     const { data, error } = await supabase
         .from("people_notes")
         .insert({
             user_id: userId,
             people_id: input.peopleId,
             note: input.note,
+            calendar_event_id: input.calendarEventId || null,
             source_type: "rolodex",
         })
         .select()

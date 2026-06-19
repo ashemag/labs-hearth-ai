@@ -329,7 +329,8 @@ export default function RolodexPage() {
     const handleAddNote = async (
         contactId: number,
         noteDraft: string,
-        draftMentions: Map<string, number>
+        draftMentions: Map<string, number>,
+        calendarEventId?: number
     ) => {
         if (!noteDraft.trim()) return false;
         // Prevent double submission
@@ -350,6 +351,7 @@ export default function RolodexPage() {
             id: -Date.now(),
             note: noteToSave,
             created_at: new Date().toISOString(),
+            calendar_event_id: calendarEventId || null,
             source_type: "rolodex",
         };
 
@@ -366,7 +368,11 @@ export default function RolodexPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ people_id: contactId, note: noteToSave }),
+                body: JSON.stringify({
+                    people_id: contactId,
+                    note: noteToSave,
+                    ...(calendarEventId ? { calendar_event_id: calendarEventId } : {}),
+                }),
             });
 
             const data = await res.json();

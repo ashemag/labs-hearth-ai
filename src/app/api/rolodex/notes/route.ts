@@ -27,8 +27,11 @@ export const POST = withUser(async (req, { supabase, user }) => {
     const body = await readJsonObject(req);
     const peopleId = requiredNumber(body.people_id, "people_id");
     const noteText = requiredString(body.note, "note");
+    const calendarEventId = body.calendar_event_id === undefined || body.calendar_event_id === null
+        ? undefined
+        : requiredNumber(body.calendar_event_id, "calendar_event_id");
 
-    const note = await createNote(supabase, user.id, { peopleId, note: noteText });
+    const note = await createNote(supabase, user.id, { peopleId, note: noteText, calendarEventId });
     scheduleNoteEmbedding(supabase, user.id, note);
     return NextResponse.json({ note });
 });

@@ -302,6 +302,7 @@ export interface ProcessPeopleMessageResult {
   shouldRespond: boolean;
   response?: string;
   toolsExecuted: string[];
+  notesCreated: { id: number; note: string }[];
 }
 
 /**
@@ -381,6 +382,7 @@ ${peopleList}`,
   });
 
   const toolsExecuted: string[] = [];
+  const notesCreated: { id: number; note: string }[] = [];
   let finalResponse = "";
 
   try {
@@ -428,6 +430,12 @@ ${peopleList}`,
             params.messageTs,
             params.channelId
           );
+          if (result.success) {
+            const note = (result.data as { note?: { id: number; note: string } } | undefined)?.note;
+            if (note) {
+              notesCreated.push({ id: note.id, note: note.note });
+            }
+          }
         } else if (functionName === "add_compliment_from_person") {
           result = await executeAddComplimentFromPerson(
             params.userId,
@@ -470,6 +478,7 @@ ${peopleList}`,
       shouldRespond: true,
       response: "Sorry, I encountered an error processing your message.",
       toolsExecuted,
+      notesCreated,
     };
   }
 
@@ -477,7 +486,7 @@ ${peopleList}`,
     shouldRespond: toolsExecuted.length > 0 || finalResponse.length > 0,
     response: finalResponse || undefined,
     toolsExecuted,
+    notesCreated,
   };
 }
-
 

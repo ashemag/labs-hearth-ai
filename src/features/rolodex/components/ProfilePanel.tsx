@@ -187,7 +187,7 @@ interface ProfilePanelProps {
     handleUpdateName: (contactId: number) => void;
     handleUpdateBio: (contactId: number) => void;
     handleUpdateLocation: (contactId: number) => void;
-    handleAddNote: (contactId: number, noteDraft: string, draftMentions: Map<string, number>) => Promise<boolean>;
+    handleAddNote: (contactId: number, noteDraft: string, draftMentions: Map<string, number>, calendarEventId?: number) => Promise<boolean>;
     handleEditNote: (noteId: number, contactId: number) => void;
     handleDeleteNote: (noteId: number, contactId: number) => void;
     handleUpdateNoteDate: (noteId: number, contactId: number, date: Date) => void;
@@ -308,6 +308,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
     const [mentionPosition, setMentionPosition] = useState<{ top: number; left: number } | null>(null);
     const [mentionIndex, setMentionIndex] = useState(0);
     const [pendingMentions, setPendingMentions] = useState<Map<string, number>>(new Map());
+    const [attachedCalendarEvent, setAttachedCalendarEvent] = useState<CalendarEvent | null>(null);
 
     const mentionSuggestions = useMemo(() => {
         if (mentionQuery === null) return [];
@@ -322,6 +323,7 @@ export default function ProfilePanel(props: ProfilePanelProps) {
         setDraftNote("");
         setAddingNoteFor(null);
         setPendingMentions(new Map());
+        setAttachedCalendarEvent(null);
         setMentionQuery(null);
         setMentionPosition(null);
         setMentionIndex(0);
@@ -409,15 +411,23 @@ export default function ProfilePanel(props: ProfilePanelProps) {
 
         const noteToRestore = draftNote;
         const mentionsToRestore = new Map(pendingMentions);
+        const calendarEventToRestore = attachedCalendarEvent;
 
         resetNoteDraft();
-        const saved = await handleAddNote(contactId, noteToRestore, mentionsToRestore);
+        const saved = await handleAddNote(contactId, noteToRestore, mentionsToRestore, calendarEventToRestore?.id);
 
         if (!saved) {
             setDraftNote(noteToRestore);
             setPendingMentions(mentionsToRestore);
+            setAttachedCalendarEvent(calendarEventToRestore);
             setAddingNoteFor(contactId);
         }
+    };
+
+    const attachNoteToCalendarEvent = (contactId: number, event: CalendarEvent) => {
+        setAttachedCalendarEvent(event);
+        setAddingNoteFor(contactId);
+        setTimeout(() => noteInputRef.current?.focus(), 0);
     };
 
     return (
@@ -935,6 +945,22 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                 target.style.height = Math.min(target.scrollHeight, 160) + "px";
                                             }}
                                         />
+                                        {addingNoteFor === contact.id && attachedCalendarEvent && (
+                                            <div className="mx-4 mb-3 inline-flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                <Calendar className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">
+                                                    Attached to {attachedCalendarEvent.event_title || "Calendar event"} · {formatCalendarEventDate(attachedCalendarEvent.event_start)}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAttachedCalendarEvent(null)}
+                                                    className="ml-0.5 rounded-full p-0.5 text-emerald-500 transition-colors hover:bg-emerald-100 hover:text-emerald-700 dark:hover:bg-emerald-900/50"
+                                                    title="Remove calendar event attachment"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        )}
                                         {addingNoteFor === contact.id && draftNote.trim() && (
                                             <div className="flex items-center justify-between border-t border-gray-100 p-4 dark:border-gray-700/70">
                                                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500">
@@ -1072,9 +1098,18 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                                         <div className={`w-[7px] h-[7px] rounded-full ring-[3px] ring-white dark:ring-gray-900 ${isUpcoming ? "bg-emerald-400 dark:bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`} />
                                                                     </div>
                                                                     <div className="min-w-0 flex-1 py-0.5">
-                                                                        <p className="truncate text-[13px] text-gray-700 dark:text-gray-300">
-                                                                            {event.event_title || "Calendar event"}
-                                                                        </p>
+                                                                        <div className="flex min-w-0 items-start gap-2">
+                                                                            <p className="min-w-0 flex-1 truncate text-[13px] text-gray-700 dark:text-gray-300">
+                                                                                {event.event_title || "Calendar event"}
+                                                                            </p>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => attachNoteToCalendarEvent(contact.id, event)}
+                                                                                className="rounded-md border border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 transition-all hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600 dark:border-gray-800 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-400"
+                                                                            >
+                                                                                Attach note
+                                                                            </button>
+                                                                        </div>
                                                                         <div className="mt-1 flex min-w-0 items-center gap-1.5">
                                                                             <Calendar className="h-3 w-3 shrink-0 text-gray-400 dark:text-gray-500" />
                                                                             <span className="truncate text-[10px] text-gray-400 dark:text-gray-500">
@@ -1128,6 +1163,9 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                         }
                                                         const note = item.data as Note;
                                                         const isAutoNote = note.source_type === "website_analysis" || note.source_type === "auto_summary";
+                                                        const linkedCalendarEvent = note.calendar_event_id
+                                                            ? contact.calendar_events.find(event => event.id === note.calendar_event_id) || null
+                                                            : null;
                                                         return (
                                                             <div key={`note-${note.id}`} className="flex gap-3 py-1 pl-0 group/item">
                                                                 <div className="flex-shrink-0 w-[15px] flex items-start justify-center pt-1.5 relative z-10">
@@ -1239,6 +1277,17 @@ export default function ProfilePanel(props: ProfilePanelProps) {
                                                                                         </div>
                                                                                     </PopoverContent>
                                                                                 </Popover>
+                                                                                {linkedCalendarEvent && (
+                                                                                    <span
+                                                                                        className="inline-flex max-w-[180px] items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                                                                        title={linkedCalendarEvent.event_title || "Calendar event"}
+                                                                                    >
+                                                                                        <Calendar className="h-2.5 w-2.5 shrink-0" />
+                                                                                        <span className="truncate">
+                                                                                            {linkedCalendarEvent.event_title || "Calendar event"}
+                                                                                        </span>
+                                                                                    </span>
+                                                                                )}
                                                                                 {isAutoNote && (
                                                                                     <span className="text-[10px] font-medium text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded-full">
                                                                                         {note.source_type === "auto_summary" ? "ai summary" : "auto"}

@@ -9,6 +9,8 @@ import { getValidSlackToken, getUserIdForWorkspace, forceRefreshSlackToken } fro
 import { processPeopleMessage } from "@/lib/people/processor";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SLACK_PEOPLE_CHANNEL_ID } from "@/lib/constants";
+import { updateNoteEmbedding } from "@/server/rolodex/notes";
+import type { ServerSupabaseClient } from "@/server/api/route";
 
 // Supabase admin client for screenshot compliment processing
 let supabase: ReturnType<typeof createAdminClient> | null = null;
@@ -254,6 +256,20 @@ interface SlackFile {
   filetype?: string;
 }
 
+interface SlackMessageEvent {
+  type?: string;
+  subtype?: string;
+  channel?: string;
+  channel_type?: string;
+  user?: string;
+  bot_id?: string;
+  bot_profile?: unknown;
+  ts?: string;
+  thread_ts?: string;
+  text?: string;
+  files?: SlackFile[];
+}
+
 // Detect actual image format from magic bytes
 function detectImageFormat(buffer: ArrayBuffer): string | null {
   const bytes = new Uint8Array(buffer);
@@ -296,6 +312,47 @@ function getImageUrlAndMimeType(file: SlackFile): { url: string; mimeType: strin
   }
 
   return { url: originalUrl, mimeType: originalMimeType, source: "unsupported" };
+}
+
+function stripBotMentions(text: string) {
+  return text.replace(/<@[A-Z0-9]+>\s*/gi, "").trim();
+}
+
+function isPeopleChannelMessage(message: SlackMessageEvent) {
+  return Boolean(PEOPLE_CHANNEL_ID && message.channel === PEOPLE_CHANNEL_ID);
+}
+
+function isDirectBotMessage(message: SlackMessageEvent) {
+  return message.channel_type === "im" || message.channel?.startsWith("D");
+}
+
+function isProcessablePeopleMessage(event: SlackMessageEvent) {
+  if (event.type === "app_mention") {
+    return true;
+  }
+
+  if (event.type !== "message") {
+    return false;
+  }
+
+  return isPeopleChannelMessage(event) || isDirectBotMessage(event);
+}
+
+function scheduleSlackNoteEmbeddings(userId: string, notes: { id: number; note: string }[]) {
+  if (!supabase || notes.length === 0) {
+    return;
+  }
+
+  const adminSupabase = supabase as unknown as ServerSupabaseClient;
+  waitUntil(
+    Promise.all(
+      notes.map((note) =>
+        updateNoteEmbedding(adminSupabase, userId, note.id, note.note).catch((error) => {
+          console.error("❌ [PEOPLE] Failed to update Slack note embedding:", error);
+        })
+      )
+    ).then(() => undefined)
+  );
 }
 
 // Process compliment screenshot from Slack
@@ -653,14 +710,16 @@ async function processPeopleMessageAsync(
       parentMessage: parentContext || undefined,
     });
 
-    await removeReaction(teamId, channel, timestamp, "thought_balloon");
-
     if (result.shouldRespond && result.response) {
       await addReaction(teamId, channel, timestamp, "white_check_mark");
       await postMessage(teamId, channel, result.response, threadTs || timestamp);
     } else if (result.toolsExecuted.length > 0) {
       await addReaction(teamId, channel, timestamp, "white_check_mark");
     }
+
+    await removeReaction(teamId, channel, timestamp, "thought_balloon");
+
+    scheduleSlackNoteEmbeddings(userId, result.notesCreated);
 
     console.log("✅ [PEOPLE] Message processed successfully");
   } catch (error) {
@@ -710,7 +769,7 @@ export async function POST(req: NextRequest) {
 
   // Handle event callbacks
   if (body.type === "event_callback") {
-    const event = body.event;
+    const event = body.event as SlackMessageEvent;
     const teamId = body.team_id;
 
     console.log(`📨 [SLACK EVENTS] Event: ${event?.type}, Channel: ${event?.channel}, Team: ${teamId}, Subtype: ${event?.subtype || 'none'}`);
@@ -722,13 +781,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Handle channel messages (including file_share for screenshot compliments)
-    if (event?.type === "message" && (!event.subtype || event.subtype === "file_share")) {
+    // Handle channel messages, app mentions, and bot DMs.
+    if (
+      event &&
+      (event.type === "app_mention" || (event.type === "message" && (!event.subtype || event.subtype === "file_share")))
+    ) {
       const message = event;
 
-      // Only process messages from the people channel
-      if (message.channel !== PEOPLE_CHANNEL_ID) {
-        console.log(`⏭️ Ignoring message from channel ${message.channel} (not people channel)`);
+      if (!isProcessablePeopleMessage(message)) {
+        console.log(`⏭️ Ignoring Slack event from channel ${message.channel} (not people channel, DM, or app mention)`);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (!message.channel || !message.ts) {
+        console.log("⏭️ Ignoring Slack message without channel or timestamp");
         return NextResponse.json({ ok: true });
       }
 
@@ -739,7 +805,8 @@ export async function POST(req: NextRequest) {
       }
 
       // Ignore empty messages
-      if (!message.text || message.text.trim().length === 0) {
+      const normalizedText = stripBotMentions(message.text || "");
+      if (!normalizedText) {
         console.log("⏭️ Ignoring empty message");
         return NextResponse.json({ ok: true });
       }
@@ -760,8 +827,9 @@ export async function POST(req: NextRequest) {
       }
 
       // Check if message has files (for compliment screenshot processing)
-      const hasFiles = message.files && message.files.length > 0;
-      const isComplimentScreenshot = hasFiles && message.text?.toLowerCase().includes("compliment");
+      const files = message.files || [];
+      const hasFiles = files.length > 0;
+      const isComplimentScreenshot = hasFiles && normalizedText.toLowerCase().includes("compliment");
 
       // If there's a file and it mentions compliment, process it as screenshot
       if (isComplimentScreenshot) {
@@ -771,10 +839,10 @@ export async function POST(req: NextRequest) {
           processComplimentScreenshotAsync(
             teamId,
             userId,
-            message.files,
+            files,
             message.channel,
             message.ts,
-            message.text || ""
+            normalizedText
           ).catch(error => {
             console.error("❌ processComplimentScreenshotAsync error:", error);
           })
@@ -790,7 +858,7 @@ export async function POST(req: NextRequest) {
         processPeopleMessageAsync(
           teamId,
           userId,
-          message.text,
+          normalizedText,
           message.channel,
           message.ts,
           message.thread_ts

@@ -28,11 +28,12 @@ import {
     Wand2,
     AlertTriangle,
     RefreshCw,
+    Hash,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { smartCropImageToSquare } from "@/lib/smart-image-crop";
 
-type SettingsTab = "profile" | "ai" | "imessage" | "calendar";
+type SettingsTab = "profile" | "ai" | "slack" | "imessage" | "calendar";
 
 
 interface PreviewMessage {
@@ -91,6 +92,16 @@ interface CalendarMatchSuggestion {
     suggested_name?: string;
 }
 
+interface SlackWorkspace {
+    id: number;
+    team_id: string;
+    team_name: string | null;
+    created_at: string;
+    updated_at: string;
+    connection_status: "connected" | "needs_reauthorization";
+    missing_scopes: string[];
+}
+
 function SettingsPageContent() {
     const [unmatched, setUnmatched] = useState<UnmatchedHandle[]>([]);
     const [contacts, setContacts] = useState<RolodexContact[]>([]);
@@ -144,7 +155,7 @@ function SettingsPageContent() {
     const searchParams = useSearchParams();
     const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
         const tab = searchParams.get("tab");
-        if (tab === "profile" || tab === "calendar" || tab === "imessage" || tab === "ai") {
+        if (tab === "profile" || tab === "calendar" || tab === "imessage" || tab === "ai" || tab === "slack") {
             return tab;
         }
         return "profile";
@@ -164,6 +175,12 @@ function SettingsPageContent() {
     const [calendarNewContactName, setCalendarNewContactName] = useState("");
     const [calendarCreateLoading, setCalendarCreateLoading] = useState(false);
     const [calendarWatches, setCalendarWatches] = useState<CalendarWatch[]>([]);
+
+    // Slack state
+    const [slackWorkspaces, setSlackWorkspaces] = useState<SlackWorkspace[]>([]);
+    const [slackLoading, setSlackLoading] = useState(true);
+    const [slackConnecting, setSlackConnecting] = useState(false);
+    const [slackDisconnectingTeamId, setSlackDisconnectingTeamId] = useState<string | null>(null);
 
     // LLM suggestion state
     const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarMatchSuggestion[]>([]);
@@ -258,6 +275,19 @@ function SettingsPageContent() {
         }
     }, []);
 
+    const fetchSlackData = useCallback(async () => {
+        setSlackLoading(true);
+        try {
+            const res = await fetch("/api/slack/workspaces", { credentials: "include" });
+            const data = await res.json();
+            if (data.workspaces) setSlackWorkspaces(data.workspaces);
+        } catch (err) {
+            console.error("Failed to fetch Slack workspaces:", err);
+        } finally {
+            setSlackLoading(false);
+        }
+    }, []);
+
     const handleConnectGoogle = async (account?: GoogleAccount) => {
         setCalendarConnecting(true);
         setCalendarConnectingAccountId(account?.id ?? null);
@@ -278,6 +308,28 @@ function SettingsPageContent() {
             console.error("Failed to initiate Google auth:", err);
             setCalendarConnecting(false);
             setCalendarConnectingAccountId(null);
+        }
+    };
+
+    const handleConnectSlack = () => {
+        setSlackConnecting(true);
+        window.location.href = "/api/slack/connect";
+    };
+
+    const handleDisconnectSlack = async (teamId: string) => {
+        setSlackDisconnectingTeamId(teamId);
+        try {
+            const res = await fetch(`/api/slack/workspaces?team_id=${encodeURIComponent(teamId)}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+            if (res.ok) {
+                setSlackWorkspaces(prev => prev.filter(workspace => workspace.team_id !== teamId));
+            }
+        } catch (err) {
+            console.error("Failed to disconnect Slack workspace:", err);
+        } finally {
+            setSlackDisconnectingTeamId(null);
         }
     };
 
@@ -590,7 +642,8 @@ function SettingsPageContent() {
         fetchData();
         fetchAiSettings();
         fetchCalendarData();
-    }, [fetchData, fetchAiSettings, fetchCalendarData]);
+        fetchSlackData();
+    }, [fetchData, fetchAiSettings, fetchCalendarData, fetchSlackData]);
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -796,6 +849,17 @@ function SettingsPageContent() {
                     >
                         <Sparkles className="h-4 w-4" />
                         AI Agent
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("slack")}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            activeTab === "slack"
+                                ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                    >
+                        <Hash className="h-4 w-4" />
+                        Slack
                     </button>
                     <button
                         onClick={() => setActiveTab("imessage")}
@@ -1063,6 +1127,181 @@ function SettingsPageContent() {
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                     Remove
                                                 </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                        )}
+
+                        {/* Slack Settings */}
+                        {activeTab === "slack" && (
+                            <section>
+                                <div className="mb-6">
+                                    <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+                                        Slack
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Add Hearth to Slack so direct messages and mentions can save notes to matched contacts.
+                                    </p>
+                                </div>
+
+                                {slackLoading ? (
+                                    <div className="flex items-center justify-center py-16">
+                                        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {slackWorkspaces.some(workspace => workspace.connection_status === "needs_reauthorization") && (
+                                            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                                                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                                                        Slack needs to be reauthorized
+                                                    </p>
+                                                    <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300/80">
+                                                        Hearth changed the permissions it requests. Reauthorize from here so Slack grants the updated DM and mention access.
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={handleConnectSlack}
+                                                    disabled={slackConnecting}
+                                                    className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+                                                >
+                                                    {slackConnecting ? (
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <RefreshCw className="h-3.5 w-3.5" />
+                                                    )}
+                                                    Reauthorize
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-900/50">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                    Hearth Slack bot
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                                    Message Hearth in Slack with updates like &quot;Nicole is moving to New York&quot; or mention Hearth in a channel.
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={handleConnectSlack}
+                                                disabled={slackConnecting}
+                                                className="inline-flex flex-shrink-0 items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                                            >
+                                                {slackConnecting ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Plus className="h-4 w-4" />
+                                                )}
+                                                {slackWorkspaces.length > 0 ? "Connect another" : "Connect Slack"}
+                                            </button>
+                                        </div>
+
+                                        <div>
+                                            <h3 className="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Connected Workspaces
+                                            </h3>
+                                            {slackWorkspaces.length === 0 ? (
+                                                <div className="rounded-xl border border-dashed border-gray-200 p-6 text-center dark:border-gray-800">
+                                                    <Hash className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-600" />
+                                                    <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                                                        No Slack workspaces connected
+                                                    </p>
+                                                    <button
+                                                        onClick={handleConnectSlack}
+                                                        disabled={slackConnecting}
+                                                        className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                                                    >
+                                                        {slackConnecting ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Plus className="h-4 w-4" />
+                                                        )}
+                                                        Connect Slack
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {slackWorkspaces.map((workspace) => {
+                                                        const disconnecting = slackDisconnectingTeamId === workspace.team_id;
+                                                        const needsReauthorization = workspace.connection_status === "needs_reauthorization";
+                                                        return (
+                                                            <div
+                                                                key={workspace.team_id}
+                                                                className={`flex items-center justify-between gap-4 rounded-xl p-4 ${
+                                                                    needsReauthorization
+                                                                        ? "border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20"
+                                                                        : "bg-gray-50 dark:bg-gray-900/50"
+                                                                }`}
+                                                            >
+                                                                <div className="flex min-w-0 items-center gap-3">
+                                                                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border bg-white dark:bg-gray-800 ${
+                                                                        needsReauthorization
+                                                                            ? "border-amber-200 text-amber-600 dark:border-amber-900/60 dark:text-amber-400"
+                                                                            : "border-gray-200 text-gray-500 dark:border-gray-700"
+                                                                    }`}>
+                                                                        {needsReauthorization ? <AlertTriangle className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <p className={`truncate text-sm font-medium ${
+                                                                            needsReauthorization
+                                                                                ? "text-amber-950 dark:text-amber-100"
+                                                                                : "text-gray-900 dark:text-white"
+                                                                        }`}>
+                                                                            {workspace.team_name || workspace.team_id}
+                                                                        </p>
+                                                                        <p className={`text-xs ${
+                                                                            needsReauthorization
+                                                                                ? "text-amber-700 dark:text-amber-300/80"
+                                                                                : "text-gray-400 dark:text-gray-500"
+                                                                        }`}>
+                                                                            {needsReauthorization
+                                                                                ? `Missing ${workspace.missing_scopes.slice(0, 3).join(", ")}${workspace.missing_scopes.length > 3 ? ` and ${workspace.missing_scopes.length - 3} more` : ""}`
+                                                                                : `Connected ${new Date(workspace.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-shrink-0 items-center gap-2">
+                                                                    {needsReauthorization ? (
+                                                                        <button
+                                                                            onClick={handleConnectSlack}
+                                                                            disabled={slackConnecting}
+                                                                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+                                                                        >
+                                                                            {slackConnecting ? (
+                                                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                            ) : (
+                                                                                <RefreshCw className="h-3.5 w-3.5" />
+                                                                            )}
+                                                                            Reauthorize
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-1 text-[11px] font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                                                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                                                                            Connected
+                                                                        </span>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => handleDisconnectSlack(workspace.team_id)}
+                                                                        disabled={disconnecting}
+                                                                        className="p-1.5 text-gray-400 transition-colors hover:text-red-500 disabled:opacity-50"
+                                                                        title="Disconnect"
+                                                                    >
+                                                                        {disconnecting ? (
+                                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                                        ) : (
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             )}
                                         </div>
                                     </div>

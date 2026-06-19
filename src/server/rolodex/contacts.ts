@@ -100,7 +100,7 @@ interface PersonRecord {
         headline: string | null;
         location: string | null;
     }[];
-    people_notes?: { id: number; note: string; created_at: string; source_type: string | null }[];
+    people_notes?: { id: number; note: string; created_at: string; source_type: string | null; calendar_event_id: number | null }[];
     people_touchpoints?: { id: number; created_at: string }[];
     people_calendar_events?: {
         id: number;
@@ -234,7 +234,8 @@ export async function listContacts(
                 id,
                 note,
                 created_at,
-                source_type
+                source_type,
+                calendar_event_id
             ),
             people_touchpoints (
                 id,

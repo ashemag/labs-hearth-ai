@@ -4,7 +4,7 @@
 // =============================================================================
 
 // Slack
-export const SLACK_PEOPLE_CHANNEL_ID = "C09MPL84L6S";
+export const SLACK_PEOPLE_CHANNEL_ID = process.env.SLACK_PEOPLE_CHANNEL_ID || "C09MPL84L6S";
 
 // Pagination defaults
 export const DEFAULT_PAGE_LIMIT = 500;

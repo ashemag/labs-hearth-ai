@@ -31,9 +31,9 @@ export default function SlackSuccess() {
             </p>
           </div>
 
-          <Link href="/">
+          <Link href="/app/settings?tab=slack">
             <Button className="w-full h-12 bg-brand-purple-darkest hover:bg-brand-purple-darker text-white font-medium transition-all">
-              Go to Hearth
+              Back to Settings
             </Button>
           </Link>
         </div>

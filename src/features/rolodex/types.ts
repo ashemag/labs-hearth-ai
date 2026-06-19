@@ -7,6 +7,7 @@ export interface Note {
     note: string;
     created_at: string;
     source_type: string | null;
+    calendar_event_id: number | null;
 }
 
 export interface Compliment {
