@@ -77,7 +77,11 @@ export function useRolodexPageEffects({
     }, [noteInputRef, selectedContactId, setContacts, setGeneratingSummaryFor]);
 
     useEffect(() => {
-        const handleClick = () => {
+        const handleClick = (event: MouseEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("[data-rolodex-context-menu='true'], [data-rolodex-list-context-menu='true']")) {
+                return;
+            }
             setContextMenu(null);
             setListContextMenu(null);
             setShowListSubmenu(false);

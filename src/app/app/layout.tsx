@@ -11,8 +11,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <ErrorBoundary>
                 {children}
             </ErrorBoundary>
-            <Toaster position="bottom-right" richColors />
+            <Toaster
+                position="bottom-right"
+                richColors
+                toastOptions={{
+                    classNames: {
+                        toast: "z-[10000]",
+                    },
+                }}
+            />
         </div>
     );
 }
-

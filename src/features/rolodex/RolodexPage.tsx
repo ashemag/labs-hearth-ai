@@ -41,7 +41,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/Sheet";
 import ContributionsGrid from "@/components/ContributionsGrid";
 import ChatWidget from "@/components/ChatWidget";
-import type { Contact, RolodexList, ContextMenuState, DiscoveryResult, Note } from "./types";
+import type { Contact, RolodexList, ContextMenuState, DiscoveryResult, Note, NetworkObjective } from "./types";
 import CommandSearchModal from "./components/CommandSearchModal";
 import AddContactModal from "./components/AddContactModal";
 import DiscoveryPanel from "./components/DiscoveryPanel";
@@ -49,6 +49,7 @@ import TodoSheet from "./components/TodoSheet";
 import ProfilePanel from "./components/ProfilePanel";
 import ListsSidebar from "./components/ListsSidebar";
 import ContactsTable from "./components/ContactsTable";
+import ObjectiveMomentumPanel from "./components/ObjectiveMomentumPanel";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { smartCropImageToSquare } from "@/lib/smart-image-crop";
@@ -210,6 +211,8 @@ export default function RolodexPage() {
         }
         return true;
     });
+    const [objective, setObjective] = useState<NetworkObjective | null>(null);
+    const [objectiveLoading, setObjectiveLoading] = useState(true);
     const userAvatarUrls = useMemo(
         () => [user?.customAvatarUrl, user?.avatarUrl].filter(Boolean) as string[],
         [user?.avatarUrl, user?.customAvatarUrl]
@@ -268,6 +271,66 @@ export default function RolodexPage() {
     useEffect(() => {
         setUserAvatarUrlIndex(0);
     }, [userAvatarUrls]);
+
+    useEffect(() => {
+        if (!authenticated) return;
+        let cancelled = false;
+
+        async function fetchObjective() {
+            setObjectiveLoading(true);
+            try {
+                const res = await fetch("/api/rolodex/objectives", { credentials: "include" });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled) {
+                    setObjective(data.objective || null);
+                }
+            } catch (error) {
+                console.error("Failed to fetch objective:", error);
+            } finally {
+                if (!cancelled) setObjectiveLoading(false);
+            }
+        }
+
+        fetchObjective();
+        return () => { cancelled = true; };
+    }, [authenticated]);
+
+    const saveObjectiveAction = useCallback(async (body: Record<string, unknown>) => {
+        const res = await fetch("/api/rolodex/objectives", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+            throw new Error("Failed to update objective");
+        }
+
+        const data = await res.json();
+        setObjective(data.objective || null);
+        return (data.objective || null) as NetworkObjective | null;
+    }, []);
+
+    const handleSetObjectiveMemberStage = useCallback(async (stageId: number, peopleId: number) => {
+        if (!objective) return;
+        await saveObjectiveAction({
+            action: "set_member_stage",
+            objective_id: objective.id,
+            stage_id: stageId,
+            people_id: peopleId,
+        });
+    }, [objective, saveObjectiveAction]);
+
+    const handleRemoveObjectiveMember = useCallback(async (peopleId: number) => {
+        if (!objective) return;
+        await saveObjectiveAction({
+            action: "remove_member",
+            objective_id: objective.id,
+            people_id: peopleId,
+        });
+    }, [objective, saveObjectiveAction]);
 
     useRolodexPageEffects({
         selectedContactId,
@@ -1061,6 +1124,7 @@ export default function RolodexPage() {
             y,
             contactId,
         });
+        setShowListSubmenu(false);
     }, [selectedContacts]);
 
     const handleCreateList = async () => {
@@ -1776,6 +1840,7 @@ export default function RolodexPage() {
             {/* Context Menu */}
             {contextMenu && (
                 <div
+                    data-rolodex-context-menu="true"
                     className="fixed z-50 max-h-[min(520px,calc(100vh-24px))] min-w-[184px] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
@@ -1843,7 +1908,7 @@ export default function RolodexPage() {
                             {selectedContacts.size === 2 && <div className="border-t border-gray-100 dark:border-gray-800 my-1" />}
                             <div className="relative group/list">
                                 <button
-                                    onClick={() => setShowListSubmenu(!showListSubmenu)}
+                                    onClick={() => setShowListSubmenu((open) => !open)}
                                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-warm-100 dark:text-gray-300 dark:hover:bg-gray-800"
                                 >
                                     <Plus className="h-4 w-4" />
@@ -1963,6 +2028,7 @@ export default function RolodexPage() {
                     <>
                         <div className="fixed inset-0 z-40" onClick={() => setListContextMenu(null)} />
                         <div
+                            data-rolodex-list-context-menu="true"
                             className="fixed z-50 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 min-w-[180px]"
                             style={{ left: listContextMenu.x, top: listContextMenu.y }}
                             onClick={(e) => e.stopPropagation()}
@@ -2696,8 +2762,18 @@ export default function RolodexPage() {
             {/* Main Content */}
             <div className="px-5 py-7 sm:px-8 lg:px-12">
                 <div className="w-full max-w-7xl mx-auto">
-                    {/* Contributions Grid */}
-                    <ContributionsGrid refreshKey={contributionsRefreshKey} />
+                    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+                        <ContributionsGrid refreshKey={contributionsRefreshKey} />
+                        {!loading && contacts.length > 0 && (
+                            <ObjectiveMomentumPanel
+                                contacts={contacts}
+                                objective={objective}
+                                objectiveLoading={objectiveLoading}
+                                setObjective={setObjective}
+                                onSaveAction={saveObjectiveAction}
+                            />
+                        )}
+                    </div>
 
                     {/* Main layout with sidebar */}
                     {!loading && contacts.length > 0 && (
@@ -2821,6 +2897,9 @@ export default function RolodexPage() {
                                     <ContactsTable
                                         contacts={contacts}
                                         lists={lists}
+                                        objective={objective}
+                                        onSetObjectiveMemberStage={handleSetObjectiveMemberStage}
+                                        onRemoveObjectiveMember={handleRemoveObjectiveMember}
                                         selectedContacts={selectedContacts}
                                         selectedContactId={selectedContactId}
                                         activeList={activeList}

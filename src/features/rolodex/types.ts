@@ -112,6 +112,27 @@ export interface RolodexList {
     member_ids: number[];
 }
 
+export interface ObjectiveRule {
+    id: number;
+    rule_text: string;
+}
+
+export interface ObjectiveStage {
+    id: number;
+    name: string;
+    color: string;
+    position: number;
+    rules: ObjectiveRule[];
+    member_ids: number[];
+}
+
+export interface NetworkObjective {
+    id: number;
+    name: string;
+    excluded_member_ids: number[];
+    stages: ObjectiveStage[];
+}
+
 export interface Todo {
     id: number;
     contactId: number;

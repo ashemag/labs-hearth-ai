@@ -2,12 +2,16 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import type { Contact, RolodexList } from "../types";
+import { ChevronDown, X } from "lucide-react";
+import type { Contact, NetworkObjective, ObjectiveStage, RolodexList } from "../types";
 import { contactMatchesSearchIndex, createContactSearchIndex } from "../search";
 
 interface ContactsTableProps {
     contacts: Contact[];
     lists: RolodexList[];
+    objective: NetworkObjective | null;
+    onSetObjectiveMemberStage: (stageId: number, peopleId: number) => Promise<void>;
+    onRemoveObjectiveMember: (peopleId: number) => Promise<void>;
     selectedContacts: Set<number>;
     selectedContactId: number | null;
     activeList: number | "all" | "curated";
@@ -18,6 +22,47 @@ interface ContactsTableProps {
     handleRowClick: (contactId: number, e: React.MouseEvent) => void;
     handleContextMenu: (contactId: number, e: React.MouseEvent) => void;
     renderNoteWithMentions: (noteText: string) => React.ReactNode;
+}
+
+function shortStageLabel(name: string) {
+    const words = name.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return "Stage";
+    if (words.length === 1) return words[0].slice(0, 12);
+    return words.slice(0, 2).join(" ").slice(0, 14);
+}
+
+function objectiveContactText(contact: Contact) {
+    return [
+        contact.name,
+        contact.custom_bio,
+        contact.custom_location,
+        ...contact.notes.map((note) => note.note),
+        ...contact.calendar_events.map((event) => event.event_title || ""),
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+}
+
+function objectiveRuleMatches(contact: Contact, stage: ObjectiveStage) {
+    const text = objectiveContactText(contact);
+    return stage.rules.some((rule) => {
+        const query = rule.rule_text.trim().toLowerCase();
+        return query.length > 0 && text.includes(query);
+    });
+}
+
+function getContactObjectiveStage(contact: Contact, objective: NetworkObjective | null) {
+    if (!objective) return null;
+
+    const stages = [...objective.stages].sort((a, b) => a.position - b.position);
+    const manualStage = stages.find((stage) => stage.member_ids.includes(contact.id));
+    if (manualStage) return { stage: manualStage, source: "manual" as const };
+
+    if ((objective.excluded_member_ids || []).includes(contact.id)) return null;
+
+    const matchedStage = [...stages].reverse().find((stage) => objectiveRuleMatches(contact, stage));
+    return matchedStage ? { stage: matchedStage, source: "rule" as const } : null;
 }
 
 function ContactAvatar({
@@ -64,6 +109,9 @@ function ContactAvatar({
 function ContactsTable({
     contacts,
     lists,
+    objective,
+    onSetObjectiveMemberStage,
+    onRemoveObjectiveMember,
     selectedContacts,
     selectedContactId,
     activeList,
@@ -75,6 +123,20 @@ function ContactsTable({
     handleContextMenu,
     renderNoteWithMentions,
 }: ContactsTableProps) {
+    const [stagePickerOpenFor, setStagePickerOpenFor] = useState<number | null>(null);
+    const [stageUpdatingFor, setStageUpdatingFor] = useState<number | null>(null);
+
+    useEffect(() => {
+        const closePicker = (event: MouseEvent) => {
+            if (!(event.target as HTMLElement).closest("[data-objective-stage-picker='true']")) {
+                setStagePickerOpenFor(null);
+            }
+        };
+
+        document.addEventListener("mousedown", closePicker);
+        return () => document.removeEventListener("mousedown", closePicker);
+    }, []);
+
     const searchIndexes = useMemo(() => {
         return new Map(contacts.map((contact) => [
             contact.id,
@@ -144,6 +206,8 @@ function ContactsTable({
                         const bio = contact.custom_bio || xp?.bio || li?.headline;
                         const location = contact.custom_location || xp?.location || li?.location;
                         const memberLists = lists.filter((list) => list.member_ids.includes(contact.id));
+                        const objectiveStage = getContactObjectiveStage(contact, objective);
+                        const objectiveStages = objective ? [...objective.stages].sort((a, b) => a.position - b.position) : [];
 
                         return (
                             <div key={contact.id} data-contact-id={contact.id}>
@@ -183,7 +247,7 @@ function ContactsTable({
                                                 {bio}
                                             </p>
                                         )}
-                                        {(location || memberLists.length > 0) && (
+                                        {(location || memberLists.length > 0 || objectiveStages.length > 0) && (
                                             <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
                                                 {location && <span className="truncate">{location}</span>}
                                                 {memberLists.slice(0, 2).map((list) => (
@@ -199,6 +263,88 @@ function ContactsTable({
                                                     <span className="text-[11px] font-medium text-gray-400">
                                                         +{memberLists.length - 2}
                                                     </span>
+                                                )}
+                                                {objectiveStages.length > 0 && (
+                                                    <div
+                                                        className="relative"
+                                                        data-objective-stage-picker="true"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            disabled={stageUpdatingFor === contact.id}
+                                                            onClick={() => setStagePickerOpenFor((current) => current === contact.id ? null : contact.id)}
+                                                            className={`inline-flex max-w-[132px] items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                                                                objectiveStage
+                                                                    ? "border-transparent"
+                                                                    : "border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-500 dark:hover:text-gray-300"
+                                                            } disabled:opacity-50`}
+                                                            style={objectiveStage ? {
+                                                                backgroundColor: `${objectiveStage.stage.color}16`,
+                                                                color: objectiveStage.stage.color,
+                                                            } : undefined}
+                                                            title={objectiveStage ? `In ${objectiveStage.stage.name}` : "Add to funnel stage"}
+                                                        >
+                                                            {objectiveStage && (
+                                                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: objectiveStage.stage.color }} />
+                                                            )}
+                                                            <span className="truncate">
+                                                                {objectiveStage ? shortStageLabel(objectiveStage.stage.name) : "Stage +"}
+                                                            </span>
+                                                            <ChevronDown className="h-3 w-3 flex-shrink-0" />
+                                                        </button>
+
+                                                        {stagePickerOpenFor === contact.id && (
+                                                            <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-44 overflow-hidden rounded-lg border border-gray-100 bg-white py-1 shadow-lg shadow-gray-200/60 dark:border-gray-800 dark:bg-gray-950 dark:shadow-none">
+                                                                {objectiveStages.map((stage) => {
+                                                                    const active = objectiveStage?.stage.id === stage.id;
+                                                                    return (
+                                                                        <button
+                                                                            key={stage.id}
+                                                                            type="button"
+                                                                            disabled={active || stageUpdatingFor === contact.id}
+                                                                            onClick={async () => {
+                                                                                setStageUpdatingFor(contact.id);
+                                                                                try {
+                                                                                    await onSetObjectiveMemberStage(stage.id, contact.id);
+                                                                                    setStagePickerOpenFor(null);
+                                                                                } finally {
+                                                                                    setStageUpdatingFor(null);
+                                                                                }
+                                                                            }}
+                                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-gray-700 transition-colors hover:bg-[#F7F3EC] disabled:cursor-default disabled:bg-gray-50 disabled:text-gray-400 dark:text-gray-200 dark:hover:bg-gray-900 dark:disabled:bg-gray-900/60 dark:disabled:text-gray-500"
+                                                                        >
+                                                                            <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
+                                                                            <span className="min-w-0 flex-1 truncate">{stage.name}</span>
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                                {objectiveStage && (
+                                                                    <>
+                                                                        <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={stageUpdatingFor === contact.id}
+                                                                            onClick={async () => {
+                                                                                setStageUpdatingFor(contact.id);
+                                                                                try {
+                                                                                    await onRemoveObjectiveMember(contact.id);
+                                                                                    setStagePickerOpenFor(null);
+                                                                                } finally {
+                                                                                    setStageUpdatingFor(null);
+                                                                                }
+                                                                            }}
+                                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/20 dark:hover:text-red-300"
+                                                                        >
+                                                                            <X className="h-3 w-3" />
+                                                                            Remove from funnel
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
